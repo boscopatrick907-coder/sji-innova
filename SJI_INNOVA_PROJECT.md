@@ -1,13 +1,14 @@
-# SJI INNOVA — PROJECT MASTER FILE
+# CELLA (SJI INNOVA) — PROJECT MASTER FILE
 
 > **Single source of truth** for the team and for any AI assistant.
 > Keep it short, current and honest. If a decision changes, change it here first.
-> **Document version:** v0.2 — 2026-10-20
+> **Document version:** v0.3 — 2026-10-20
 
-**Project working name:** `TO FILL` *(e.g. "Innova", "ShopMate", "BizLocal")*
+**Project working name:** Cella
 **One-line pitch:** An inventory, sales and customer-credit system for Cameroonian SMEs that keeps working offline and comes with a WhatsApp AI assistant that answers from live stock data.
 **Submission deadline:** `TO FILL` **Competition date:** `TO FILL`
-**Last updated:** 2026-10-20 **Maintained by:** `TO FILL` *(project lead)*
+**Project type:** Pre-built project presented at hackathon (not live-coded from scratch)
+**Last updated:** 2026-10-20 **Maintained by:** Emmanuel Oyono *(Database & Backend)* / `TO FILL` *(Project Lead)*
 
 ---
 
@@ -106,8 +107,8 @@ Full payroll, tax declarations, large-enterprise ERP features, native mobile app
 |---|---|---|
 | Desktop app | **Java Swing + FlatLaf** | Cashier interface; FlatLaf gives a modern look |
 | Local DB | **SQLite** via JDBC | Embedded, nothing to install, safe after power cuts |
-| Cloud API | **`TO FILL`**: Spring Boot **or** Javalin | ⚠️ Decide by end of Week 1 — email the teacher. Use Javalin if Spring Boot was not covered in class. |
-| Cloud DB | **MySQL** | Known by the team |
+| Cloud API | **Spring Boot** (Java REST API) | Industry-standard, robust ecosystem, Spring Data, security, production-ready |
+| Cloud DB | **MySQL** | Managed relational DB in the cloud |
 | Owner dashboard | **HTML + CSS + Chart.js**, served as a **PWA** | Hosted as static files on the API server or a free host (e.g. Netlify). Uses a `manifest.json` + service worker for offline caching. |
 | AI agent | **n8n** (visual workflow, no extra language needed) | Calls the cloud API only — never invents data |
 | Receipt printing | **ESC/POS** via `escpos-java` or USB print | Works with most thermal printers common in Cameroon |
@@ -171,8 +172,8 @@ The dashboard HTML/JS/CSS files are served either (a) as static files from the s
 | Role | Owner | Responsibilities | Backup for |
 |---|---|---|---|
 | Project lead & integration | `TO FILL` | Planning, this file, merges, unblocking the team | Backend |
-| Backend & database | `TO FILL` | Cloud API, MySQL, sync endpoints, JWT auth | Desktop app |
-| Desktop app | `TO FILL` | Swing screens, SQLite, offline mode, receipt print | Backend |
+| Backend & database | **Emmanuel Oyono** | Cloud API (Spring Boot), MySQL schema, local SQLite DAO/sync endpoints, JWT auth | Desktop app |
+| Desktop app | `TO FILL` | Swing screens, SQLite UI integration, offline mode, receipt print | Backend |
 | AI agent & dashboard | `TO FILL` | n8n flows, PWA dashboard, WhatsApp integration | Research/QA |
 | Research, design, QA & pitch | `TO FILL` | Interviews, mockups, testing the demo path, slides | AI agent |
 
@@ -290,7 +291,7 @@ The dashboard HTML/JS/CSS files are served either (a) as static files from the s
 - [ ] Shared folder for docs, this file, interview notes `[lead]`
 - [ ] Chat group + one fixed 30-minute weekly team meeting `[lead]`
 - [ ] All 5 developers on the same Java version and IDE `[all]`
-- [ ] Decide Spring Boot vs Javalin — log decision in §16 `[lead + backend dev]`
+- [x] **Decide Spring Boot vs Javalin** — Spring Boot confirmed `[Emmanuel Oyono]`
 - [ ] **Register WhatsApp Business test number** — start Meta approval immediately (takes days to weeks) `[AI/dashboard dev]`
 
 ### M1: Research and submission (Weeks 1-4)
@@ -420,15 +421,15 @@ A task is **done** only if all of the following are true:
 
 | # | Question | Owner | Deadline | Status |
 |---|---|---|---|---|
-| 1 | Real submission deadline and competition date | `TO FILL` | Week 1 | ❌ Open |
-| 2 | Is the project built live during the competition or presented as pre-built? | `TO FILL` | Week 1 | ❌ Open |
-| 3 | Evaluation criteria and weights (technical, business, innovation, demo?) | `TO FILL` | Week 1 | ❌ Open |
-| 4 | Rules on reusing coursework — what must be new? | `TO FILL` | Week 1 | ❌ Open |
-| 5 | Rules on using AI tools to write code | `TO FILL` | Week 1 | ❌ Open |
-| 6 | Is a working prototype required at submission? | `TO FILL` | Week 1 | ❌ Open |
-| 7 | **Spring Boot or Javalin?** *(email the teacher)* | Backend dev | End Week 1 | ❌ Open |
-| 8 | Final project name | All | End Week 1 | ❌ Open |
-| 9 | The 5 team members, their roles and backup assignments | Project lead | End Week 1 | ❌ Open |
+| 1 | Real submission deadline and competition date | Project lead | Week 1 | ❌ Open |
+| 2 | Is the project built live during the competition or presented as pre-built? | Emmanuel Oyono | - | ✅ **Pre-built project** |
+| 3 | Evaluation criteria and weights (technical, business, innovation, demo?) | Project lead | Week 1 | ❌ Open |
+| 4 | Rules on reusing coursework — what must be new? | Project lead | Week 1 | ❌ Open |
+| 5 | Rules on using AI tools to write code | Project lead | Week 1 | ❌ Open |
+| 6 | Is a working prototype required at submission? | Project lead | Week 1 | ❌ Open |
+| 7 | **Spring Boot or Javalin?** | Emmanuel Oyono | - | ✅ **Spring Boot** |
+| 8 | Final project name | All | - | ✅ **Cella** |
+| 9 | The 5 team members, their roles and backup assignments | Project lead | End Week 1 | ⏳ In progress (Emmanuel = DB & Backend) |
 | 10 | WhatsApp Business account and test number registered | AI/dashboard dev | End Week 1 | ❌ Open |
 
 ---
@@ -531,3 +532,7 @@ Act as a tough jury member. Ask me 10 questions about SJI Innova (technical, bus
 | 2026-10-20 | `tax_rate` and `discount_amount` added to data model | FCFA VAT and local discounts are core features, not Phase 2 |
 | 2026-10-20 | Sales void/return and audit log added to MVP | Without void, a cashier error corrupts stock and revenue permanently |
 | 2026-10-20 | `sessions` table added for API JWT management | Auth mechanism was undefined; scoped tokens separate customer and owner access |
+| 2026-10-20 | Project working name chosen: **Cella** | Short, memorable, professional branding for local commerce |
+| 2026-10-20 | Cloud API: **Spring Boot** confirmed | Comprehensive ecosystem, built-in security, standard for enterprise backends |
+| 2026-10-20 | Format confirmed: **Pre-built project** | Project will be prepared, hardened, and rehearsed before the hackathon presentation |
+| 2026-10-20 | Database & Backend Lead: **Emmanuel Oyono** | Dedicated owner for schema design, Spring Boot API, and sync contracts |
