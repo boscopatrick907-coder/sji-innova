@@ -39,8 +39,9 @@ On Windows PowerShell:
 .\mvnw.cmd --batch-mode --no-transfer-progress clean verify
 ```
 
-This builds both modules and runs one desktop startup smoke test. It does not
-validate sales, persistence, synchronization, or other unimplemented features.
+This builds both modules and runs five SQLite integration tests plus one desktop
+startup test. Storage tests use temporary databases. Sales and synchronization
+are not implemented.
 
 The prepared cloud environment also supplies proxy settings outside the checkout.
 Use this build command there:
@@ -66,11 +67,40 @@ java "-Djava.awt.headless=true" -jar desktop/target/innova-desktop-0.1.0-SNAPSHO
 
 ## Structure and next work
 
-- `core`: shared business services and JDBC persistence; currently a placeholder.
+- `core`: product validation, creation and shop-scoped listing; SQLite JDBC persistence.
 - `desktop`: Swing + FlatLaf entry point; depends on `core`.
 - `.github/workflows/build.yml`: Linux and Windows builds and packaged startup checks.
 
-Next: implement versioned SQLite migrations and an atomic offline cash sale,
-including rollback tests, before adding cloud sync. Spring Boot is the selected cloud framework; its module will be added later. No database, credentials, or external services are needed for
-this foundation. Windows CI is configured; a real Windows GUI/installer test
+Next: stock movements and an atomic offline cash sale, including rollback tests,
+before adding cloud sync. Spring Boot is the selected cloud framework; its module will be added later. SQLite is embedded; no separate database installation, credentials, or external
+services are needed. Windows CI is configured; a real Windows GUI/installer test
 remains a separate quality gate.
+
+## Try local product storage (no screen yet)
+
+After building, run from the repository root:
+
+```sh
+java -jar desktop/target/innova-desktop-0.1.0-SNAPSHOT.jar --product-demo data/demo.db
+```
+
+Run the same command again. The first run creates a sample product costing
+500 FCFA; the second loads that same product with the same UUID, demonstrating
+persistence across separate application runs. This is an explicit demo with a
+fixed demo shop ID, not production shop registration. Use a disposable demo file.
+The demo prints `Loaded existing products; no sample added` on later runs.
+
+SQLite JDBC is included in the packaged JAR, including native libraries for the
+supported platforms. No separate SQLite program is required. The file's parent
+directories are created automatically. Each connection is closed after use.
+Schema version 1 creates the initial products table atomically; repeated
+initialization preserves data, and newer schemas are rejected. WAL mode supports
+local recovery; it does not replace backups. Do not copy a live `.db` file alone
+for backup: SQLite may also have active `-wal` and `-shm` files.
+
+Products currently store UUID, shop UUID, name, whole-FCFA price, timestamps and
+catalog version. Shop registration/authentication, stock, categories, unit/tax
+fields, edits, UI forms and cloud sync come later through additional migrations.
+Shop-scoped queries are data filtering, not an authorization system. The service
+validates input and the JDBC repository uses parameterized SQL for values.
+Database files are ignored by Git; never commit a shop's live data.

@@ -23,3 +23,7 @@ jobs:
         run: .\mvnw.cmd --batch-mode --no-transfer-progress clean verify
       - name: Check packaged application
         run: java "-Djava.awt.headless=true" -jar desktop/target/innova-desktop-0.1.0-SNAPSHOT.jar --smoke-test
+      - name: Check packaged SQLite persistence
+        run: |
+          java -jar desktop/target/innova-desktop-0.1.0-SNAPSHOT.jar --product-demo "${{ runner.temp }}/cella-demo.db"
+          java -jar desktop/target/innova-desktop-0.1.0-SNAPSHOT.jar --product-demo "${{ runner.temp }}/cella-demo.db"
