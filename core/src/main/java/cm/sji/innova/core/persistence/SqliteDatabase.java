@@ -9,7 +9,7 @@ import java.sql.SQLException;
 
 /** File-backed connections. Call initialize before using repositories. */
 public final class SqliteDatabase {
-    private static final int SCHEMA_VERSION = 1;
+    private static final int SCHEMA_VERSION = 2;
     private final Path file;
 
     public SqliteDatabase(Path file) {
@@ -57,6 +57,22 @@ public final class SqliteDatabase {
                         """);
                     statement.execute("CREATE INDEX products_shop_id ON products(shop_id)");
                     statement.execute("PRAGMA user_version = 1");
+                    version = 1;
+                }
+                if (version == 1) {
+                    statement.execute("ALTER TABLE products ADD COLUMN model_reference TEXT");
+                    statement.execute("ALTER TABLE products ADD COLUMN cost_price INTEGER CHECK(cost_price IS NULL OR (typeof(cost_price) = 'integer' AND cost_price >= 0))");
+                    statement.execute("ALTER TABLE products ADD COLUMN category TEXT");
+                    statement.execute("ALTER TABLE products ADD COLUMN unit TEXT NOT NULL DEFAULT 'piece' CHECK(unit IN ('piece', 'kg', 'litre'))");
+                    statement.execute("""
+                        CREATE TABLE product_specifications (
+                            product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+                            name TEXT NOT NULL CHECK(length(trim(name)) > 0),
+                            value TEXT NOT NULL CHECK(length(trim(value)) > 0),
+                            PRIMARY KEY (product_id, name)
+                        )
+                        """);
+                    statement.execute("PRAGMA user_version = 2");
                 }
                 statement.execute("COMMIT");
             } catch (SQLException failure) {

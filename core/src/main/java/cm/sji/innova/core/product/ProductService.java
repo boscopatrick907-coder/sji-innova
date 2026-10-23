@@ -15,8 +15,15 @@ public final class ProductService {
     }
 
     public Product create(UUID shopId, String name, long unitPrice) throws SQLException {
+        return create(shopId, name, unitPrice, null, null, null, "piece", java.util.Map.of());
+    }
+
+    public Product create(UUID shopId, String name, long sellingPrice, String modelReference,
+                          Long buyingPrice, String category, String unit,
+                          java.util.Map<String, String> specifications) throws SQLException {
         Instant now = Instant.now();
-        Product product = new Product(UUID.randomUUID(), shopId, name, unitPrice, now, now, 1);
+        Product product = new Product(UUID.randomUUID(), shopId, name, sellingPrice, now, now, 1,
+                modelReference, buyingPrice, category, unit, specifications);
         repository.insert(product);
         return product;
     }
