@@ -1,0 +1,15 @@
+# Maven outputs
+**/target/
+# Local configuration and IDE files
+.idea/
+*.iml
+.classpath
+.project
+.settings/
+.vscode/
+.env
+.env.*
+!.env.example
+*.db
+*.db-shm
+*.db-wal
