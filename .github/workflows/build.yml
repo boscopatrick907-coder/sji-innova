@@ -22,4 +22,4 @@ jobs:
         if: runner.os == 'Windows'
         run: .\mvnw.cmd --batch-mode --no-transfer-progress clean verify
       - name: Check packaged application
-        run: java -Djava.awt.headless=true -jar desktop/target/innova-desktop-0.1.0-SNAPSHOT.jar --smoke-test
+        run: java "-Djava.awt.headless=true" -jar desktop/target/innova-desktop-0.1.0-SNAPSHOT.jar --smoke-test

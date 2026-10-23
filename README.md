@@ -61,7 +61,7 @@ For a cloud machine without a display, validate the same startup path and FlatLa
 initialization without opening a window:
 
 ```sh
-java -Djava.awt.headless=true -jar desktop/target/innova-desktop-0.1.0-SNAPSHOT.jar --smoke-test
+java "-Djava.awt.headless=true" -jar desktop/target/innova-desktop-0.1.0-SNAPSHOT.jar --smoke-test
 ```
 
 ## Structure and next work
