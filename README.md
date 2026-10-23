@@ -39,7 +39,7 @@ On Windows PowerShell:
 .\mvnw.cmd --batch-mode --no-transfer-progress clean verify
 ```
 
-This builds both modules and runs five SQLite integration tests plus one desktop
+This builds both modules and runs eleven SQLite integration tests plus one desktop
 startup test. Storage tests use temporary databases. Sales and synchronization
 are not implemented.
 
@@ -88,19 +88,35 @@ Run the same command again. The first run creates a sample product costing
 500 FCFA; the second loads that same product with the same UUID, demonstrating
 persistence across separate application runs. This is an explicit demo with a
 fixed demo shop ID, not production shop registration. Use a disposable demo file.
+The new sample also includes a buying price of 300 FCFA, model Classic V2,
+category Clothing, unit piece, color blue and size M. Existing demo products are
+preserved rather than filled with invented details.
 The demo prints `Loaded existing products; no sample added` on later runs.
 
 SQLite JDBC is included in the packaged JAR, including native libraries for the
 supported platforms. No separate SQLite program is required. The file's parent
 directories are created automatically. Each connection is closed after use.
-Schema version 1 creates the initial products table atomically; repeated
-initialization preserves data, and newer schemas are rejected. WAL mode supports
+Schema version 2 adds product details and a specifications table. Version 1
+databases upgrade automatically inside a transaction: existing IDs, names,
+selling prices, timestamps and catalog versions are preserved. Unknown buying
+prices remain NULL, specifications start empty, and the default unit is piece.
+Repeated initialization preserves data, and newer schemas are rejected. WAL mode supports
 local recovery; it does not replace backups. Do not copy a live `.db` file alone
 for backup: SQLite may also have active `-wal` and `-shm` files.
 
-Products currently store UUID, shop UUID, name, whole-FCFA price, timestamps and
-catalog version. Shop registration/authentication, stock, categories, unit/tax
-fields, edits, UI forms and cloud sync come later through additional migrations.
+Products store UUID, shop UUID, name, selling price (`unit_price`), optional buying
+price (`cost_price`), optional model/reference and category, unit (`piece`, `kg`,
+`litre`), timestamps and catalog version. Prices are whole FCFA; unknown buying
+price differs from zero. Buying price may exceed selling price (e.g. clearance).
+Specifications are flexible name/value pairs, such as color=blue and size=M,
+stored in `product_specifications`. Each sellable variant is a separate product
+ID; grouping variants under a shared parent is not implemented. Product and
+specification inserts succeed or roll back together.
+
+The demo is a local developer tool and prints buying prices. Those prices must
+not be included in future customer-facing API/WhatsApp responses.
+Shop registration/authentication, stock, tax fields, edits, UI forms and cloud
+sync come later through additional migrations.
 Shop-scoped queries are data filtering, not an authorization system. The service
 validates input and the JDBC repository uses parameterized SQL for values.
 Database files are ignored by Git; never commit a shop's live data.
