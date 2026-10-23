@@ -14,6 +14,10 @@ public final class DesktopApplication {
     private DesktopApplication() { }
 
     public static void main(String[] args) throws Exception {
+        if (args.length == 2 && "--product-demo".equals(args[0])) {
+            ProductStorageDemo.run(java.nio.file.Path.of(args[1]));
+            return;
+        }
         boolean smokeTest = args.length == 1 && "--smoke-test".equals(args[0]);
         if (!smokeTest && GraphicsEnvironment.isHeadless()) {
             throw new IllegalStateException("A graphical desktop is required. Use --smoke-test for a headless startup check.");
