@@ -120,3 +120,10 @@ sync come later through additional migrations.
 Shop-scoped queries are data filtering, not an authorization system. The service
 validates input and the JDBC repository uses parameterized SQL for values.
 Database files are ignored by Git; never commit a shop's live data.
+
+## Desktop team handoff
+
+Charles, Willy and Pascal: start with [the team guide](docs/team/README.md).
+It contains AI prompts, local setup instructions, shared boundaries and individual
+first tasks for Claude Code or Antigravity. These are implementation briefs;
+the proposed desktop shell and Products screen are not built yet.
