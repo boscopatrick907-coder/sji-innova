@@ -127,3 +127,10 @@ Charles, Willy and Pascal: start with [the team guide](docs/team/README.md).
 It contains AI prompts, local setup instructions, shared boundaries and individual
 first tasks for Claude Code or Antigravity. These are implementation briefs;
 the proposed desktop shell and Products screen are not built yet.
+
+## Visual roadmap
+
+See the [delivery roadmap](docs/roadmap/ROADMAP.md) for objectives, suggested
+owners, dependencies and acceptance checks. For the interactive offline version,
+download/open `docs/roadmap/index.html` in a browser; filter by owner or status
+and print/save all stages as PDF. Status is a manual snapshot, not live tracking.
