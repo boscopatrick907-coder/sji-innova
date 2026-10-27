@@ -76,10 +76,12 @@ class SaleStorageTest {
         // 6. Verify movement history has delivery (+10000) and sale (-2000)
         List<StockMovement> history = reopenedStock.history(shopId, product.id());
         assertEquals(2, history.size());
-        assertEquals(-2_000L, history.get(0).quantityMilli());
-        assertEquals(StockMovement.Type.SALE, history.get(0).type());
-        assertEquals(10_000L, history.get(1).quantityMilli());
-        assertEquals(StockMovement.Type.DELIVERY, history.get(1).type());
+        // History is timestamp/ID ordered, not newest-first; inspect each type.
+        // Equal clock timestamps must not make this test depend on random UUID order.
+        assertEquals(-2_000L, history.stream().filter(m -> m.type() == StockMovement.Type.SALE)
+                .findFirst().orElseThrow().quantityMilli());
+        assertEquals(10_000L, history.stream().filter(m -> m.type() == StockMovement.Type.DELIVERY)
+                .findFirst().orElseThrow().quantityMilli());
     }
 
     @Test
@@ -118,5 +120,49 @@ class SaleStorageTest {
         assertTrue(secondAttempt.replayed());
         assertEquals(4_000L, stock.current(shopId, product.id()).quantityMilli());
         assertEquals(2, stock.history(shopId, product.id()).size());
+    }
+
+    @Test
+    void laterItemFailureRollsBackEarlierStockDeductionAndMovement() throws Exception {
+        Product available = products.create(shopId, "Available", 500);
+        Product empty = products.create(shopId, "Empty", 700);
+        stock.receive(UUID.randomUUID(), shopId, available.id(), deviceId, 5_000, "Delivery");
+        UUID saleId = UUID.randomUUID();
+        assertThrows(IllegalStateException.class, () -> sales.makeCashSale(saleId, shopId, deviceId,
+                "ROLLBACK-001", List.of(new SaleItemRequest(available.id(), 1_000),
+                        new SaleItemRequest(empty.id(), 1_000))));
+        assertEquals(5_000, stock.current(shopId, available.id()).quantityMilli());
+        assertEquals(1, stock.history(shopId, available.id()).size());
+        assertTrue(stock.history(shopId, empty.id()).isEmpty());
+        assertTrue(sales.getSale(shopId, saleId).isEmpty());
+        try (var connection = database.open(); var statement = connection.createStatement();
+             var rows = statement.executeQuery("SELECT COUNT(*) FROM sale_items")) {
+            assertTrue(rows.next());
+            assertEquals(0, rows.getInt(1));
+        }
+    }
+
+    @Test
+    void saleItemWriteFailureRollsBackSaleHeaderAndStockAndAllowsRetry() throws Exception {
+        Product product = products.create(shopId, "Soap", 500);
+        stock.receive(UUID.randomUUID(), shopId, product.id(), deviceId, 5_000, "Delivery");
+        try (var connection = database.open(); var statement = connection.createStatement()) {
+            statement.execute("""
+                CREATE TRIGGER fail_sale_item BEFORE INSERT ON sale_items
+                BEGIN SELECT RAISE(ABORT, 'Simulated item write failure'); END
+                """);
+        }
+        UUID saleId = UUID.randomUUID();
+        assertThrows(java.sql.SQLException.class, () -> sales.makeCashSale(saleId, shopId, deviceId,
+                "ROLLBACK-002", List.of(new SaleItemRequest(product.id(), 1_000))));
+        assertEquals(5_000, stock.current(shopId, product.id()).quantityMilli());
+        assertEquals(1, stock.history(shopId, product.id()).size());
+        assertTrue(sales.getSale(shopId, saleId).isEmpty());
+        try (var connection = database.open(); var statement = connection.createStatement()) {
+            statement.execute("DROP TRIGGER fail_sale_item");
+        }
+        assertFalse(sales.makeCashSale(saleId, shopId, deviceId, "ROLLBACK-002",
+                List.of(new SaleItemRequest(product.id(), 1_000))).replayed());
+        assertEquals(4_000, stock.current(shopId, product.id()).quantityMilli());
     }
 }
