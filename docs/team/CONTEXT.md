@@ -14,11 +14,11 @@ optional VAT, and Must/Should/Could scope. Do not resurrect older sync rules or
 claim open framework decisions are still undecided. Escalate unresolved conflicts
 to Patrick and Emmanuel rather than rewriting the plans yourself.
 
-Snapshot when this handoff was written: product-details PR #3 is merged. Verify
-current main; code may have advanced since this document. Available today:
+Snapshot updated with the stock-management implementation. Verify the branch
+and current main before relying on these additions. Available on this branch:
 
 - core Product, ProductService, ProductRepository, SqliteDatabase and
-  SqliteProductRepository; schema version 2 migrates older databases.
+  SqliteProductRepository; schema version 3 migrates older databases.
 - Product creation and shop-scoped listing; no product edit/delete yet.
 - Product fields: id/shopId UUIDs, name, unitPrice (SELLING price), optional
   costPrice (BUYING price), optional modelReference/category, unit, specifications,
@@ -29,9 +29,12 @@ current main; code may have advanced since this document. Available today:
   variant is a separate product ID. There is no parent-variant feature yet.
 - DesktopApplication is a placeholder Swing entry point. It supports
   --smoke-test and --product-demo PATH; preserve those modes.
-- Baseline: 11 SQLite integration tests + 1 desktop startup test. Recount from
+- Baseline: 23 SQLite integration tests + 1 desktop startup test. Recount from
   current test reports instead of treating this historical count as mandatory.
-- No actual stock service, sales, authentication, receipts or sync exists yet.
+- StockService and SqliteStockRepository implement local receipts, adjustments,
+  history, current stock and low-stock thresholds. Read docs/backend/STOCK.md for
+  the contract, retry IDs and integer-thousandths quantities. No stock UI yet.
+- Sales, authentication, sale receipts and sync are not implemented.
   Do not invent those as working features.
 
 ## Responsibilities

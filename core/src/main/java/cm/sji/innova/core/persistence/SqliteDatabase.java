@@ -9,7 +9,7 @@ import java.sql.SQLException;
 
 /** File-backed connections. Call initialize before using repositories. */
 public final class SqliteDatabase {
-    private static final int SCHEMA_VERSION = 2;
+    private static final int SCHEMA_VERSION = 3;
     private final Path file;
 
     public SqliteDatabase(Path file) {
@@ -73,6 +73,28 @@ public final class SqliteDatabase {
                         )
                         """);
                     statement.execute("PRAGMA user_version = 2");
+                    version = 2;
+                }
+                if (version == 2) {
+                    statement.execute("ALTER TABLE products ADD COLUMN current_stock_milli INTEGER NOT NULL DEFAULT 0 CHECK(typeof(current_stock_milli) = 'integer')");
+                    statement.execute("ALTER TABLE products ADD COLUMN min_stock_milli INTEGER NOT NULL DEFAULT 0 CHECK(typeof(min_stock_milli) = 'integer' AND min_stock_milli >= 0)");
+                    statement.execute("""
+                        CREATE TABLE stock_movements (
+                            id TEXT PRIMARY KEY NOT NULL,
+                            shop_id TEXT NOT NULL,
+                            product_id TEXT NOT NULL REFERENCES products(id),
+                            device_id TEXT NOT NULL,
+                            type TEXT NOT NULL CHECK(type IN ('delivery', 'adjustment')),
+                            quantity_milli INTEGER NOT NULL CHECK(typeof(quantity_milli) = 'integer' AND quantity_milli != 0),
+                            reason TEXT NOT NULL CHECK(length(trim(reason)) > 0),
+                            created_at TEXT NOT NULL,
+                            CHECK(type != 'delivery' OR quantity_milli > 0)
+                        )
+                        """);
+                    statement.execute("CREATE INDEX stock_movements_product ON stock_movements(shop_id, product_id, created_at, id)");
+                    statement.execute("CREATE TRIGGER stock_movements_no_update BEFORE UPDATE ON stock_movements BEGIN SELECT RAISE(ABORT, 'Stock movements are append-only'); END");
+                    statement.execute("CREATE TRIGGER stock_movements_no_delete BEFORE DELETE ON stock_movements BEGIN SELECT RAISE(ABORT, 'Stock movements are append-only'); END");
+                    statement.execute("PRAGMA user_version = 3");
                 }
                 statement.execute("COMMIT");
             } catch (SQLException failure) {

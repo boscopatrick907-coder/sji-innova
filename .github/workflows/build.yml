@@ -27,3 +27,7 @@ jobs:
         run: |
           java -jar desktop/target/innova-desktop-0.1.0-SNAPSHOT.jar --product-demo "${{ runner.temp }}/cella-demo.db"
           java -jar desktop/target/innova-desktop-0.1.0-SNAPSHOT.jar --product-demo "${{ runner.temp }}/cella-demo.db"
+      - name: Check packaged stock persistence and retry
+        run: |
+          java -cp desktop/target/innova-desktop-0.1.0-SNAPSHOT.jar cm.sji.innova.core.demo.StockDemo "${{ runner.temp }}/cella-stock-demo.db"
+          java -cp desktop/target/innova-desktop-0.1.0-SNAPSHOT.jar cm.sji.innova.core.demo.StockDemo "${{ runner.temp }}/cella-stock-demo.db"
