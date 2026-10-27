@@ -61,7 +61,7 @@ class ProductDetailsTest {
         try (var connection = database.open(); var statement = connection.createStatement();
              var rows = statement.executeQuery("PRAGMA user_version")) {
             assertTrue(rows.next());
-            assertEquals(2, rows.getInt(1));
+            assertEquals(3, rows.getInt(1));
         }
     }
 

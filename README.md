@@ -39,7 +39,7 @@ On Windows PowerShell:
 .\mvnw.cmd --batch-mode --no-transfer-progress clean verify
 ```
 
-This builds both modules and runs eleven SQLite integration tests plus one desktop
+This builds both modules and runs twenty-three SQLite integration tests plus one desktop
 startup test. Storage tests use temporary databases. Sales and synchronization
 are not implemented.
 
@@ -71,8 +71,9 @@ java "-Djava.awt.headless=true" -jar desktop/target/innova-desktop-0.1.0-SNAPSHO
 - `desktop`: Swing + FlatLaf entry point; depends on `core`.
 - `.github/workflows/build.yml`: Linux and Windows builds and packaged startup checks.
 
-Next: stock movements and an atomic offline cash sale, including rollback tests,
-before adding cloud sync. Spring Boot is the selected cloud framework; its module will be added later. SQLite is embedded; no separate database installation, credentials, or external
+Local stock receipts, adjustments, history and low-stock thresholds are implemented.
+Next: desktop stock integration and an atomic offline cash sale with rollback tests,
+before cloud sync. Spring Boot is the selected cloud framework; its module will be added later. SQLite is embedded; no separate database installation, credentials, or external
 services are needed. Windows CI is configured; a real Windows GUI/installer test
 remains a separate quality gate.
 
@@ -96,7 +97,8 @@ The demo prints `Loaded existing products; no sample added` on later runs.
 SQLite JDBC is included in the packaged JAR, including native libraries for the
 supported platforms. No separate SQLite program is required. The file's parent
 directories are created automatically. Each connection is closed after use.
-Schema version 2 adds product details and a specifications table. Version 1
+Schema version 2 adds product details and a specifications table; schema version 3
+adds stock movements, current stock and low-stock thresholds. Version 1
 databases upgrade automatically inside a transaction: existing IDs, names,
 selling prices, timestamps and catalog versions are preserved. Unknown buying
 prices remain NULL, specifications start empty, and the default unit is piece.
@@ -115,7 +117,7 @@ specification inserts succeed or roll back together.
 
 The demo is a local developer tool and prints buying prices. Those prices must
 not be included in future customer-facing API/WhatsApp responses.
-Shop registration/authentication, stock, tax fields, edits, UI forms and cloud
+Shop registration/authentication, sales, tax fields, edits, UI forms and cloud
 sync come later through additional migrations.
 Shop-scoped queries are data filtering, not an authorization system. The service
 validates input and the JDBC repository uses parameterized SQL for values.
@@ -134,3 +136,16 @@ See the [delivery roadmap](docs/roadmap/ROADMAP.md) for objectives, suggested
 owners, dependencies and acceptance checks. For the interactive offline version,
 download/open `docs/roadmap/index.html` in a browser; filter by owner or status
 and print/save all stages as PDF. Status is a manual snapshot, not live tracking.
+
+## Stock management
+
+See [the stock service guide](docs/backend/STOCK.md) for the Java interface,
+quantity rules, retry handling, database upgrade and desktop integration notes.
+No stock screen is implemented yet. To try a receipt without a screen, build and
+run twice against a disposable database:
+
+```sh
+java -cp desktop/target/innova-desktop-0.1.0-SNAPSHOT.jar cm.sji.innova.core.demo.StockDemo data/stock-demo.db
+```
+
+Both runs show 10 pieces and one movement: the same delivery is not counted twice.
