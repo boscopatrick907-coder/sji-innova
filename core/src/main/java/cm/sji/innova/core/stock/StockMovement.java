@@ -7,7 +7,7 @@ import java.util.UUID;
 /** id is the client-generated operation ID: reuse it for retries only. */
 public record StockMovement(UUID id, UUID shopId, UUID productId, UUID deviceId,
                             Type type, long quantityMilli, String reason, Instant createdAt) {
-    public enum Type { DELIVERY, ADJUSTMENT }
+    public enum Type { DELIVERY, ADJUSTMENT, SALE, VOID }
 
     public StockMovement {
         Objects.requireNonNull(id, "operationId");
@@ -18,8 +18,10 @@ public record StockMovement(UUID id, UUID shopId, UUID productId, UUID deviceId,
         Objects.requireNonNull(createdAt, "createdAt");
         reason = Objects.requireNonNull(reason, "reason").strip();
         if (reason.isEmpty()) throw new IllegalArgumentException("A reason is required");
-        if (quantityMilli == 0 || (type == Type.DELIVERY && quantityMilli < 0)) {
-            throw new IllegalArgumentException("Delivery quantity must be positive; adjustment must be nonzero");
+        if (quantityMilli == 0
+                || ((type == Type.DELIVERY || type == Type.VOID) && quantityMilli < 0)
+                || (type == Type.SALE && quantityMilli > 0)) {
+            throw new IllegalArgumentException("Quantity sign does not match movement type: " + type);
         }
     }
 

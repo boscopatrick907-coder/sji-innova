@@ -9,7 +9,7 @@ import java.sql.SQLException;
 
 /** File-backed connections. Call initialize before using repositories. */
 public final class SqliteDatabase {
-    private static final int SCHEMA_VERSION = 3;
+    public static final int SCHEMA_VERSION = 4;
     private final Path file;
 
     public SqliteDatabase(Path file) {
@@ -93,8 +93,61 @@ public final class SqliteDatabase {
                         """);
                     statement.execute("CREATE INDEX stock_movements_product ON stock_movements(shop_id, product_id, created_at, id)");
                     statement.execute("CREATE TRIGGER stock_movements_no_update BEFORE UPDATE ON stock_movements BEGIN SELECT RAISE(ABORT, 'Stock movements are append-only'); END");
-                    statement.execute("CREATE TRIGGER stock_movements_no_delete BEFORE DELETE ON stock_movements BEGIN SELECT RAISE(ABORT, 'Stock movements are append-only'); END");
                     statement.execute("PRAGMA user_version = 3");
+                    version = 3;
+                }
+                if (version == 3) {
+                    statement.execute("""
+                        CREATE TABLE stock_movements_v4 (
+                            id TEXT PRIMARY KEY NOT NULL,
+                            shop_id TEXT NOT NULL,
+                            product_id TEXT NOT NULL REFERENCES products(id),
+                            device_id TEXT NOT NULL,
+                            type TEXT NOT NULL CHECK(type IN ('delivery', 'adjustment', 'sale', 'void')),
+                            quantity_milli INTEGER NOT NULL CHECK(typeof(quantity_milli) = 'integer' AND quantity_milli != 0),
+                            reason TEXT NOT NULL CHECK(length(trim(reason)) > 0),
+                            created_at TEXT NOT NULL,
+                            CHECK((type != 'delivery' AND type != 'void') OR quantity_milli > 0),
+                            CHECK(type != 'sale' OR quantity_milli < 0)
+                        )
+                        """);
+                    statement.execute("""
+                        INSERT INTO stock_movements_v4 (id, shop_id, product_id, device_id, type, quantity_milli, reason, created_at)
+                        SELECT id, shop_id, product_id, device_id, type, quantity_milli, reason, created_at FROM stock_movements
+                        """);
+                    statement.execute("DROP TABLE stock_movements");
+                    statement.execute("ALTER TABLE stock_movements_v4 RENAME TO stock_movements");
+                    statement.execute("CREATE INDEX stock_movements_product ON stock_movements(shop_id, product_id, created_at, id)");
+                    statement.execute("CREATE TRIGGER stock_movements_no_update BEFORE UPDATE ON stock_movements BEGIN SELECT RAISE(ABORT, 'Stock movements are append-only'); END");
+                    statement.execute("CREATE TRIGGER stock_movements_no_delete BEFORE DELETE ON stock_movements BEGIN SELECT RAISE(ABORT, 'Stock movements are append-only'); END");
+
+                    statement.execute("""
+                        CREATE TABLE sales (
+                            id TEXT PRIMARY KEY NOT NULL,
+                            shop_id TEXT NOT NULL,
+                            receipt_number TEXT NOT NULL CHECK(length(trim(receipt_number)) > 0),
+                            device_id TEXT NOT NULL,
+                            payment_method TEXT NOT NULL CHECK(payment_method IN ('cash', 'momo', 'credit')),
+                            total_amount INTEGER NOT NULL CHECK(total_amount >= 0),
+                            created_at TEXT NOT NULL
+                        )
+                        """);
+                    statement.execute("CREATE INDEX sales_shop_created ON sales(shop_id, created_at, id)");
+
+                    statement.execute("""
+                        CREATE TABLE sale_items (
+                            id TEXT PRIMARY KEY NOT NULL,
+                            sale_id TEXT NOT NULL REFERENCES sales(id) ON DELETE RESTRICT,
+                            product_id TEXT NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+                            product_name TEXT NOT NULL,
+                            unit TEXT NOT NULL,
+                            quantity_milli INTEGER NOT NULL CHECK(quantity_milli > 0),
+                            unit_price INTEGER NOT NULL CHECK(unit_price >= 0),
+                            subtotal INTEGER NOT NULL CHECK(subtotal >= 0)
+                        )
+                        """);
+                    statement.execute("CREATE INDEX sale_items_sale ON sale_items(sale_id)");
+                    statement.execute("PRAGMA user_version = 4");
                 }
                 statement.execute("COMMIT");
             } catch (SQLException failure) {
