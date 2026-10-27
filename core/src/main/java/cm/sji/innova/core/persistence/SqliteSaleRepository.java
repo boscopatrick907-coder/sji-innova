@@ -15,8 +15,9 @@ public final class SqliteSaleRepository implements SaleRepository {
     @Override
     public SaleResult recordSale(Sale sale) throws SQLException {
         try (Connection connection = database.open()) {
-            connection.setAutoCommit(false);
             try (Statement statement = connection.createStatement()) {
+                // Use SQL-managed transactions consistently, as in the stock repository.
+                // setAutoCommit(false) would already BEGIN and make this a nested BEGIN.
                 statement.execute("BEGIN IMMEDIATE");
                 // Check idempotent retry
                 try (PreparedStatement check = connection.prepareStatement("SELECT * FROM sales WHERE id = ?")) {
@@ -25,7 +26,7 @@ public final class SqliteSaleRepository implements SaleRepository {
                         if (rs.next()) {
                             Optional<Sale> existing = loadSale(connection, sale.shopId(), sale.id());
                             if (existing.isPresent()) {
-                                connection.commit();
+                                statement.execute("COMMIT");
                                 return new SaleResult(existing.get(), true);
                             }
                         }
@@ -121,11 +122,12 @@ public final class SqliteSaleRepository implements SaleRepository {
                 }
 
                 statement.execute("COMMIT");
-                connection.commit();
                 return new SaleResult(sale, false);
             } catch (SQLException | RuntimeException failure) {
                 try {
-                    connection.rollback();
+                    try (Statement rollback = connection.createStatement()) {
+                        rollback.execute("ROLLBACK");
+                    }
                 } catch (SQLException rollbackFailure) {
                     failure.addSuppressed(rollbackFailure);
                 }
