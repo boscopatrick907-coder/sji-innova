@@ -34,7 +34,9 @@ and current main before relying on these additions. Available on this branch:
 - StockService and SqliteStockRepository implement local receipts, adjustments,
   history, current stock and low-stock thresholds. Read docs/backend/STOCK.md for
   the contract, retry IDs and integer-thousandths quantities. No stock UI yet.
-- Sales, authentication, sale receipts and sync are not implemented.
+- SaleService and SqliteSaleRepository implement atomic cash sales, item snapshotting,
+  and stock deduction. Read docs/backend/SALES.md for the contract. No sales UI yet.
+- Authentication, printable receipts and sync are not implemented.
   Do not invent those as working features.
 
 ## Responsibilities
