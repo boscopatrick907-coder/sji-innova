@@ -1,0 +1,57 @@
+classDiagram
+    direction LR
+    class ProductService {
+        create(...) Product
+        list(shopId) List
+    }
+    class StockService {
+        receive(...) StockResult
+        adjust(...) StockResult
+        current(shopId, productId) StockLevel
+        list(shopId) List
+        history(shopId, productId) List
+        setMinimum(...) StockLevel
+    }
+    class SaleService {
+        makeCashSale(...) SaleResult
+        getSale(shopId, saleId) Optional
+        listSales(shopId) List
+    }
+    class ProductRepository {
+        <<interface>>
+        insert(product) void
+        findByShop(shopId) List
+    }
+    class StockRepository {
+        <<interface>>
+        record(movement) StockResult
+        current(...) StockLevel
+        list(shopId) List
+        history(...) List
+        setMinimum(...) StockLevel
+    }
+    class SaleRepository {
+        <<interface>>
+        recordSale(sale) SaleResult
+        findById(...) Optional
+        listByShop(shopId) List
+    }
+    class SqliteProductRepository
+    class SqliteStockRepository
+    class SqliteSaleRepository
+    class SqliteDatabase {
+        Path file
+        SCHEMA_VERSION = 4
+        open() Connection
+        initialize() void
+    }
+    ProductService --> ProductRepository : injected
+    StockService --> StockRepository : injected
+    SaleService --> SaleRepository : injected
+    SaleService --> ProductRepository : reads catalog
+    ProductRepository <|.. SqliteProductRepository
+    StockRepository <|.. SqliteStockRepository
+    SaleRepository <|.. SqliteSaleRepository
+    SqliteProductRepository --> SqliteDatabase
+    SqliteStockRepository --> SqliteDatabase
+    SqliteSaleRepository --> SqliteDatabase

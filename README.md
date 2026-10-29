@@ -149,3 +149,9 @@ java -cp desktop/target/innova-desktop-0.1.0-SNAPSHOT.jar cm.sji.innova.core.dem
 ```
 
 Both runs show 10 pieces and one movement: the same delivery is not counted twice.
+
+## UML and database diagrams
+
+See the [diagram collection](docs/diagrams/README.md): UML use cases, domain and
+service classes, stock/cash-sale sequences, and separate current/target database
+ER diagrams. Markdown renders on GitHub; SVG images are supplied for sharing.

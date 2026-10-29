@@ -1,0 +1,97 @@
+classDiagram
+    direction TB
+    class Product {
+        <<record>>
+        UUID id
+        UUID shopId
+        String name
+        long unitPrice
+        Long costPrice
+        String modelReference
+        String category
+        String unit
+        Map specifications
+        Instant createdAt
+        Instant updatedAt
+        long version
+    }
+    class StockMovement {
+        <<record>>
+        UUID id
+        UUID shopId
+        UUID productId
+        UUID deviceId
+        Type type
+        long quantityMilli
+        String reason
+        Instant createdAt
+        sameOperation(other) boolean
+    }
+    class MovementType {
+        <<enumeration>>
+        DELIVERY
+        ADJUSTMENT
+        SALE
+        VOID
+    }
+    class StockLevel {
+        <<record>>
+        UUID shopId
+        UUID productId
+        String productName
+        String unit
+        long quantityMilli
+        long minimumMilli
+        lowStock() boolean
+    }
+    class StockResult {
+        <<record>>
+        boolean replayed
+    }
+    class Sale {
+        <<record>>
+        UUID id
+        UUID shopId
+        String receiptNumber
+        UUID deviceId
+        PaymentMethod paymentMethod
+        long totalAmount
+        Instant createdAt
+    }
+    class SaleItem {
+        <<record>>
+        UUID id
+        UUID saleId
+        UUID productId
+        String productName
+        String unit
+        long quantityMilli
+        long unitPrice
+        long subtotal
+    }
+    class SaleItemRequest {
+        <<record>>
+        UUID productId
+        long quantityMilli
+        Long customUnitPrice
+    }
+    class SaleResult {
+        <<record>>
+        boolean replayed
+    }
+    class PaymentMethod {
+        <<enumeration>>
+        CASH
+        MOMO
+        CREDIT
+    }
+    StockMovement --> MovementType : type
+    StockResult *-- "1" StockMovement : movement
+    StockResult *-- "1" StockLevel : stock
+    Sale *-- "1..*" SaleItem : items
+    Sale --> PaymentMethod : paymentMethod
+    SaleResult *-- "1" Sale : sale
+    StockMovement ..> Product : productId
+    StockLevel ..> Product : productId
+    SaleItem ..> Product : productId
+    SaleItemRequest ..> Product : productId
