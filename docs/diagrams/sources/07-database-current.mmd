@@ -1,0 +1,54 @@
+erDiagram
+    products ||--o{ product_specifications : has
+    products ||--o{ stock_movements : has
+    products ||--o{ sale_items : referenced_by
+    sales ||--o{ sale_items : contains
+    product_specifications {
+        TEXT product_id PK,FK
+        TEXT name PK
+        TEXT value
+    }
+    products {
+        TEXT id PK
+        TEXT shop_id "UUID text - no shop FK yet"
+        TEXT name
+        INTEGER unit_price "selling price FCFA"
+        TEXT created_at "ISO-8601 timestamp"
+        TEXT updated_at "ISO-8601 timestamp"
+        INTEGER version
+        TEXT model_reference "nullable"
+        INTEGER cost_price "nullable buying price FCFA"
+        TEXT category "nullable"
+        TEXT unit "piece kg litre"
+        INTEGER current_stock_milli "cached thousandths"
+        INTEGER min_stock_milli "low stock threshold"
+    }
+    sale_items {
+        TEXT id PK
+        TEXT sale_id FK
+        TEXT product_id FK
+        TEXT product_name "sale-time snapshot"
+        TEXT unit "piece kg litre"
+        INTEGER quantity_milli "signed movement or positive sale quantity"
+        INTEGER unit_price "selling price FCFA"
+        INTEGER subtotal
+    }
+    sales {
+        TEXT id PK
+        TEXT shop_id "UUID text - no shop FK yet"
+        TEXT receipt_number "not unique in schema"
+        TEXT device_id "UUID text - no device FK yet"
+        TEXT payment_method "cash momo credit"
+        INTEGER total_amount
+        TEXT created_at "ISO-8601 timestamp"
+    }
+    stock_movements {
+        TEXT id PK
+        TEXT shop_id "UUID text - no shop FK yet"
+        TEXT product_id FK
+        TEXT device_id "UUID text - no device FK yet"
+        TEXT type "delivery adjustment sale void"
+        INTEGER quantity_milli "signed movement or positive sale quantity"
+        TEXT reason
+        TEXT created_at "ISO-8601 timestamp"
+    }

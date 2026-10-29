@@ -1,0 +1,47 @@
+@startuml
+left to right direction
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam backgroundColor white
+skinparam usecaseBackgroundColor #EAF3EC
+skinparam usecaseBorderColor #17664D
+actor "Cashier" as Cashier
+actor "Owner / manager" as Owner
+actor "Customer\n(WhatsApp)" as Customer
+rectangle "Cella — target MVP user workflows" {
+  usecase "Manage product catalog\n(storage exists; screen planned)" as Products
+  usecase "Receive / adjust stock\n(service exists; screen planned)" as Stock
+  usecase "Record cash sale\n(service exists; screen planned)" as Sale
+  usecase "Deduct stock atomically\n(implemented)" as Deduct
+  usecase "View movement history\n(service exists)" as History
+  usecase "Login and enforce roles\n(planned)" as Login
+  usecase "Record credit / repayment\n(planned)" as Debt
+  usecase "Void sale with audit trail\n(planned)" as Void
+  usecase "Generate PDF receipt\n(planned)" as Receipt
+  usecase "Back up / restore data\n(planned)" as Backup
+  usecase "View owner dashboard\n(planned)" as Dashboard
+  usecase "Ask availability / price\n(planned)" as Ask
+}
+Cashier --> Sale
+Cashier --> Debt
+Cashier --> Login
+Cashier --> Receipt
+Owner --> Login
+Owner --> Products
+Owner --> Stock
+Owner --> History
+Owner --> Void
+Owner --> Backup
+Owner --> Dashboard
+Customer --> Ask
+Sale ..> Deduct : <<include>>
+note bottom of Sale
+Cash-only backend exists today.
+No production cashier workflow or
+role enforcement is implied by this view.
+end note
+note bottom of Void
+Final owner/cashier permission matrix
+must be agreed before implementation.
+end note
+@enduml

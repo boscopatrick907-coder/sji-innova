@@ -1,0 +1,34 @@
+sequenceDiagram
+    actor Caller as Caller (future checkout screen)
+    participant Service as SaleService
+    participant Products as ProductRepository
+    participant Repo as SqliteSaleRepository
+    participant DB as SQLite
+    Caller->>Service: makeCashSale(saleId, shop, device, receiptNumber, cart)
+    Service->>Products: findByShop(shop)
+    Products-->>Service: Product prices and units
+    Service->>Service: Build item snapshots and calculate whole-FCFA totals
+    Service->>Repo: recordSale(sale)
+    Repo->>DB: BEGIN IMMEDIATE
+    Repo->>DB: Look up existing saleId
+    alt Existing sale in same shop
+        Repo->>DB: COMMIT
+        Repo-->>Caller: Stored sale, replayed=true
+        Note over Repo,Caller: Known gap: changed request details are not compared
+    else New sale
+        loop Each sale item
+            Repo->>DB: Read product unit and current stock
+            Repo->>Repo: Check whole pieces and sufficient stock
+            Repo->>DB: INSERT negative sale stock movement
+            Repo->>DB: UPDATE cached stock
+        end
+        Repo->>DB: INSERT sales header
+        Repo->>DB: INSERT sale_items
+        alt All writes succeed
+            Repo->>DB: COMMIT
+            Repo-->>Caller: Stored sale, replayed=false
+        else Validation or write fails
+            Repo->>DB: ROLLBACK
+            Repo-->>Caller: Error, no partial sale or stock deduction
+        end
+    end
