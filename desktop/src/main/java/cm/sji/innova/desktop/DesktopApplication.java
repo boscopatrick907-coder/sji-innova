@@ -1,15 +1,28 @@
 package cm.sji.innova.desktop;
 
+import cm.sji.innova.desktop.shell.AppContext;
+import cm.sji.innova.desktop.shell.AppContextLoader;
+import cm.sji.innova.desktop.shell.LocalAppData;
+import cm.sji.innova.desktop.shell.Messages;
+import cm.sji.innova.desktop.shell.ShellPanel;
+import cm.sji.innova.desktop.shell.StartupOptions;
 import com.formdev.flatlaf.FlatLightLaf;
-import java.awt.BorderLayout;
 import java.awt.GraphicsEnvironment;
-import javax.swing.BorderFactory;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Comparator;
+import java.util.Locale;
 import javax.swing.JFrame;
-import javax.swing.JLabel;
-import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 
-/** Desktop entry point. Business logic will live in the core module. */
+/**
+ * Desktop entry point.
+ *
+ * <p>Modes: normal launch (opens the Cella window), {@code --smoke-test} (headless check on a
+ * throw-away folder) and {@code --product-demo PATH} (prints demo products into the given
+ * database). Normal launch never inserts demo products.
+ */
 public final class DesktopApplication {
     private DesktopApplication() { }
 
@@ -18,29 +31,72 @@ public final class DesktopApplication {
             ProductStorageDemo.run(java.nio.file.Path.of(args[1]));
             return;
         }
-        boolean smokeTest = args.length == 1 && "--smoke-test".equals(args[0]);
-        if (!smokeTest && GraphicsEnvironment.isHeadless()) {
+        if (args.length == 1 && "--smoke-test".equals(args[0])) {
+            smokeTest();
+            return;
+        }
+        StartupOptions options = StartupOptions.parse(args, System.getenv());
+        if (GraphicsEnvironment.isHeadless()) {
             throw new IllegalStateException("A graphical desktop is required. Use --smoke-test for a headless startup check.");
         }
+        LocalAppData location = LocalAppData.forOptions(options);
+        Messages messages = Messages.load(options.locale());
         SwingUtilities.invokeAndWait(() -> {
-            if (!FlatLightLaf.setup()) {
-                throw new IllegalStateException("FlatLaf could not initialize");
-            }
-            JPanel content = new JPanel(new BorderLayout());
-            content.setBorder(BorderFactory.createEmptyBorder(24, 24, 24, 24));
-            content.add(new JLabel("SJI Innova — application foundation"), BorderLayout.CENTER);
-            if (smokeTest) {
-                content.setSize(640, 400);
-                content.doLayout();
-                System.out.println("Desktop startup smoke check passed");
-                return;
-            }
-            JFrame frame = new JFrame("SJI Innova");
+            setUpLookAndFeel();
+            JFrame frame = new JFrame(messages.get("app.title"));
+            ShellPanel shell = new ShellPanel(messages, location,
+                    () -> AppContextLoader.load(location), () -> System.exit(0));
             frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-            frame.setContentPane(content);
-            frame.setSize(640, 400);
+            frame.setContentPane(shell);
+            frame.setSize(960, 600);
             frame.setLocationRelativeTo(null);
             frame.setVisible(true);
+            shell.start();   // opens the database in the background
         });
+    }
+
+    /**
+     * Headless check: runs the real start-up (folder, shop ID, database) on a temporary folder,
+     * builds the main page without showing it, and deletes the folder. Real user data is never touched.
+     */
+    private static void smokeTest() throws Exception {
+        Path temporary = Files.createTempDirectory("cella-smoke-");
+        try {
+            LocalAppData location = new LocalAppData(temporary);
+            AppContext context = AppContextLoader.load(location);
+            if (!context.products().list(context.shopId()).isEmpty()) {
+                throw new IllegalStateException("A fresh database must not contain demo products");
+            }
+            Messages messages = Messages.load(Locale.ENGLISH);
+            SwingUtilities.invokeAndWait(() -> {
+                setUpLookAndFeel();
+                ShellPanel shell = new ShellPanel(messages, location, () -> context, () -> { });
+                shell.showMain(context);
+                shell.setSize(960, 600);
+                shell.doLayout();
+                if (shell.currentPage() != ShellPanel.Page.MAIN || !"products".equals(shell.selectedScreenId())) {
+                    throw new IllegalStateException("Main page did not show the Products entry");
+                }
+            });
+            System.out.println("Desktop startup smoke check passed");
+        } finally {
+            deleteQuietly(temporary);
+        }
+    }
+
+    private static void setUpLookAndFeel() {
+        if (!FlatLightLaf.setup()) {
+            throw new IllegalStateException("FlatLaf could not initialize");
+        }
+    }
+
+    private static void deleteQuietly(Path folder) {
+        try (var paths = Files.walk(folder)) {
+            paths.sorted(Comparator.reverseOrder()).forEach(path -> {
+                try { Files.deleteIfExists(path); } catch (IOException ignored) { }
+            });
+        } catch (IOException ignored) {
+            // A leftover temporary folder is harmless; it never contains real data.
+        }
     }
 }
