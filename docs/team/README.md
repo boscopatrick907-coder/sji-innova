@@ -98,3 +98,10 @@ Charles, Willy and Pascal: read the [2 November review and correction checklists
 before continuing your current desktop tasks. Findings are tied to the reviewed
 commits; append evidence when fixes are tested rather than treating passing builds
 as proof that every acceptance criterion is complete.
+
+## Emmanuel — next backend assignment
+
+Read [Emmanuel's cash-sale void brief](EMMANUEL.md) for the AI starting prompt,
+current code context, atomic reversal rules, migration/event design and required
+tests. This is a backend task; Charles, Willy and Pascal continue their separate
+desktop corrections. Sale voiding is planned, not implemented by this document.
