@@ -258,3 +258,11 @@ Known limitations / unrun checks:
 Never tick a task as done until you have evidence. Open a PR for review; do not
 merge automatically. Patrick coordinates review; this file does not authorize
 sending messages or credentials to anyone.
+
+## Review follow-up — 2 November 2026
+
+Your first void implementation at `194c481` was reviewed. Read the
+[dedicated correction brief](../reviews/emmanuel-voids-2026-11-02/EMMANUEL.md)
+and [full evidence](../reviews/emmanuel-voids-2026-11-02/REVIEW.md).
+It covers the audit-only mixed-unit aggregate overflow; retain the rest of the
+feature and its genuine stock-overflow/rollback protections.
