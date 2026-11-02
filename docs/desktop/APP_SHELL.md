@@ -25,6 +25,9 @@ Example: `java -jar desktop/target/innova-desktop-0.1.0-SNAPSHOT.jar --data-dir 
 `shop-id.txt` holds one UUID. It is created at the first launch and reused at every
 launch. It is a **temporary development identity**, not a login and not a shop
 registration. A damaged file stops start-up with a clear error and is never replaced.
+If `cella.db` exists but `shop-id.txt` is missing, start-up also stops with an error and
+no new ID is created, because a new ID would hide the shop's existing products. To recover,
+put the old `shop-id.txt` back in the data folder and click **Retry**.
 
 ## Start-up behaviour
 

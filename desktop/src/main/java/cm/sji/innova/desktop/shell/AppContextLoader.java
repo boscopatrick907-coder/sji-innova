@@ -19,6 +19,13 @@ public final class AppContextLoader {
 
     public static AppContext load(LocalAppData location) throws IOException, SQLException {
         Files.createDirectories(location.directory());
+        // An existing database without its ID file: refuse, never invent a new ID.
+        if (Files.exists(location.databaseFile()) && !Files.exists(location.shopIdFile())) {
+            throw new IOException("The shop database " + location.databaseFile()
+                    + " exists, but the shop identity file " + location.shopIdFile() + " is missing."
+                    + " Cella did not create a new identity, so your products are not lost."
+                    + " Put your copy of shop-id.txt back in this folder, then click Retry.");
+        }
         UUID shopId = ShopIdentity.loadOrCreate(location.shopIdFile());
         SqliteDatabase database = new SqliteDatabase(location.databaseFile());
         database.initialize();

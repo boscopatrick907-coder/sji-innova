@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -53,5 +54,30 @@ class AppContextLoaderTest {
         Files.writeString(notAFolder, "I am a file", StandardCharsets.UTF_8);
         assertThrows(IOException.class, () -> AppContextLoader.load(new LocalAppData(notAFolder)));
         assertEquals("I am a file", Files.readString(notAFolder, StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void aMissingShopIdNextToAnExistingDatabaseStopsStartup() throws Exception {
+        LocalAppData location = new LocalAppData(folder.resolve("cella"));
+
+        // 1. First start: save one product and remember the shop ID
+        AppContext first = AppContextLoader.load(location);
+        first.products().create(first.shopId(), "Rice 1 kg", 500);
+        UUID oldId = first.shopId();
+
+        // 2. Lose ONLY the ID file (the database stays)
+        Files.delete(location.shopIdFile());
+
+        // 3. The second start must refuse to start
+        assertThrows(IOException.class, () -> AppContextLoader.load(location));
+
+        // 4. Cella must NOT have invented a new ID file
+        assertFalse(Files.exists(location.shopIdFile()));
+
+        // 5. Put the old ID back: same shop, and the product is still there
+        Files.writeString(location.shopIdFile(), oldId.toString(), StandardCharsets.UTF_8);
+        AppContext recovered = AppContextLoader.load(location);
+        assertEquals(oldId, recovered.shopId());
+        assertEquals(1, recovered.products().list(recovered.shopId()).size());
     }
 }
