@@ -40,20 +40,49 @@ public final class ProductPanel extends JPanel {
 
     private final JButton saveButton = new JButton();
     private final JButton refreshButton = new JButton();
+    private final JButton addSpecificationButton = new JButton();
     private final JLabel statusLabel = new JLabel(" ");
+
+    private boolean savePending = false;
+    private volatile Runnable onSaveWorkerDone;
+    private volatile Runnable onLoadWorkerDone;
+    private java.util.function.Consumer<String> errorHandler = this::displayErrorDialog;
 
     public ProductPanel(ProductService products, UUID shopId,
                         ResourceBundle messages) {
+        this(products, shopId, messages, null, null);
+    }
+
+    public ProductPanel(ProductService products, UUID shopId) {
+        this(products, shopId, defaultBundle(), null, null);
+    }
+
+    ProductPanel(ProductService products, UUID shopId,
+                 ResourceBundle messages,
+                 Runnable onSaveWorkerDone,
+                 Runnable onLoadWorkerDone) {
 
         this.products = Objects.requireNonNull(products, "products");
         this.shopId = Objects.requireNonNull(shopId, "shopId");
         this.messages = messages;
+        this.onSaveWorkerDone = onSaveWorkerDone;
+        this.onLoadWorkerDone = onLoadWorkerDone;
 
         this.unitBox = new JComboBox<>(new UnitOption[]{
                 new UnitOption("piece", message("unit.piece", "Piece")),
                 new UnitOption("kg", message("unit.kg", "Kilogram")),
                 new UnitOption("litre", message("unit.litre", "Litre"))
         });
+
+        this.addSpecificationButton.setText(
+                "+ " + message("action.addSpecification", "Add characteristic"));
+        this.addSpecificationButton.addActionListener(e -> addSpecRow());
+
+        this.saveButton.setText(message("action.save", "Save"));
+        this.saveButton.addActionListener(e -> saveProduct());
+
+        this.refreshButton.setText(message("action.refresh", "Refresh"));
+        this.refreshButton.addActionListener(e -> loadProducts());
 
         setLayout(new BorderLayout(15, 15));
         setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
@@ -72,10 +101,6 @@ public final class ProductPanel extends JPanel {
 
         addSpecRow();
         loadProducts();
-    }
-
-    public ProductPanel(ProductService products, UUID shopId) {
-        this(products, shopId, defaultBundle());
     }
 
     private static ResourceBundle defaultBundle() {
@@ -128,18 +153,11 @@ public final class ProductPanel extends JPanel {
         specificationsPanel.setLayout(
                 new BoxLayout(specificationsPanel, BoxLayout.Y_AXIS));
 
-        JButton addSpecificationButton = new JButton(
-                "+ " + message("action.addSpecification", "Add characteristic"));
-        addSpecificationButton.addActionListener(e -> addSpecRow());
-
         c.gridy = row++;
         form.add(specificationsPanel, c);
 
         c.gridy = row++;
         form.add(addSpecificationButton, c);
-
-        saveButton.setText(message("action.save", "Save"));
-        saveButton.addActionListener(e -> saveProduct());
 
         c.gridy = row++;
         form.add(saveButton, c);
@@ -176,8 +194,6 @@ public final class ProductPanel extends JPanel {
                         message("nav.products", "Saved products")));
 
         JPanel topBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
-        refreshButton.setText(message("action.refresh", "Refresh"));
-        refreshButton.addActionListener(e -> loadProducts());
         topBar.add(refreshButton);
         panel.add(topBar, BorderLayout.NORTH);
 
@@ -189,15 +205,30 @@ public final class ProductPanel extends JPanel {
         return panel;
     }
 
-    private void addSpecRow() {
+    void addSpecRow() {
 
         SpecRow row = new SpecRow();
+        row.setEnabled(saveButton.isEnabled());
         specificationRows.add(row);
 
         specificationsPanel.add(row.panel);
 
         specificationsPanel.revalidate();
         specificationsPanel.repaint();
+    }
+
+    void setFormEnabled(boolean enabled) {
+        nameField.setEnabled(enabled);
+        modelField.setEnabled(enabled);
+        buyingPriceField.setEnabled(enabled);
+        sellingPriceField.setEnabled(enabled);
+        categoryField.setEnabled(enabled);
+        unitBox.setEnabled(enabled);
+        addSpecificationButton.setEnabled(enabled);
+        saveButton.setEnabled(enabled);
+        for (SpecRow row : specificationRows) {
+            row.setEnabled(enabled);
+        }
     }
 
     private Map<String, String> getSpecifications() {
@@ -229,7 +260,11 @@ public final class ProductPanel extends JPanel {
         return specifications;
     }
 
-    private void saveProduct() {
+    void saveProduct() {
+
+        if (savePending) {
+            return;
+        }
 
         String name = nameField.getText().strip();
         String model = modelField.getText().strip();
@@ -287,7 +322,8 @@ public final class ProductPanel extends JPanel {
             return;
         }
 
-        saveButton.setEnabled(false);
+        savePending = true;
+        setFormEnabled(false);
         statusLabel.setText(message("state.saving", "Saving…"));
 
         SwingWorker<Product, Void> worker =
@@ -311,8 +347,6 @@ public final class ProductPanel extends JPanel {
             @Override
             protected void done() {
 
-                saveButton.setEnabled(true);
-
                 try {
                     get();
 
@@ -333,6 +367,10 @@ public final class ProductPanel extends JPanel {
                             : "";
                     showError(message("error.saveProduct",
                             "Product could not be saved") + ": " + details);
+                } finally {
+                    savePending = false;
+                    setFormEnabled(true);
+                    notifySaveWorkerDone();
                 }
             }
         };
@@ -358,8 +396,6 @@ public final class ProductPanel extends JPanel {
 
             @Override
             protected void done() {
-
-                refreshButton.setEnabled(true);
 
                 try {
                     List<Product> savedProducts = get();
@@ -397,6 +433,9 @@ public final class ProductPanel extends JPanel {
                             : "";
                     showError(message("error.loadProducts",
                             "Products could not be loaded") + ": " + details);
+                } finally {
+                    refreshButton.setEnabled(true);
+                    notifyLoadWorkerDone();
                 }
             }
         };
@@ -473,7 +512,7 @@ public final class ProductPanel extends JPanel {
                    .replace(">", "&gt;");
     }
 
-    private void clearForm() {
+    void clearForm() {
 
         nameField.setText("");
         modelField.setText("");
@@ -487,15 +526,68 @@ public final class ProductPanel extends JPanel {
         addSpecRow();
     }
 
-    private void showError(String message) {
-
-        JOptionPane.showMessageDialog(
-                this,
-                message,
-                message("products.title", "Products"),
-                JOptionPane.ERROR_MESSAGE
-        );
+    void setErrorHandler(java.util.function.Consumer<String> errorHandler) {
+        this.errorHandler = Objects.requireNonNull(errorHandler, "errorHandler");
     }
+
+    private void showError(String message) {
+        if (errorHandler != null) {
+            errorHandler.accept(message);
+        }
+    }
+
+    private void displayErrorDialog(String message) {
+        try {
+            if (!GraphicsEnvironment.isHeadless()) {
+                JOptionPane.showMessageDialog(
+                        this,
+                        message,
+                        message("products.title", "Products"),
+                        JOptionPane.ERROR_MESSAGE
+                );
+            }
+        } catch (HeadlessException ignored) {
+            // Handled cleanly in headless environments
+        }
+    }
+
+    void setOnSaveWorkerDone(Runnable onSaveWorkerDone) {
+        this.onSaveWorkerDone = onSaveWorkerDone;
+    }
+
+    void setOnLoadWorkerDone(Runnable onLoadWorkerDone) {
+        this.onLoadWorkerDone = onLoadWorkerDone;
+    }
+
+    private void notifySaveWorkerDone() {
+        Runnable callback = this.onSaveWorkerDone;
+        if (callback != null) {
+            callback.run();
+        }
+    }
+
+    private void notifyLoadWorkerDone() {
+        Runnable callback = this.onLoadWorkerDone;
+        if (callback != null) {
+            callback.run();
+        }
+    }
+
+    // Package-private accessors for testing:
+    JTextField nameField() { return nameField; }
+    JTextField modelField() { return modelField; }
+    JTextField buyingPriceField() { return buyingPriceField; }
+    JTextField sellingPriceField() { return sellingPriceField; }
+    JTextField categoryField() { return categoryField; }
+    JComboBox<UnitOption> unitBox() { return unitBox; }
+    JButton saveButton() { return saveButton; }
+    JButton refreshButton() { return refreshButton; }
+    JButton addSpecificationButton() { return addSpecificationButton; }
+    JLabel statusLabel() { return statusLabel; }
+    DefaultListModel<String> productListModel() { return productListModel; }
+    JList<String> productList() { return productList; }
+    List<SpecRow> specificationRows() { return specificationRows; }
+    boolean isSavePending() { return savePending; }
 
     public static final class UnitOption {
         private final String code;
@@ -520,12 +612,13 @@ public final class ProductPanel extends JPanel {
         }
     }
 
-    private class SpecRow {
+    class SpecRow {
 
         final JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
 
         final JTextField name = new JTextField(7);
         final JTextField value = new JTextField(7);
+        final JButton removeButton = new JButton();
 
         SpecRow() {
 
@@ -535,8 +628,7 @@ public final class ProductPanel extends JPanel {
             panel.add(new JLabel(message("specification.value", "Value") + ":"));
             panel.add(value);
 
-            JButton removeButton = new JButton(
-                    message("action.removeSpecification", "Remove"));
+            removeButton.setText(message("action.removeSpecification", "Remove"));
 
             removeButton.addActionListener(e -> {
 
@@ -549,5 +641,15 @@ public final class ProductPanel extends JPanel {
 
             panel.add(removeButton);
         }
+
+        void setEnabled(boolean enabled) {
+            name.setEnabled(enabled);
+            value.setEnabled(enabled);
+            removeButton.setEnabled(enabled);
+        }
+
+        JTextField nameField() { return name; }
+        JTextField valueField() { return value; }
+        JButton removeButton() { return removeButton; }
     }
 }
