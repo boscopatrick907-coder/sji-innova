@@ -2,9 +2,9 @@ package cm.sji.innova.core.sale;
 
 import cm.sji.innova.core.product.Product;
 import cm.sji.innova.core.product.ProductRepository;
-import java.sql.SQLException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -60,11 +60,39 @@ public final class SaleService {
         return saleRepository.recordSale(sale, request);
     }
 
+    public VoidSaleResult voidCashSale(UUID operationId, UUID shopId, UUID saleId,
+                                       UUID deviceId, UUID performedBy, String reason) throws SQLException {
+        VoidSaleRequest request = new VoidSaleRequest(operationId, shopId, saleId, deviceId, performedBy, reason);
+        return saleRepository.voidSale(request);
+    }
+
     public Optional<Sale> getSale(UUID shopId, UUID saleId) throws SQLException {
-        return saleRepository.findById(Objects.requireNonNull(shopId), Objects.requireNonNull(saleId));
+        return saleRepository.findById(Objects.requireNonNull(shopId, "shopId"), Objects.requireNonNull(saleId, "saleId"));
     }
 
     public List<Sale> listSales(UUID shopId) throws SQLException {
-        return saleRepository.listByShop(Objects.requireNonNull(shopId));
+        return saleRepository.listByShop(Objects.requireNonNull(shopId, "shopId"));
+    }
+
+    public Optional<SaleState> getSaleState(UUID shopId, UUID saleId) throws SQLException {
+        return saleRepository.findStateById(
+                Objects.requireNonNull(shopId, "shopId"),
+                Objects.requireNonNull(saleId, "saleId"));
+    }
+
+    public List<SaleState> listSaleStates(UUID shopId) throws SQLException {
+        return saleRepository.listStatesByShop(Objects.requireNonNull(shopId, "shopId"));
+    }
+
+    public List<SaleEvent> listSaleEvents(UUID shopId, UUID saleId) throws SQLException {
+        return saleRepository.listEvents(
+                Objects.requireNonNull(shopId, "shopId"),
+                Objects.requireNonNull(saleId, "saleId"));
+    }
+
+    public List<SaleAuditRecord> listAuditRecords(UUID shopId, UUID saleId) throws SQLException {
+        return saleRepository.listAuditRecords(
+                Objects.requireNonNull(shopId, "shopId"),
+                Objects.requireNonNull(saleId, "saleId"));
     }
 }

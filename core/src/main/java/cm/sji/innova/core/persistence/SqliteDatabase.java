@@ -1,15 +1,17 @@
 package cm.sji.innova.core.persistence;
 
+import cm.sji.innova.core.sale.SaleEvent;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.UUID;
 
 /** File-backed connections. Call initialize before using repositories. */
 public final class SqliteDatabase {
-    public static final int SCHEMA_VERSION = 4;
+    public static final int SCHEMA_VERSION = 5;
     private final Path file;
 
     public SqliteDatabase(Path file) {
@@ -148,6 +150,100 @@ public final class SqliteDatabase {
                         """);
                     statement.execute("CREATE INDEX sale_items_sale ON sale_items(sale_id)");
                     statement.execute("PRAGMA user_version = 4");
+                    version = 4;
+                }
+                if (version == 4) {
+                    statement.execute("CREATE UNIQUE INDEX products_shop_id_id ON products(shop_id, id)");
+                    statement.execute("CREATE UNIQUE INDEX sales_shop_id_id ON sales(shop_id, id)");
+                    statement.execute("CREATE UNIQUE INDEX sale_items_sale_product_id ON sale_items(sale_id, id, product_id)");
+                    statement.execute("CREATE UNIQUE INDEX stock_movements_shop_product_id ON stock_movements(shop_id, product_id, id)");
+
+                    statement.execute("CREATE TRIGGER sales_no_update BEFORE UPDATE ON sales BEGIN SELECT RAISE(ABORT, 'Sales are append-only'); END");
+                    statement.execute("CREATE TRIGGER sales_no_delete BEFORE DELETE ON sales BEGIN SELECT RAISE(ABORT, 'Sales are append-only'); END");
+                    statement.execute("CREATE TRIGGER sale_items_no_update BEFORE UPDATE ON sale_items BEGIN SELECT RAISE(ABORT, 'Sale items are append-only'); END");
+                    statement.execute("CREATE TRIGGER sale_items_no_delete BEFORE DELETE ON sale_items BEGIN SELECT RAISE(ABORT, 'Sale items are append-only'); END");
+
+                    statement.execute("""
+                        CREATE TABLE sale_events (
+                            id TEXT PRIMARY KEY NOT NULL,
+                            sale_id TEXT NOT NULL,
+                            shop_id TEXT NOT NULL,
+                            device_id TEXT NOT NULL,
+                            type TEXT NOT NULL CHECK(type IN ('created', 'voided')),
+                            performed_by TEXT CHECK(performed_by IS NULL OR length(trim(performed_by)) > 0),
+                            reason TEXT NOT NULL CHECK(length(trim(reason)) > 0),
+                            created_at TEXT NOT NULL,
+                            CHECK(type != 'voided' OR performed_by IS NOT NULL),
+                            UNIQUE(sale_id, type),
+                            UNIQUE(shop_id, sale_id, id),
+                            FOREIGN KEY (shop_id, sale_id) REFERENCES sales(shop_id, id) ON DELETE RESTRICT
+                        )
+                        """);
+                    statement.execute("CREATE INDEX sale_events_shop_sale_created ON sale_events(shop_id, sale_id, created_at, id)");
+                    statement.execute("CREATE TRIGGER sale_events_no_update BEFORE UPDATE ON sale_events BEGIN SELECT RAISE(ABORT, 'Sale events are append-only'); END");
+                    statement.execute("CREATE TRIGGER sale_events_no_delete BEFORE DELETE ON sale_events BEGIN SELECT RAISE(ABORT, 'Sale events are append-only'); END");
+
+                    // Deterministically backfill creation events for existing v4 sales without inventing actor IDs.
+                    try (var query = connection.createStatement();
+                         var existingSales = query.executeQuery(
+                                 "SELECT id, shop_id, device_id, receipt_number, created_at FROM sales ORDER BY created_at, id");
+                         var insertEvent = connection.prepareStatement("""
+                                 INSERT INTO sale_events (id, sale_id, shop_id, device_id, type, performed_by, reason, created_at)
+                                 VALUES (?, ?, ?, ?, 'created', NULL, ?, ?)
+                                 """)) {
+                        while (existingSales.next()) {
+                            String saleId = existingSales.getString("id");
+                            insertEvent.setString(1, SaleEvent.createdEventId(UUID.fromString(saleId)).toString());
+                            insertEvent.setString(2, saleId);
+                            insertEvent.setString(3, existingSales.getString("shop_id"));
+                            insertEvent.setString(4, existingSales.getString("device_id"));
+                            insertEvent.setString(5, "Sale " + existingSales.getString("receipt_number"));
+                            insertEvent.setString(6, existingSales.getString("created_at"));
+                            insertEvent.addBatch();
+                        }
+                        insertEvent.executeBatch();
+                    }
+
+                    statement.execute("""
+                        CREATE TABLE sale_void_items (
+                            sale_item_id TEXT PRIMARY KEY NOT NULL,
+                            void_event_id TEXT NOT NULL,
+                            shop_id TEXT NOT NULL,
+                            sale_id TEXT NOT NULL,
+                            product_id TEXT NOT NULL,
+                            stock_movement_id TEXT NOT NULL UNIQUE,
+                            quantity_milli INTEGER NOT NULL CHECK(typeof(quantity_milli) = 'integer' AND quantity_milli > 0),
+                            FOREIGN KEY (shop_id, sale_id, void_event_id) REFERENCES sale_events(shop_id, sale_id, id) ON DELETE RESTRICT,
+                            FOREIGN KEY (sale_id, sale_item_id, product_id) REFERENCES sale_items(sale_id, id, product_id) ON DELETE RESTRICT,
+                            FOREIGN KEY (shop_id, product_id, stock_movement_id) REFERENCES stock_movements(shop_id, product_id, id) ON DELETE RESTRICT
+                        )
+                        """);
+                    statement.execute("CREATE INDEX sale_void_items_sale ON sale_void_items(shop_id, sale_id)");
+                    statement.execute("CREATE TRIGGER sale_void_items_no_update BEFORE UPDATE ON sale_void_items BEGIN SELECT RAISE(ABORT, 'Sale void items are append-only'); END");
+                    statement.execute("CREATE TRIGGER sale_void_items_no_delete BEFORE DELETE ON sale_void_items BEGIN SELECT RAISE(ABORT, 'Sale void items are append-only'); END");
+
+                    statement.execute("""
+                        CREATE TABLE audit_log (
+                            id TEXT PRIMARY KEY NOT NULL,
+                            shop_id TEXT NOT NULL,
+                            device_id TEXT NOT NULL,
+                            performed_by TEXT NOT NULL CHECK(length(trim(performed_by)) > 0),
+                            action TEXT NOT NULL CHECK(length(trim(action)) > 0),
+                            target_table TEXT NOT NULL CHECK(length(trim(target_table)) > 0),
+                            target_id TEXT NOT NULL CHECK(length(trim(target_id)) > 0),
+                            event_id TEXT NOT NULL UNIQUE,
+                            reason TEXT NOT NULL CHECK(length(trim(reason)) > 0),
+                            old_value TEXT NOT NULL CHECK(length(trim(old_value)) > 0),
+                            new_value TEXT NOT NULL CHECK(length(trim(new_value)) > 0),
+                            created_at TEXT NOT NULL,
+                            FOREIGN KEY (shop_id, target_id, event_id) REFERENCES sale_events(shop_id, sale_id, id) ON DELETE RESTRICT
+                        )
+                        """);
+                    statement.execute("CREATE INDEX audit_log_shop_target ON audit_log(shop_id, target_table, target_id, created_at, id)");
+                    statement.execute("CREATE TRIGGER audit_log_no_update BEFORE UPDATE ON audit_log BEGIN SELECT RAISE(ABORT, 'Audit log is append-only'); END");
+                    statement.execute("CREATE TRIGGER audit_log_no_delete BEFORE DELETE ON audit_log BEGIN SELECT RAISE(ABORT, 'Audit log is append-only'); END");
+
+                    statement.execute("PRAGMA user_version = 5");
                 }
                 statement.execute("COMMIT");
             } catch (SQLException failure) {
