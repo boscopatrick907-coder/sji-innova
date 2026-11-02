@@ -91,3 +91,10 @@ The integration order avoids replacing each other's entry-point changes.
 At the end of each session report: task, branch/commit, what works, tests run,
 what is blocked, and the next small step. Include a screenshot of visible UI
 changes when possible. A passing cloud startup check is not a Windows GUI test.
+
+## Desktop review feedback
+
+Charles, Willy and Pascal: read the [2 November review and correction checklists](../reviews/desktop-2026-11-02/README.md)
+before continuing your current desktop tasks. Findings are tied to the reviewed
+commits; append evidence when fixes are tested rather than treating passing builds
+as proof that every acceptance criterion is complete.
