@@ -39,9 +39,9 @@ On Windows PowerShell:
 .\mvnw.cmd --batch-mode --no-transfer-progress clean verify
 ```
 
-This builds both modules and runs twenty-three SQLite integration tests plus one desktop
-startup test. Storage tests use temporary databases. Sales and synchronization
-are not implemented.
+This builds both modules and runs forty SQLite integration tests plus one desktop
+startup test on this branch. Storage tests use temporary databases. Product, stock
+and cash-sale backends are implemented; synchronization is not.
 
 The prepared cloud environment also supplies proxy settings outside the checkout.
 Use this build command there:
@@ -155,3 +155,10 @@ Both runs show 10 pieces and one movement: the same delivery is not counted twic
 See the [diagram collection](docs/diagrams/README.md): UML use cases, domain and
 service classes, stock/cash-sale sequences, and separate current/target database
 ER diagrams. Markdown renders on GitHub; SVG images are supplied for sharing.
+
+## Cash-sale retries and rounding
+
+Identical retries keep the original sale and stock unchanged; changed checkout
+details are rejected. New fractional cash-sale lines round to nearest whole FCFA
+with halves up, then sum the rounded lines. Existing sales are not recalculated.
+See [the sales contract](docs/backend/SALES.md) before wiring checkout screens.
