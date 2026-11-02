@@ -14,6 +14,12 @@ public final class SqliteSaleRepository implements SaleRepository {
 
     @Override
     public SaleResult recordSale(Sale sale) throws SQLException {
+        return recordSale(sale, CashSaleRequest.fromSale(sale));
+    }
+
+    @Override
+    public SaleResult recordSale(Sale sale, CashSaleRequest request) throws SQLException {
+        request.requireMatches(sale);
         try (Connection connection = database.open()) {
             try (Statement statement = connection.createStatement()) {
                 // Use SQL-managed transactions consistently, as in the stock repository.
@@ -26,9 +32,11 @@ public final class SqliteSaleRepository implements SaleRepository {
                         if (rs.next()) {
                             Optional<Sale> existing = loadSale(connection, sale.shopId(), sale.id());
                             if (existing.isPresent()) {
+                                request.requireMatches(existing.get());
                                 statement.execute("COMMIT");
                                 return new SaleResult(existing.get(), true);
                             }
+                            throw new IllegalArgumentException("Sale ID was already used with different checkout details");
                         }
                     }
                 }

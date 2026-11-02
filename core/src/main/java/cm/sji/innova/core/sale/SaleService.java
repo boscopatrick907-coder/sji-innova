@@ -3,6 +3,8 @@ package cm.sji.innova.core.sale;
 import cm.sji.innova.core.product.Product;
 import cm.sji.innova.core.product.ProductRepository;
 import java.sql.SQLException;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -24,12 +26,12 @@ public final class SaleService {
 
     public SaleResult makeCashSale(UUID saleId, UUID shopId, UUID deviceId,
                                   String receiptNumber, List<SaleItemRequest> itemRequests) throws SQLException {
-        Objects.requireNonNull(saleId, "saleId");
-        Objects.requireNonNull(shopId, "shopId");
-        Objects.requireNonNull(deviceId, "deviceId");
-        Objects.requireNonNull(receiptNumber, "receiptNumber");
-        if (itemRequests == null || itemRequests.isEmpty()) {
-            throw new IllegalArgumentException("Sale must contain at least one item");
+        CashSaleRequest request = new CashSaleRequest(saleId, shopId, deviceId, receiptNumber, itemRequests);
+        // Resolve retries from their saved snapshots, before consulting today's catalog prices.
+        Optional<Sale> stored = saleRepository.findById(shopId, saleId);
+        if (stored.isPresent()) {
+            request.requireMatches(stored.get());
+            return new SaleResult(stored.get(), true);
         }
 
         Map<UUID, Product> productsById = productRepository.findByShop(shopId).stream()
@@ -38,22 +40,24 @@ public final class SaleService {
         List<SaleItem> items = new ArrayList<>();
         long totalAmount = 0L;
 
-        for (SaleItemRequest req : itemRequests) {
+        for (SaleItemRequest req : request.items()) {
             Product prod = productsById.get(req.productId());
             if (prod == null) {
                 throw new IllegalArgumentException("Product not found in this shop: " + req.productId());
             }
             long unitPrice = req.customUnitPrice() != null ? req.customUnitPrice() : prod.unitPrice();
-            // Quantity is in milli-units (e.g. 2000 milli = 2 pieces).
-            // Subtotal in whole FCFA = (quantityMilli * unitPrice) / 1000
-            long subtotal = Math.multiplyExact(req.quantityMilli(), unitPrice) / 1000L;
+            // Round each line to whole FCFA, nearest with ties up; never use floating point.
+            // Decimal arithmetic also avoids overflow in an intermediate long multiplication.
+            long subtotal = BigDecimal.valueOf(req.quantityMilli(), 3)
+                    .multiply(BigDecimal.valueOf(unitPrice))
+                    .setScale(0, RoundingMode.HALF_UP).longValueExact();
             totalAmount = Math.addExact(totalAmount, subtotal);
             items.add(new SaleItem(UUID.randomUUID(), saleId, prod.id(), prod.name(),
                     prod.unit(), req.quantityMilli(), unitPrice, subtotal));
         }
 
-        Sale sale = new Sale(saleId, shopId, receiptNumber, deviceId, PaymentMethod.CASH, totalAmount, Instant.now(), items);
-        return saleRepository.recordSale(sale);
+        Sale sale = new Sale(saleId, shopId, request.receiptNumber(), deviceId, PaymentMethod.CASH, totalAmount, Instant.now(), items);
+        return saleRepository.recordSale(sale, request);
     }
 
     public Optional<Sale> getSale(UUID shopId, UUID saleId) throws SQLException {

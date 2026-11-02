@@ -14,11 +14,11 @@ optional VAT, and Must/Should/Could scope. Do not resurrect older sync rules or
 claim open framework decisions are still undecided. Escalate unresolved conflicts
 to Patrick and Emmanuel rather than rewriting the plans yourself.
 
-Snapshot updated with the stock-management implementation. Verify the branch
+Snapshot updated with cash-sale retry and rounding corrections. Verify the branch
 and current main before relying on these additions. Available on this branch:
 
 - core Product, ProductService, ProductRepository, SqliteDatabase and
-  SqliteProductRepository; schema version 3 migrates older databases.
+  SqliteProductRepository; schema version 4 migrates older databases.
 - Product creation and shop-scoped listing; no product edit/delete yet.
 - Product fields: id/shopId UUIDs, name, unitPrice (SELLING price), optional
   costPrice (BUYING price), optional modelReference/category, unit, specifications,
@@ -29,13 +29,16 @@ and current main before relying on these additions. Available on this branch:
   variant is a separate product ID. There is no parent-variant feature yet.
 - DesktopApplication is a placeholder Swing entry point. It supports
   --smoke-test and --product-demo PATH; preserve those modes.
-- Baseline: 23 SQLite integration tests + 1 desktop startup test. Recount from
+- Baseline: 40 SQLite integration tests + 1 desktop startup test. Recount from
   current test reports instead of treating this historical count as mandatory.
 - StockService and SqliteStockRepository implement local receipts, adjustments,
   history, current stock and low-stock thresholds. Read docs/backend/STOCK.md for
   the contract, retry IDs and integer-thousandths quantities. No stock UI yet.
 - SaleService and SqliteSaleRepository implement atomic cash sales, item snapshotting,
-  and stock deduction. Read docs/backend/SALES.md for the contract. No sales UI yet.
+  and stock deduction. Identical retries preserve saved prices; changed checkout
+  details are rejected. New line totals use exact HALF_UP whole-FCFA rounding,
+  then sum lines; old sales remain unchanged. Read docs/backend/SALES.md before
+  wiring checkout. No sales UI yet.
 - Authentication, printable receipts and sync are not implemented.
   Do not invent those as working features.
 
