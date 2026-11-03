@@ -44,6 +44,8 @@ public final class ProductPanel extends JPanel {
     private final JLabel statusLabel = new JLabel(" ");
 
     private boolean savePending = false;
+    // Accessed on the EDT. Old queries may finish, but only the latest owns UI state.
+    private long loadGeneration;
     private volatile Runnable onSaveWorkerDone;
     private volatile Runnable onLoadWorkerDone;
     private java.util.function.Consumer<String> errorHandler = this::displayErrorDialog;
@@ -379,6 +381,7 @@ public final class ProductPanel extends JPanel {
     }
 
     public void loadProducts() {
+        final long generation = ++loadGeneration;
 
         productListModel.clear();
         productListModel.addElement(message("state.loading", "Loading…"));
@@ -398,6 +401,9 @@ public final class ProductPanel extends JPanel {
             protected void done() {
 
                 try {
+                    if (generation != loadGeneration) {
+                        return; // Superseded success/failure must not overwrite a newer request.
+                    }
                     List<Product> savedProducts = get();
 
                     productListModel.clear();
@@ -434,7 +440,10 @@ public final class ProductPanel extends JPanel {
                     showError(message("error.loadProducts",
                             "Products could not be loaded") + ": " + details);
                 } finally {
-                    refreshButton.setEnabled(true);
+                    if (generation == loadGeneration) {
+                        refreshButton.setEnabled(true);
+                    }
+                    // Completion hooks still fire for stale workers so tests can await cleanup.
                     notifyLoadWorkerDone();
                 }
             }
