@@ -13,6 +13,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.Locale;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.JFrame;
 import javax.swing.SwingUtilities;
 
@@ -68,16 +71,20 @@ public final class DesktopApplication {
                 throw new IllegalStateException("A fresh database must not contain demo products");
             }
             Messages messages = Messages.load(Locale.ENGLISH);
+            AtomicReference<CompletionStage<Void>> productsReady = new AtomicReference<>();
             SwingUtilities.invokeAndWait(() -> {
                 setUpLookAndFeel();
                 ShellPanel shell = new ShellPanel(messages, location, () -> context, () -> { });
                 shell.showMain(context);
+                productsReady.set(shell.productsReady());
                 shell.setSize(960, 600);
                 shell.doLayout();
                 if (shell.currentPage() != ShellPanel.Page.MAIN || !"products".equals(shell.selectedScreenId())) {
                     throw new IllegalStateException("Main page did not show the Products entry");
                 }
             });
+            // The Products screen is asynchronous: keep temporary data until its query finishes.
+            productsReady.get().toCompletableFuture().get(10, TimeUnit.SECONDS);
             System.out.println("Desktop startup smoke check passed");
         } finally {
             deleteQuietly(temporary);

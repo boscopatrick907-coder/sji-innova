@@ -6,6 +6,7 @@ import java.awt.FlowLayout;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutionException;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultListModel;
@@ -51,6 +52,7 @@ public final class ShellPanel extends JPanel {
     private final JPanel screenArea = new JPanel(screens);
     private final JLabel statusLine = new JLabel(" ");
     private Page currentPage;
+    private CompletionStage<Void> productsReady;
 
     public ShellPanel(Messages messages, LocalAppData location, Callable<AppContext> loader, Runnable onExit) {
         super(new BorderLayout());
@@ -90,7 +92,9 @@ public final class ShellPanel extends JPanel {
 
     public void showMain(AppContext context) {
         screenArea.removeAll();
-        screenArea.add(ProductsSlot.create(context, messages), "products");
+        var products = ProductsSlot.create(context, messages);
+        productsReady = products.initialLoadCompletion();
+        screenArea.add(products, "products");
         DefaultListModel<NavItem> model = (DefaultListModel<NavItem>) navigation.getModel();
         model.clear();
         model.addElement(new NavItem("products", messages.get("shell.nav.products")));
@@ -112,6 +116,11 @@ public final class ShellPanel extends JPanel {
     }
 
     public Page currentPage() { return currentPage; }
+
+    /** Obtain on the EDT after showMain, then await off the EDT. */
+    public CompletionStage<Void> productsReady() {
+        return java.util.Objects.requireNonNull(productsReady, "Products screen is not initialized");
+    }
 
     /** The id of the screen selected in the navigation, or null if nothing is selected. */
     public String selectedScreenId() {

@@ -1,7 +1,8 @@
 # Cella (SJI Innova)
 
-Offline-first inventory and sales software for Cameroonian shops. The current
-implementation is a Java project foundation, not a working sales application.
+Offline-first inventory and sales software for Cameroonian shops. The desktop
+currently supports product entry and listing. Stock, cash sales and voids have
+backend services; their cashier screens are still to be integrated.
 See [the project master file](SJI_INNOVA_PROJECT.md) for current decisions
 and [the detailed v0.3 plan](SJI_INNOVA_PROJECT_v03.md) for the revised scope
 and event-sync design. The master file confirms the Cella name and Spring Boot;
@@ -39,9 +40,10 @@ On Windows PowerShell:
 .\mvnw.cmd --batch-mode --no-transfer-progress clean verify
 ```
 
-This builds both modules and runs forty SQLite integration tests plus one desktop
-startup test on this branch. Storage tests use temporary databases. Product, stock
-and cash-sale backends are implemented; synchronization is not.
+This builds both modules and runs SQLite integration and desktop tests. Storage
+tests use temporary databases. Product, stock, cash-sale and cash-void backends
+are implemented; synchronization is not. The Products form is connected to the
+main window; stock, checkout and void screens are not yet connected.
 
 The prepared cloud environment also supplies proxy settings outside the checkout.
 Use this build command there:
@@ -65,6 +67,17 @@ initialization without opening a window:
 java "-Djava.awt.headless=true" -jar desktop/target/innova-desktop-0.1.0-SNAPSHOT.jar --smoke-test
 ```
 
+To use a separate local test shop, run from the same project directory each time:
+
+```sh
+java -jar desktop/target/innova-desktop-0.1.0-SNAPSHOT.jar --data-dir ./data/my-test-shop
+```
+
+The Products page now supports entering and listing products. Save a product,
+close the app, and reopen with the same data directory to see it again. A
+persisted development shop ID is used until real login/shop registration exists.
+Do not delete its shop-id.txt; see [startup/recovery notes](docs/desktop/APP_SHELL.md).
+
 ## Structure and next work
 
 - `core`: product validation, creation and shop-scoped listing; SQLite JDBC persistence.
@@ -72,12 +85,12 @@ java "-Djava.awt.headless=true" -jar desktop/target/innova-desktop-0.1.0-SNAPSHO
 - `.github/workflows/build.yml`: Linux and Windows builds and packaged startup checks.
 
 Local stock receipts, adjustments, history and low-stock thresholds are implemented.
-Next: desktop stock integration and an atomic offline cash sale with rollback tests,
+Next: stock and checkout screen integration, then the remaining offline workflows
 before cloud sync. Spring Boot is the selected cloud framework; its module will be added later. SQLite is embedded; no separate database installation, credentials, or external
 services are needed. Windows CI is configured; a real Windows GUI/installer test
 remains a separate quality gate.
 
-## Try local product storage (no screen yet)
+## Try the product-storage command-line demo
 
 After building, run from the repository root:
 
@@ -117,8 +130,8 @@ specification inserts succeed or roll back together.
 
 The demo is a local developer tool and prints buying prices. Those prices must
 not be included in future customer-facing API/WhatsApp responses.
-Shop registration/authentication, sales, tax fields, edits, UI forms and cloud
-sync come later through additional migrations.
+Shop registration/authentication, tax fields, product edits, remaining UI forms
+and cloud sync are future work. Cash sales and full cash-sale voids exist in core.
 Shop-scoped queries are data filtering, not an authorization system. The service
 validates input and the JDBC repository uses parameterized SQL for values.
 Database files are ignored by Git; never commit a shop's live data.
@@ -141,7 +154,7 @@ and print/save all stages as PDF. Status is a manual snapshot, not live tracking
 
 See [the stock service guide](docs/backend/STOCK.md) for the Java interface,
 quantity rules, retry handling, database upgrade and desktop integration notes.
-No stock screen is implemented yet. To try a receipt without a screen, build and
+No stock screen is implemented yet; Products is the first connected screen. To try a receipt without a screen, build and
 run twice against a disposable database:
 
 ```sh
