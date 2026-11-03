@@ -34,7 +34,8 @@ not ready-made components or generated Java code.
 Use a calm, readable interface for a small shop: a dark green sidebar, a light
 content area, a clear Products heading, search and category filter, and an obvious
 Add product button. The product list shows name/model/specifications, category,
-unit, buying price and selling price. Design the add form with labelled fields,
+available quantity with its unit, buying price and selling price. Include an
+optional photo picker, preview, replace/remove controls and a no-photo placeholder. Design the add form with labelled fields,
 optional buying price, canonical units and flexible specification name/value rows.
 
 | Element | Reference |
@@ -102,3 +103,22 @@ Report actual GUI checks separately from automated checks.
 > states and accessibility choices. Do not change the Java implementation in this
 > design task. Show what you checked and the limitations. Do not push or merge
 > without my request.
+
+## Patrick's additions: photos and available quantity
+
+Include a thumbnail in each product row and an optional photo picker in the add
+form (JPG/PNG, proposed 5 MB limit). Design missing/invalid image states, preview,
+replace and remove actions. The browser prototype stores selections only in memory;
+reloading loses them. Real product-photo persistence is NOT implemented. Emmanuel
+must agree the product/image association, managed local files, validation, backup
+and future synchronization contract before a Java photo feature is implemented.
+Never depend on the original photo's absolute path on someone else's computer.
+
+Show available quantity from the existing StockService, scoped to the current
+shop/product. Product creation starts with no stock movements, so show 0; an
+explicit stock receipt adds quantities. Do not add an editable balance field to
+Product or write directly to stock tables. Design the subsequent Stock receipt
+flow separately; do not pretend a product save also received stock. Stock loading
+and errors must remain distinguishable from a genuine zero balance. Whole pieces
+and fractional kg/litres must follow docs/backend/STOCK.md's integer-thousandths
+rules. The displayed 24 / 42.5 / 18 / 0 quantities are fictitious mockup data.
