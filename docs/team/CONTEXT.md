@@ -27,9 +27,11 @@ and current main before relying on these additions. Available on this branch:
   Buying price may be unknown (`null`) or zero; those mean different things.
 - Specifications are Map<String,String>, e.g. color=blue, size=M. Each sellable
   variant is a separate product ID. There is no parent-variant feature yet.
-- DesktopApplication is a placeholder Swing entry point. It supports
-  --smoke-test and --product-demo PATH; preserve those modes.
-- Baseline: 40 SQLite integration tests + 1 desktop startup test. Recount from
+- DesktopApplication now opens the shell with a connected ProductPanel, using
+  the persisted development shop ID and injected ProductService. It supports
+  --smoke-test and --product-demo PATH; preserve those modes. First-load readiness
+  is awaited by startup checks before disposable databases are cleaned up.
+- Baseline on the integration branch: 96 total tests across core and desktop. Recount from
   current test reports instead of treating this historical count as mandatory.
 - StockService and SqliteStockRepository implement local receipts, adjustments,
   history, current stock and low-stock thresholds. Read docs/backend/STOCK.md for

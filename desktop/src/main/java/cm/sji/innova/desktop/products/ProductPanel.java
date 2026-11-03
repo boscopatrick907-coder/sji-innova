@@ -14,6 +14,8 @@ import java.util.Objects;
 import java.util.ResourceBundle;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 
 public final class ProductPanel extends JPanel {
 
@@ -46,6 +48,7 @@ public final class ProductPanel extends JPanel {
     private boolean savePending = false;
     // Accessed on the EDT. Old queries may finish, but only the latest owns UI state.
     private long loadGeneration;
+    private final CompletableFuture<Void> initialLoad = new CompletableFuture<>();
     private volatile Runnable onSaveWorkerDone;
     private volatile Runnable onLoadWorkerDone;
     private java.util.function.Consumer<String> errorHandler = this::displayErrorDialog;
@@ -399,7 +402,7 @@ public final class ProductPanel extends JPanel {
 
             @Override
             protected void done() {
-
+                Throwable loadFailure = null;
                 try {
                     if (generation != loadGeneration) {
                         return; // Superseded success/failure must not overwrite a newer request.
@@ -420,6 +423,7 @@ public final class ProductPanel extends JPanel {
                     }
 
                 } catch (InterruptedException exception) {
+                    loadFailure = exception;
                     Thread.currentThread().interrupt();
                     productListModel.clear();
                     productListModel.addElement(
@@ -429,6 +433,7 @@ public final class ProductPanel extends JPanel {
                             "Products could not be loaded"));
 
                 } catch (ExecutionException exception) {
+                    loadFailure = exception.getCause() == null ? exception : exception.getCause();
                     productListModel.clear();
                     productListModel.addElement(
                             message("error.loadProducts",
@@ -445,11 +450,20 @@ public final class ProductPanel extends JPanel {
                     }
                     // Completion hooks still fire for stale workers so tests can await cleanup.
                     notifyLoadWorkerDone();
+                    if (generation == 1) {
+                        if (loadFailure == null) initialLoad.complete(null);
+                        else initialLoad.completeExceptionally(loadFailure);
+                    }
                 }
             }
         };
 
         worker.execute();
+    }
+
+    /** Await off the EDT before startup checks dispose their temporary database. */
+    public CompletionStage<Void> initialLoadCompletion() {
+        return initialLoad.minimalCompletionStage();
     }
 
     private String formatProductDisplay(Product product) {

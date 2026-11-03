@@ -50,14 +50,25 @@ there, `FallbackMessages` (English) is used, so the window never shows a missing
 **Keys the shell uses (Pascal: please add them to `messages_en` and `messages_fr`):**
 `app.title`, `shell.nav.accessibleName`, `shell.nav.products`, `shell.loading`,
 `shell.error.title`, `shell.error.dataFolder` (`{0}` = folder), `shell.error.retry`,
-`shell.error.exit`, `shell.devShop` (`{0}` = shop ID), `shell.products.placeholder.title`,
-`shell.products.placeholder.body`.
+`shell.error.exit`, `shell.devShop` (`{0}` = shop ID).
+The Products panel uses the product/action/unit keys listed in docs/team/PASCAL.md.
 
 ## Products slot (for Willy)
 
-`ProductsSlot.create(AppContext, Messages)` returns the Products screen. It is a placeholder
-today. After `ProductPanel(ProductService, UUID, ResourceBundle)` is merged, replace the body
-with `new ProductPanel(context.products(), context.shopId(), messages.bundle())`.
+`ProductsSlot.create(AppContext, Messages)` now returns the real
+`ProductPanel(context.products(), context.shopId(), messages.bundle())`.
+Normal launch displays the product form and saved-products list using the stable
+shop context. No demo data is inserted. Saving uses the existing product service.
+
+The panel exposes initialLoadCompletion(), and the shell exposes productsReady().
+Obtain these stages on the EDT and await them off the EDT when checking startup.
+The headless smoke test waits for the first product query to finish before
+removing its disposable database; load failure fails the check.
+
+A headless integration test fills the form through the shell, saves full product
+details to temporary SQLite, reopens the same context, and verifies the same
+product ID/details and displayed list. Actual OS-window usability still needs
+human checking; a rendered preview is not a Windows GUI test.
 
 ## Limitations
 
