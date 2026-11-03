@@ -1,45 +1,104 @@
-# Charles — desktop coordinator (Claude Code)
+# Charles — Cella desktop design handoff
 
-Read CONTEXT.md first. Your first task is the application shell and stable local
-application context, not the Products form or business rules.
+Updated 3 November 2026. This replaces your completed first shell assignment.
+The shell and real Products panel are already connected on main (PR #17).
+Do not recreate them or repeat the old placeholder integration task.
 
-## Start
+## Your next task
 
-With a clean checkout on up-to-date main:
+Patrick and Charles will compare visual proposals before implementing the chosen
+look in Java. Prepare your proposal using the attached Products design as a
+starting point. This is a proposal, not an approved final interface.
 
-```sh
-git switch -c desktop/app-shell
-```
+- [Products preview](../design/products.png)
+- [Add product preview](../design/add-product.png)
+- [Editable Products SVG](../design/cella-products.svg)
+- [Editable Add product SVG](../design/cella-add-product.svg)
+- [Clickable HTML prototype](../design/preview.html) — download and open locally;
+  GitHub's file viewer shows source rather than running it.
 
-Inspect DesktopApplication, ProductStorageDemo, desktop/pom.xml, the startup test,
-and core service constructors. Pascal owns bundles; Willy owns ProductPanel.
-Coordinate contracts in CONTEXT.md before implementation.
+![Products proposal](../design/products.png)
 
-## Deliver one small pull request
+![Add product proposal](../design/add-product.png)
 
-1. Create one main Cella window with a clear Products navigation entry and a main
-   content area. Leave future modules out, or label placeholders honestly.
-2. Prepare stable local app data: document the default directory and a supported
-   override for testing; persist one development shop UUID and reuse it on restart.
-   This is temporary development identity, not login or shop registration.
-3. Initialize SQLite and construct ProductService off the EDT. Show a loading
-   state; on failure offer a clear retry/exit action. Never delete or silently
-   replace a failed database or identity file.
-4. Load Pascal's French/English bundle, using a documented startup locale. Preserve
-   --smoke-test and --product-demo PATH and avoid real user data in smoke tests.
-5. Provide the Products slot. Integrate ProductPanel(ProductService, UUID,
-   ResourceBundle) after Willy's work merges. Before it exists, use a compiling
-   placeholder; do not import nonexistent classes or build a duplicate product form.
-6. Keep the headless startup check useful after restructuring. Test stable context
-   across restart with temporary files. Coordinate shared bootstrap changes only here.
+## What these files mean
 
-## Acceptance
+All products and shop details are fictitious. The HTML prototype supports search,
+category filtering and adding sample products in memory; reloading resets it.
+It does not connect to SQLite. No live Figma file was created: drag the SVG files
+into Figma or Penpot, then check the fonts and editable layers. Imported SVGs are
+not ready-made components or generated Java code.
 
-- Launch on Windows opens one Cella window with working navigation.
-- Reopening with the same data directory reuses database path and shop UUID.
-- Startup DB failures show an error rather than a frozen window or silent empty DB.
-- Normal launch never inserts demo products. Headless checks never touch live data.
-- Build/tests pass; GUI checks and any untested parts are reported honestly.
+## Visual direction
 
-Future task after the pilot: integrate Sales and Customers panels when their
-contracts exist. Do not implement authentication/backend services in this task.
+Use a calm, readable interface for a small shop: a dark green sidebar, a light
+content area, a clear Products heading, search and category filter, and an obvious
+Add product button. The product list shows name/model/specifications, category,
+unit, buying price and selling price. Design the add form with labelled fields,
+optional buying price, canonical units and flexible specification name/value rows.
+
+| Element | Reference |
+| --- | --- |
+| Canvas for comparing proposals | 960 × 600 px |
+| Sidebar | #153D31 |
+| Main action | #1B624B |
+| Page background | #F5F7F4 |
+| Main text | #203B33 |
+| Secondary text | #74827B; check contrast before implementation |
+| Borders | #E1E7E1 |
+| Control / dialog corners | 6–10 px / 14 px |
+
+Use a readable sans-serif font and visible keyboard focus. Test resizing, long
+names and French/English labels. Adjust colors and spacing for accessibility.
+The sample owner profile is conceptual: there is no login yet. Do not display a
+fake shop name, logged-in owner or unverified connectivity status in the real app.
+Stock and Sales are future screens; hide them or clearly mark them unavailable.
+
+## Steps to follow
+
+1. Start from an up-to-date main with a clean working tree. Read README.md,
+   docs/team/CONTEXT.md and the actual desktop code. Preserve unfinished work.
+2. Create your own branch, e.g. design/charles-products-proposal. Open the HTML
+   locally and inspect/import the SVGs. No paid Figma plan is required for using
+   the local previews or SVG files.
+3. Prepare a comparable Products screen and Add product dialog. Include empty,
+   loading, error/retry and saving states, keyboard flow and a narrow-window view.
+4. Share screenshots or exported SVGs in docs/design/charles/ and explain your
+   choices. Compare with Patrick using the same sample catalog and canvas.
+5. Let Patrick choose the direction before a separate Java styling PR. For this
+   task, deliver design assets only; preserve current working application behavior.
+
+## Boundaries for the later Java implementation
+
+Keep Java 21, Swing and FlatLaf. Reuse ShellPanel, ProductsSlot, ProductPanel and
+injected ProductService; coordinate ProductPanel changes with Willy and translation
+keys with Pascal. Do not add a web framework or replace the desktop architecture.
+No SQL/schema/core changes are needed for styling. Keep database work off the EDT,
+loading readiness, disabled duplicate saves, validation, stable shop identity,
+error handling, smoke mode and restart persistence. Buying price may be unknown
+or exceed selling price; blank must not become zero. Do not implement product
+edit/delete or make unavailable navigation look functional.
+
+## Delivery checklist
+
+- [ ] Products and Add product designs exported and visible in the repository.
+- [ ] Loading, empty, error, saving, keyboard and resize behavior explained.
+- [ ] French/English labels and whole-FCFA prices considered.
+- [ ] Differences from Patrick's proposal explained in plain language.
+- [ ] No fake data added to the application or live shop database.
+- [ ] Branch, screenshots and remaining limitations shared with Patrick.
+
+Design-only edits need an asset/link check, not a Java rebuild. For a later Java
+change, run the wrapper clean verify and packaged smoke test from README.md;
+also test the real window, save/reopen persistence and keyboard flow on Windows.
+Report actual GUI checks separately from automated checks.
+
+## Prompt to paste into your AI editor
+
+> Read docs/team/CHARLES.md and docs/team/CONTEXT.md. Inspect the repository and
+> docs/design assets. My current task is a Products and Add product visual proposal
+> to compare with Patrick, not the completed shell assignment. Explain each step
+> simply. Create my design exports in docs/design/charles/ and describe the UI
+> states and accessibility choices. Do not change the Java implementation in this
+> design task. Show what you checked and the limitations. Do not push or merge
+> without my request.

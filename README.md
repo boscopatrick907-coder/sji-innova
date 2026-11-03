@@ -140,8 +140,9 @@ Database files are ignored by Git; never commit a shop's live data.
 
 Charles, Willy and Pascal: start with [the team guide](docs/team/README.md).
 It contains AI prompts, local setup instructions, shared boundaries and individual
-first tasks for Claude Code or Antigravity. These are implementation briefs;
-the proposed desktop shell and Products screen are not built yet.
+assignments for Claude Code or Antigravity. The shell and Products screen are
+connected. Charles’s current task is a [visual design proposal](docs/team/CHARLES.md),
+with mockup assets in `docs/design/`.
 
 ## Visual roadmap
 
