@@ -33,7 +33,7 @@ class ProductsShellIntegrationTest {
         return null;
     }
 
-    private record Opened(ShellPanel shell, ProductPanel products) { }
+    private record Opened(ShellPanel shell, ProductPanel products, AtomicReference<String> errorMessage) { }
 
     private Opened open(AppContext context) throws Exception {
         var opened = new AtomicReference<Opened>();
@@ -42,9 +42,13 @@ class ProductsShellIntegrationTest {
             shell.showMain(context);
             var panel = findProducts(shell);
             assertNotNull(panel, "The main window must contain the real Products panel, not a placeholder");
+            // Windows runners may have a graphical session. Capture errors before the
+            // load worker's done() runs on the EDT instead of opening a modal dialog.
+            var errorMessage = new AtomicReference<String>();
+            panel.setErrorHandler(errorMessage::set);
             assertEquals(ShellPanel.Page.MAIN, shell.currentPage());
             assertEquals("products", shell.selectedScreenId());
-            opened.set(new Opened(shell, panel));
+            opened.set(new Opened(shell, panel, errorMessage));
         });
         return opened.get();
     }
@@ -111,7 +115,10 @@ class ProductsShellIntegrationTest {
         ExecutionException failure = assertThrows(ExecutionException.class,
                 () -> window.shell().productsReady().toCompletableFuture().get(5, TimeUnit.SECONDS));
         assertInstanceOf(SQLException.class, failure.getCause());
-        SwingUtilities.invokeAndWait(() -> assertEquals("Products could not be loaded",
-                window.products().productListModel().get(0)));
+        SwingUtilities.invokeAndWait(() -> {
+            assertEquals("Products could not be loaded", window.products().productListModel().get(0));
+            assertNotNull(window.errorMessage().get());
+            assertTrue(window.errorMessage().get().contains("Simulated load failure"));
+        });
     }
 }
