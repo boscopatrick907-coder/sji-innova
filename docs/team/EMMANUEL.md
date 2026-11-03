@@ -195,26 +195,26 @@ caused the earlier nested-transaction failure. Preserve the existing build fix.
 Use temporary databases; never a real shop's data. Add focused integration tests
 that can fail when the behavior is wrong. Include:
 
-- [ ] Receive 10, sell 2, void: stock returns to 10; event/audit/movements exist.
-- [ ] Original sale/items/prices/timestamps remain exactly unchanged.
-- [ ] Close/reopen: void state, original sale and stock history persist.
-- [ ] Identical retry returns the original void and never restores stock twice.
-- [ ] Changed operation details are rejected without modifying anything.
-- [ ] A new operation ID for an already-voided sale cannot restore stock again.
-- [ ] Two simultaneous void requests (same/different operation IDs) produce exactly
+- [x] Receive 10, sell 2, void: stock returns to 10; event/audit/movements exist.
+- [x] Original sale/items/prices/timestamps remain exactly unchanged.
+- [x] Close/reopen: void state, original sale and stock history persist.
+- [x] Identical retry returns the original void and never restores stock twice.
+- [x] Changed operation details are rejected without modifying anything.
+- [x] A new operation ID for an already-voided sale cannot restore stock again.
+- [x] Two simultaneous void requests (same/different operation IDs) produce exactly
       one effective void/restoration; use synchronization, not timing guesses.
-- [ ] Wrong-shop, nonexistent sale, blank reason and unsupported payment type fail.
-- [ ] Multi-item and repeated-product lines restore the correct total quantities.
-- [ ] kg/litre fractional quantities use exact stored thousandths.
-- [ ] A failure after an earlier item/event write rolls back every affected row
+- [x] Wrong-shop, nonexistent sale, blank reason and unsupported payment type fail.
+- [x] Multi-item and repeated-product lines restore the correct total quantities.
+- [x] kg/litre fractional quantities use exact stored thousandths.
+- [x] A failure after an earlier item/event write rolls back every affected row
       and cache value. A legitimate retry afterward can still succeed.
-- [ ] Restoration overflow rolls everything back.
-- [ ] Populated schema-v4 upgrade preserves products/specifications/sales/stock,
+- [x] Restoration overflow rolls everything back.
+- [x] Populated schema-v4 upgrade preserves products/specifications/sales/stock,
       backfills events correctly and survives repeated initialization.
-- [ ] Failed migration restores the previous schema/version/data before retry.
-- [ ] Checkout creation/retries still work and don't duplicate created events.
-- [ ] Replaying checkout after void leaves void state and stock unchanged.
-- [ ] Existing HALF_UP rounding and changed-checkout-retry tests still pass.
+- [x] Failed migration restores the previous schema/version/data before retry.
+- [x] Checkout creation/retries still work and don't duplicate created events.
+- [x] Replaying checkout after void leaves void state and stock unchanged.
+- [x] Existing HALF_UP rounding and changed-checkout-retry tests still pass.
 
 Run full wrapper clean verify and the packaged headless startup check from README.
 Report passed/failed/skipped/unrun counts honestly. A backend check does not prove
@@ -238,22 +238,39 @@ branches or put secrets/database files/generated build output into Git.
 
 ## Progress / evidence to complete while working
 
-- [ ] Confirm no competing void implementation/migration is in progress.
-- [ ] Inspect current main and agree service/error/state contract.
-- [ ] Implement migration with populated-data/rollback tests.
-- [ ] Implement one-transaction void, retry guards and audit/event links.
-- [ ] Complete behavior/concurrency tests and full verification.
-- [ ] Document limitations and request another person's review.
+- [x] Confirm no competing void implementation/migration is in progress.
+- [x] Inspect current main and agree service/error/state contract.
+- [x] Implement migration with populated-data/rollback tests.
+- [x] Implement one-transaction void, retry guards and audit/event links.
+- [x] Complete behavior/concurrency tests and full verification.
+- [x] Document limitations and request another person's review.
 
 Branch / commit / PR:
+- Branch: `backend/sale-voids` (from `main` `3d1f133`).
 
 Migration version and tables/constraints added:
+- Schema version **5** (`SqliteDatabase.SCHEMA_VERSION = 5`).
+- Added `sale_events` (`id`, `sale_id`, `shop_id`, `device_id`, `type IN ('created', 'voided')`, `performed_by`, `reason`, `created_at`, `UNIQUE(sale_id, type)`, `UNIQUE(shop_id, sale_id, id)`, composite FK `(shop_id, sale_id) -> sales(shop_id, id)`).
+- Deterministically backfills `created` events (`SaleEvent.createdEventId(saleId)`, `performed_by = NULL`) for existing Schema v4 sales.
+- Added `sale_void_items` (`sale_item_id` PK, `void_event_id`, `shop_id`, `sale_id`, `product_id`, `stock_movement_id` UNIQUE, `quantity_milli`, composite FKs to `sale_events`, `sale_items`, and `stock_movements`).
+- Added `audit_log` (`id`, `shop_id`, `device_id`, `performed_by`, `action`, `target_table`, `target_id`, `event_id` UNIQUE, `reason`, `old_value`, `new_value`, `created_at`, composite FK to `sale_events`).
+- Added append-only `BEFORE UPDATE` and `BEFORE DELETE` triggers on `sales`, `sale_items`, `sale_events`, `sale_void_items`, and `audit_log`.
 
 Public method and error contract:
+- `SaleService.voidCashSale(UUID operationId, UUID shopId, UUID saleId, UUID deviceId, UUID performedBy, String reason) -> VoidSaleResult`
+- `SaleService.getSaleState(UUID shopId, UUID saleId) -> Optional<SaleState>`
+- `SaleService.listSaleStates(UUID shopId) -> List<SaleState>`
+- `SaleService.listSaleEvents(UUID shopId, UUID saleId) -> List<SaleEvent>`
+- `SaleService.listAuditRecords(UUID shopId, UUID saleId) -> List<SaleAuditRecord>`
+- Throws `NullPointerException` on null arguments; `IllegalArgumentException` on blank reason, nonexistent/wrong-shop sale, non-cash sale, or reused `operationId` with changed details; `IllegalStateException` on a new `operationId` when the sale is already voided; `ArithmeticException` on stock restoration overflow; `SQLException` on storage failures.
 
 Commands run and exact results:
+- `.\mvnw.cmd --batch-mode --no-transfer-progress clean verify`: `BUILD SUCCESS` — 52 tests run (`innova-core`: 51 passed, 0 failed, 0 errors, 0 skipped; `innova-desktop`: 1 passed, 0 failed, 0 errors, 0 skipped).
+- `java "-Djava.awt.headless=true" -jar desktop/target/innova-desktop-0.1.0-SNAPSHOT.jar --smoke-test`: exited 0 (`Desktop startup smoke check passed`).
 
 Known limitations / unrun checks:
+- No desktop void UI screen, printable credit/void receipt, partial item return, credit/MoMo reversal, authentication/role check (`performedBy` is caller-supplied attribution until login is built), or cloud synchronization is implemented in this milestone.
+- Visible Windows GUI interaction for voiding sales is unrun because no void UI screen exists yet.
 
 Never tick a task as done until you have evidence. Open a PR for review; do not
 merge automatically. Patrick coordinates review; this file does not authorize
