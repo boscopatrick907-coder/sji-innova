@@ -10,22 +10,22 @@ Open the repository root in your tool, then paste the matching prompt.
 
 **Charles**
 
-> Read docs/team/CONTEXT.md and docs/team/CHARLES.md, then follow them for my
-> first task. Inspect the actual repository before editing. Explain the steps
+> Read docs/team/CONTEXT.md and docs/team/CHARLES.md, then follow my current assignment.
+> Inspect the actual repository before editing. Explain the steps
 > in simple language and implement only my assigned milestone. Show what you
 > tested and the remaining limitations. Do not push or merge without my request.
 
 **Willy**
 
-> Read docs/team/CONTEXT.md and docs/team/WILLY.md, then follow them for my
-> first task. Inspect the actual repository before editing. Explain the steps
+> Read docs/team/CONTEXT.md and docs/team/WILLY.md, then follow my current assignment.
+> Inspect the actual repository before editing. Explain the steps
 > in simple language and implement only my assigned milestone. Show what you
 > tested and the remaining limitations. Do not push or merge without my request.
 
 **Pascal**
 
-> Read docs/team/CONTEXT.md and docs/team/PASCAL.md, then follow them for my
-> first task. Inspect the actual repository before editing. Explain the steps
+> Read docs/team/CONTEXT.md and docs/team/PASCAL.md, then follow my current assignment.
+> Inspect the actual repository before editing. Explain the steps
 > in simple language and implement only my assigned milestone. Show what you
 > tested and the remaining limitations. Do not push or merge without my request.
 
@@ -70,7 +70,7 @@ On Linux/macOS use `./mvnw` instead. The README's `/workspace/.setup` paths belo
 only to the prepared cloud machine; do not copy them onto a friend's PC. Use
 normal GitHub sign-in when needed; do not put credentials in code or chat.
 
-## First milestone and merge order
+## Original milestone and merge order (historical)
 
 Goal: open Cella, navigate to Products, save product details, restart, and see
 those same details again.
@@ -92,7 +92,13 @@ At the end of each session report: task, branch/commit, what works, tests run,
 what is blocked, and the next small step. Include a screenshot of visible UI
 changes when possible. A passing cloud startup check is not a Windows GUI test.
 
-## Desktop review feedback
+## Current design assignment
+
+Charles: use [your updated design brief](CHARLES.md) and the assets in
+`docs/design/`. The shell and Products integration have merged. Compare designs
+with Patrick before a separate Java styling change.
+
+## Desktop review feedback (historical evidence)
 
 Charles, Willy and Pascal: read the [2 November review and correction checklists](../reviews/desktop-2026-11-02/README.md)
 before continuing your current desktop tasks. Findings are tied to the reviewed
