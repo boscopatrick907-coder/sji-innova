@@ -54,6 +54,8 @@ Sales, stock deductions, and sale voids are **strictly atomic** within single SQ
 
 6. `audit_log` (append-only, added in Schema v5):
    - `id`, `shop_id`, `device_id`, `performed_by`, `action` (`VOID_SALE`), `target_table` (`sales`), `target_id` (`saleId`), `event_id` (`UNIQUE`, referencing `sale_events`), `reason`, `old_value` (JSON), `new_value` (JSON), `created_at`.
+   - `old_value` records `{"status":"paid","receiptNumber":"...","totalAmount":...}`.
+   - `new_value` records `{"status":"voided","voidEventId":"...","performedBy":"...","restoredItemCount":...,"restoredItems":[{"saleItemId":"...","productId":"...","unit":"...","quantityMilli":...,"stockMovementId":"..."},...]}`. Quantities are recorded per item with their canonical unit (`piece`, `kg`, `litre`) rather than summed across incompatible units.
 
 ## How desktop UI calls SaleService (Checkout and Void)
 
@@ -113,7 +115,7 @@ List<SaleAuditRecord> audits = saleService.listAuditRecords(shopId, completedSal
 - **Changed void retry:** Reusing an `operationId` with a different shop, sale, device, actor, or reason (or reusing a `created` event ID) throws `IllegalArgumentException` without modifying anything.
 - **Already-voided sale:** Calling `voidCashSale` with a new `operationId` for a sale that has already been voided throws `IllegalStateException` and does not restore stock again.
 - **Invalid inputs / wrong shop / non-cash sale:** Null arguments throw `NullPointerException`. Blank reason, nonexistent `saleId`, wrong `shopId`, or non-cash payment method (`momo`, `credit`) throws `IllegalArgumentException`.
-- **Overflow / storage failure:** Stock restoration overflow throws `ArithmeticException`; database errors throw `SQLException`. Any failure rolls back the entire void transaction so no partial event, movement, stock change, or audit row remains.
+- **Overflow / storage failure:** Per-product stock restoration uses checked arithmetic (`Math.addExact(currentStock, item.quantityMilli())`) and throws `ArithmeticException` on genuine product stock overflow, without combining quantities across different products or units; database errors throw `SQLException`. Any failure rolls back the entire void transaction so no partial event, movement, stock change, or audit row remains.
 - **Checkout replay after void:** Retrying `makeCashSale` with the original `saleId` and matching checkout details after the sale was voided returns `replayed=true` without deducting stock again, duplicating the `created` event, or reactivating the voided sale.
 - **Development actor attribution:** Until user login and role authentication are implemented, `performedBy` is an explicit caller-supplied UUID recorded for attribution in `sale_events` and `audit_log`. It is not verified authentication or role authorization. Legacy Schema v4 sales migrated to Schema v5 have `performedBy = null` on their backfilled `created` event rather than a guessed user ID.
 - **Limitations:** This milestone implements full voids of recorded cash sales only. It does not build desktop UI screens, partial item returns, damaged-goods workflows, credit/MoMo reversals, physical cash-drawer payouts, tax/receipt document cancellation, authentication, or cloud sync.

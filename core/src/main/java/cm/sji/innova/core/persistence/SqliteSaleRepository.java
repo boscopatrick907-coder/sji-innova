@@ -236,7 +236,7 @@ public final class SqliteSaleRepository implements SaleRepository {
 
                 // 4 & 5. Restore quantities from saved sale items, insert VOID movements + relational links, and update cached stock
                 List<StockMovement> restoredMovements = new ArrayList<>(sale.items().size());
-                long totalRestoredMilli = 0L;
+                StringBuilder restoredItemsJson = new StringBuilder("[");
                 String movementReason = "Void sale " + sale.receiptNumber() + ": " + request.reason();
 
                 for (SaleItem item : sale.items()) {
@@ -260,7 +260,6 @@ public final class SqliteSaleRepository implements SaleRepository {
                     }
 
                     long afterStock = Math.addExact(currentStock, item.quantityMilli());
-                    totalRestoredMilli = Math.addExact(totalRestoredMilli, item.quantityMilli());
 
                     UUID movementId = UUID.nameUUIDFromBytes(
                             ("void-movement:" + request.operationId() + ":" + item.id()).getBytes(StandardCharsets.UTF_8));
@@ -312,10 +311,21 @@ public final class SqliteSaleRepository implements SaleRepository {
                         }
                     }
 
+                    if (restoredItemsJson.length() > 1) {
+                        restoredItemsJson.append(',');
+                    }
+                    restoredItemsJson.append("{\"saleItemId\":\"").append(item.id())
+                            .append("\",\"productId\":\"").append(item.productId())
+                            .append("\",\"unit\":").append(jsonQuote(item.unit()))
+                            .append(",\"quantityMilli\":").append(item.quantityMilli())
+                            .append(",\"stockMovementId\":\"").append(movement.id())
+                            .append("\"}");
+
                     restoredMovements.add(movement);
                 }
+                restoredItemsJson.append(']');
 
-                // 6. Append the immutable audit entry
+                // 6. Append the immutable audit entry with per-item quantities and units rather than a cross-unit sum
                 UUID auditId = UUID.nameUUIDFromBytes(
                         ("void-audit:" + request.operationId()).getBytes(StandardCharsets.UTF_8));
                 String oldValue = "{\"status\":\"paid\",\"receiptNumber\":" + jsonQuote(sale.receiptNumber())
@@ -323,7 +333,7 @@ public final class SqliteSaleRepository implements SaleRepository {
                 String newValue = "{\"status\":\"voided\",\"voidEventId\":\"" + voidEvent.id()
                         + "\",\"performedBy\":\"" + request.performedBy()
                         + "\",\"restoredItemCount\":" + sale.items().size()
-                        + ",\"restoredQuantityMilli\":" + totalRestoredMilli + "}";
+                        + ",\"restoredItems\":" + restoredItemsJson + "}";
 
                 SaleAuditRecord auditRecord = new SaleAuditRecord(
                         auditId,

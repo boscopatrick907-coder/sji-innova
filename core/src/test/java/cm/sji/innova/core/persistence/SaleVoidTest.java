@@ -353,6 +353,82 @@ class SaleVoidTest {
     }
 
     @Test
+    void mixedUnitVoidSucceedsWhenEachProductStockFitsLongEvenIfCrossProductSumWouldOverflow() throws Exception {
+        // 1. Create a kg product priced at 1 FCFA/kg and receive Long.MAX_VALUE thousandths
+        Product bulkGrain = products.create(shop, "Bulk Grain", 1, null, null, "Food", "kg", Map.of());
+        stock.receive(UUID.randomUUID(), shop, bulkGrain.id(), device, Long.MAX_VALUE, "Max bulk grain delivery");
+
+        // 2. Create a piece product priced at 1000 FCFA and receive 1000 thousandths (1 piece)
+        Product bag = products.create(shop, "Packaging Bag", 1000, null, null, "Supplies", "piece", Map.of());
+        stock.receive(UUID.randomUUID(), shop, bag.id(), device, 1_000L, "Single bag delivery");
+
+        // 3. Sell both in one cash sale; rounded total fits long and both stocks become zero
+        UUID saleId = UUID.randomUUID();
+        Sale originalSale = sales.makeCashSale(saleId, shop, device, "REC-MIXED-MAX", List.of(
+                new SaleItemRequest(bulkGrain.id(), Long.MAX_VALUE),
+                new SaleItemRequest(bag.id(), 1_000L)
+        )).sale();
+        assertEquals(0L, stock.current(shop, bulkGrain.id()).quantityMilli());
+        assertEquals(0L, stock.current(shop, bag.id()).quantityMilli());
+
+        // 4. Void that sale: restoring each individual stock fits long, even though summing across products overflows long
+        UUID voidOpId = UUID.randomUUID();
+        VoidSaleResult voidResult = sales.voidCashSale(
+                voidOpId, shop, saleId, device, cashier, "Void mixed-unit max-quantity sale");
+
+        assertFalse(voidResult.replayed());
+        assertEquals(SaleStatus.VOIDED, voidResult.status());
+        assertEquals(originalSale, voidResult.sale());
+        assertEquals(originalSale, sales.getSale(shop, saleId).orElseThrow());
+
+        // Each product's restored quantity is exact and matches movement history
+        assertEquals(Long.MAX_VALUE, stock.current(shop, bulkGrain.id()).quantityMilli());
+        assertEquals(Long.MAX_VALUE, stock.history(shop, bulkGrain.id()).stream().mapToLong(StockMovement::quantityMilli).sum());
+        assertEquals(1_000L, stock.current(shop, bag.id()).quantityMilli());
+        assertEquals(1_000L, stock.history(shop, bag.id()).stream().mapToLong(StockMovement::quantityMilli).sum());
+
+        // One void event, one audit entry, and two item-restoration links committed
+        SaleState state = sales.getSaleState(shop, saleId).orElseThrow();
+        assertEquals(SaleStatus.VOIDED, state.status());
+        assertEquals(2, state.events().size());
+        assertEquals(1, sales.listAuditRecords(shop, saleId).size());
+        assertEquals(2, voidResult.restoredMovements().size());
+
+        try (var connection = database.open();
+             var stmt = connection.prepareStatement("SELECT COUNT(*) FROM sale_void_items WHERE shop_id = ? AND sale_id = ?")) {
+            stmt.setString(1, shop.toString());
+            stmt.setString(2, saleId.toString());
+            try (var rows = stmt.executeQuery()) {
+                assertTrue(rows.next());
+                assertEquals(2, rows.getInt(1));
+            }
+        }
+
+        // Audit output has no misleading cross-unit quantity sum and records per-item identities/units/quantities
+        String newValueJson = voidResult.auditRecord().newValue();
+        assertFalse(newValueJson.contains("restoredQuantityMilli"));
+        assertTrue(newValueJson.contains("\"restoredItemCount\":2"));
+        assertTrue(newValueJson.contains("\"restoredItems\":["));
+        assertTrue(newValueJson.contains("\"productId\":\"" + bulkGrain.id() + "\""));
+        assertTrue(newValueJson.contains("\"unit\":\"kg\""));
+        assertTrue(newValueJson.contains("\"quantityMilli\":" + Long.MAX_VALUE));
+        assertTrue(newValueJson.contains("\"productId\":\"" + bag.id() + "\""));
+        assertTrue(newValueJson.contains("\"unit\":\"piece\""));
+        assertTrue(newValueJson.contains("\"quantityMilli\":1000"));
+
+        // 5. Retry the same void: returns the saved void result without restoring stock a second time
+        VoidSaleResult retry = sales.voidCashSale(
+                voidOpId, shop, saleId, device, cashier, "Void mixed-unit max-quantity sale");
+        assertTrue(retry.replayed());
+        assertEquals(voidResult.sale(), retry.sale());
+        assertEquals(voidResult.voidEvent(), retry.voidEvent());
+        assertEquals(voidResult.restoredMovements(), retry.restoredMovements());
+        assertEquals(voidResult.auditRecord(), retry.auditRecord());
+        assertEquals(Long.MAX_VALUE, stock.current(shop, bulkGrain.id()).quantityMilli());
+        assertEquals(1_000L, stock.current(shop, bag.id()).quantityMilli());
+    }
+
+    @Test
     void midTransactionFailuresAndOverflowRollBackEveryChangeAndAllowSubsequentRetry() throws Exception {
         Product oil = products.create(shop, "Oil", 1000, null, null, "Food", "litre", Map.of());
         stock.receive(UUID.randomUUID(), shop, shirt.id(), device, 10_000L, "Delivery shirts");
@@ -590,4 +666,3 @@ class SaleVoidTest {
         }
     }
 }
-
