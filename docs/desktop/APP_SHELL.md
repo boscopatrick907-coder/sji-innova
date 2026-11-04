@@ -10,7 +10,8 @@ The shell is the Cella main window, its navigation, and the local start-up
 | Windows | `%APPDATA%\Cella` (for example `C:\Users\you\AppData\Roaming\Cella`) |
 | Other | `~/.cella` |
 
-Files inside: `cella.db` (SQLite database) and `shop-id.txt` (the development shop ID).
+Files inside: `cella.db` (SQLite database), `shop-id.txt` (the development shop ID)
+and `logs/cella-0.log` (error log, see below).
 
 **Override (for tests and developers)**, in this order of priority:
 
@@ -40,6 +41,15 @@ put the old `shop-id.txt` back in the data folder and click **Retry**.
 
 Normal launch never adds demo products. `--smoke-test` runs the same start-up on a
 throw-away temporary folder. `--product-demo PATH` is unchanged.
+
+## Error log
+
+Start-up failures are logged with `java.util.logging` (no `printStackTrace`). Normal launch
+writes them to the console and to `logs/cella-0.log` in the data folder (3 rotating files of
+1 MB). A user who opened Cella with a double-click has no console, so ask for this file when
+they report "Cella could not start". If the log file cannot be opened, Cella logs to the
+console only and keeps running. `--smoke-test` and the unit tests write no log file in the
+real data folder.
 
 ## Language
 
