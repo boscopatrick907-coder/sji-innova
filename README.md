@@ -141,8 +141,9 @@ Database files are ignored by Git; never commit a shop's live data.
 Charles, Willy and Pascal: start with [the team guide](docs/team/README.md).
 It contains AI prompts, local setup instructions, shared boundaries and individual
 assignments for Claude Code or Antigravity. The shell and Products screen are
-connected. Charles’s current task is a [visual design proposal](docs/team/CHARLES.md),
-with mockup assets in `docs/design/`.
+connected. Patrick owns Products design; [Willy builds Stock](docs/team/WILLY.md) and
+[Charles builds Sales and shared wiring](docs/team/CHARLES.md). Mockup references
+remain in `docs/design/`.
 
 ## Visual roadmap
 

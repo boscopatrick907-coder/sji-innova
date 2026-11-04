@@ -1,51 +1,92 @@
-# Willy — primary desktop feature developer (Antigravity)
+# Willy — Stock management screen
 
-Read CONTEXT.md first. You own the Products form and list. Your workload is the
-main desktop feature work; Pascal supports translations and QA.
+Current assignment: 4 November 2026. This replaces the old Products assignment.
+Patrick now owns Products and its design implementation. Charles owns Sales and
+shared startup/navigation wiring. Do not restyle or replace ProductPanel.
 
 ## Start
 
-With a clean checkout on up-to-date main:
+Read README.md, docs/team/CONTEXT.md, docs/team/README.md and
+[the stock service contract](../backend/STOCK.md). Inspect current code rather
+than assuming every old example describes the latest schema.
+With a clean checkout on updated main, create `desktop/stock-screen`.
+Own `desktop/src/main/java/cm/sji/innova/desktop/stock/` and related tests.
 
-```sh
-git switch -c desktop/products-screen
-```
+## Milestone 1 — receive goods and see the result
 
-Read Product, ProductService, ProductDetailsTest and existing desktop code.
-Implement ProductPanel in the products package using the shared injected-service
-constructor. Do not edit Charles's shell/entry-point classes. Ask Charles to wire
-in the panel after it is ready. Coordinate labels with Pascal.
+Build a StockPanel with injected StockService, ProductService, shop UUID, device
+UUID and ResourceBundle. Agree its constructor with Charles before implementation.
+Use a disposable integration harness until the shared context wiring merges;
+your PR must compile without an unmerged class. Do not construct another database
+in a button handler or silently invent a device UUID each operation.
 
-## Deliver one small pull request
+- List shop products, units, available quantities and minimum thresholds using
+  StockService.list and the existing catalog service as needed.
+- Choose a product and receive a positive quantity with a required reason or
+  delivery reference through StockService.receive.
+- Refresh stock and show the persisted movement after successful receipt.
+- Add product movement history using StockService.history. Preserve service order.
+- Keep one operation UUID and the same request while a failed/uncertain receipt
+  is retried. A genuinely new request gets a new ID. Do not let editing input
+  silently turn an uncertain retry into a second receipt.
 
-1. Show saved products for the injected shop UUID using ProductService.list.
-2. Add labelled inputs for name, model/reference, buying price, selling price,
-   category and unit, plus add/remove rows for specifications such as color/size.
-3. Required: name, selling price and unit. Model/category/specifications are
-   optional. Blank buying price means unknown; accept zero and do not require
-   buying price to be lower than selling price. Use integer FCFA with overflow
-   checks. Unit values must be piece/kg/litre.
-4. Validate before saving, display core validation failures clearly, and preserve
-   user input when a save fails. Reject duplicate trimmed specification names.
-5. Save with the real detailed ProductService.create overload on a SwingWorker.
-   Prevent duplicate clicks while running. Refresh the list on success; clear
-   inputs only after successful persistence. Keep UI changes on the EDT.
-6. Include empty/loading/error states and a retry/refresh action. Prices must
-   visibly distinguish buying from selling and unknown from zero.
-7. Use Pascal's bundles for all user-visible text and messages. Translate unit
-   labels but pass canonical codes to core. No SQL or migration edits.
+Acceptance: receive 10 pieces, see 10 available and one movement, restart with the
+same data directory, and still see 10. Retry the same receipt: still 10 and one
+movement. Verify fractional kg/litres, wrong-shop filtering, failed-save input
+preservation and no frozen window during slow loads.
 
-## Acceptance
+## Milestone 2 — corrections and low-stock thresholds
 
-- Create a T-shirt: model Classic V2, buying 2000, selling 3000 FCFA, category
-  Clothing, piece, color=blue, size=M. Save and see every entered detail.
-- Restart after integration: the same product remains, without duplicate seeds.
-- Red and blue entries get separate IDs; no parent-variant grouping is claimed.
-- Blank buying price remains unknown. Negative, noninteger and overflow prices
-  are rejected; failed saves retain input. Slow loading does not freeze the window.
-- Add useful UI/service integration tests with temporary databases. Report what
-  was tested headlessly and what was verified in the Windows window.
+After milestone 1 review, add signed nonzero corrections through StockService.adjust
+with a mandatory reason. Label these as changes, not absolute stock counts:
+“Retirer 2 pièces” means -2000. Show before/change/result and confirm destructive
+corrections. Reject a negative final balance through the service; never edit or
+delete historical movements. Retrying uses the same operation-ID rules.
 
-Do not add stock quantity editing: stock movements are a separate backend task.
-No product edit/delete, cart or checkout in this first PR. Your next assignment
-will be Sales UI after Emmanuel supplies the stock and sale service contracts.
+Add nonnegative minimum thresholds with StockService.setMinimum. The service's
+lowStock() means available <= minimum. Display text/icons as well as color.
+Refresh when entering Stock and after operations; show loading/retry on failures.
+Initial zero means no recorded opening stock, not a verified empty shelf.
+
+## Boundaries
+
+No checkout, sales deductions, product form, photos, login, supplier purchasing,
+sync or database migration. Do not use adjustments to simulate a sale. Ask Emmanuel
+about missing backend contracts; Charles alone coordinates shared bootstrap files.
+
+## Shared implementation rules
+
+Use Java 21, Swing and FlatLaf. Inspect actual main and the service signatures;
+reuse the existing SQLite database and stable shop identity. No SQL in panels,
+no replacement repositories, schema changes, demo seeds or database deletion.
+Run DB work off the EDT with SwingWorker; update controls on the EDT. Preserve
+input on error, distinguish loading/error from zero, disable repeated submissions
+and ignore stale background responses. No authentication is implemented.
+
+Use exact quantities: 1000 internal units = 1 piece/kg/litre; pieces must be whole,
+kg/litre allow at most three decimal places. Parse without floating point, reject
+overflow and invalid values, and format French/English display labels separately
+from canonical unit codes. Prices are whole FCFA; use the service's authoritative
+results. Coordinate translation keys with Pascal; do not overwrite other people's
+bundle edits. Match Patrick's chosen visual tokens without redesigning Products.
+
+## Verification and delivery
+
+Run the full wrapper clean verify and packaged headless smoke test from README.md.
+Use temporary SQLite databases in meaningful persistence/integration tests. Keep
+existing startup readiness and recovery checks working. Test the actual Windows
+window for keyboard flow, resize, loading, failure/retry and reopen persistence;
+report untested GUI checks honestly. Never use a live shop database for testing.
+
+Deliver one reviewable PR per milestone with screenshots, branch/commit, tests,
+known limitations and exact manual steps. Never push directly to main, force-push
+or merge your own PR automatically. Push only when your human requests it.
+Explain each step in simple language so the developer can explain the code.
+
+## Prompt for your AI editor
+
+> Read docs/team/WILLY.md, docs/team/CONTEXT.md and docs/backend/STOCK.md.
+> My current assignment is Stock, not Products. Inspect the repository, explain
+> each step simply and implement milestone 1 on desktop/stock-screen. Coordinate
+> injected services with Charles and labels with Pascal. Preserve Patrick's
+> Products files. Show tests and limitations. Do not push or merge without my request.

@@ -70,44 +70,38 @@ On Linux/macOS use `./mvnw` instead. The README's `/workspace/.setup` paths belo
 only to the prepared cloud machine; do not copy them onto a friend's PC. Use
 normal GitHub sign-in when needed; do not put credentials in code or chat.
 
-## Original milestone and merge order (historical)
+## Current assignments — 4 November 2026
 
-Goal: open Cella, navigate to Products, save product details, restart, and see
-those same details again.
+| Person | Owns | Current brief |
+| --- | --- | --- |
+| Patrick | Products design and implementation | Choose among the three proposals; own ProductPanel |
+| Willy | Stock screen | [WILLY.md](WILLY.md) |
+| Charles | Cash Sales and shared service/navigation wiring | [CHARLES.md](CHARLES.md) |
+| Pascal | French/English resources and cross-screen QA | [PASCAL.md](PASCAL.md) |
+| Emmanuel | Backend contracts and planned photo storage | Coordinate photo design before implementing persistence |
 
-1. Pascal supplies the agreed French/English translation files.
-2. Charles supplies the shell, persistent application context and Products slot.
-3. Willy integrates the Products panel using those shared contracts.
-4. All three test the combined application on Windows; another person reviews
-   each pull request. Patrick coordinates review/integration; Emmanuel reviews
-   service usage and persistence boundaries.
+The old Charles/Willy assignments have been replaced in place: these are the
+only current briefs for them. Products and shell already work on main. Photo
+storage and stock/sales UI integration remain new work. `docs/design/` contains
+visual proposals, not an application implementation.
 
-They can develop in parallel: Willy develops his panel against injected services
-and a ResourceBundle; Pascal works in resources/tests; Charles owns navigation.
-The integration order avoids replacing each other's entry-point changes.
+## Coordination and merge order
+
+1. Charles delivers shared StockService/SaleService and stable device context.
+2. Willy builds Stock in his package; Charles builds Sales in his package. Each
+   screen can develop against injected existing services while wiring is reviewed.
+3. Merge shared wiring first, then Stock receipt/history so the team can prepare
+   test stock, then cash Sales. Each PR must compile independently. Charles owns
+   shared shell edits; coordinate constructor/translation changes before coding.
+4. Patrick implements Products independently and supplies chosen visual tokens.
+   Review each PR before merging; test the combined application afterward.
+
+Historical review evidence remains under docs/reviews/. It describes older commits,
+not current assignments. Do not follow old correction checklists as new work
+without reproducing the issue on current main.
 
 ## Share progress
 
-At the end of each session report: task, branch/commit, what works, tests run,
-what is blocked, and the next small step. Include a screenshot of visible UI
-changes when possible. A passing cloud startup check is not a Windows GUI test.
-
-## Current design assignment
-
-Charles: use [your updated design brief](CHARLES.md) and the assets in
-`docs/design/`. The shell and Products integration have merged. Compare designs
-with Patrick before a separate Java styling change.
-
-## Desktop review feedback (historical evidence)
-
-Charles, Willy and Pascal: read the [2 November review and correction checklists](../reviews/desktop-2026-11-02/README.md)
-before continuing your current desktop tasks. Findings are tied to the reviewed
-commits; append evidence when fixes are tested rather than treating passing builds
-as proof that every acceptance criterion is complete.
-
-## Emmanuel — next backend assignment
-
-Read [Emmanuel's cash-sale void brief](EMMANUEL.md) for the AI starting prompt,
-current code context, atomic reversal rules, migration/event design and required
-tests. This is a backend task; Charles, Willy and Pascal continue their separate
-desktop corrections. Sale voiding is planned, not implemented by this document.
+Report branch/commit, working behavior, tests, screenshots, blockers and next step.
+Separate automated/headless checks from actual Windows GUI tests. Follow README.md
+for Java 21 build/run commands and preserve user work before switching branches.

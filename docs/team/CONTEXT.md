@@ -18,7 +18,7 @@ Snapshot updated with cash-sale retry and rounding corrections. Verify the branc
 and current main before relying on these additions. Available on this branch:
 
 - core Product, ProductService, ProductRepository, SqliteDatabase and
-  SqliteProductRepository; schema version 4 migrates older databases.
+  SqliteProductRepository; schema version 5 migrates older databases.
 - Product creation and shop-scoped listing; no product edit/delete yet.
 - Product fields: id/shopId UUIDs, name, unitPrice (SELLING price), optional
   costPrice (BUYING price), optional modelReference/category, unit, specifications,
@@ -48,7 +48,7 @@ and current main before relying on these additions. Available on this branch:
 
 Patrick: project coordination and integration. Emmanuel: database/backend and
 service contracts. Charles: desktop coordination, shell/navigation/shared UI.
-Willy: primary Products UI developer, later sales UI. Pascal: translations,
+Willy: Stock screen. Patrick owns Products design/implementation; Charles owns Sales. Pascal: translations,
 smaller supporting tasks and hands-on QA. AI tool choice does not change ownership.
 
 Desktop work belongs under desktop/. Do not change core/, SQL migrations, Maven
@@ -57,26 +57,18 @@ responsible owner agrees. Report missing backend operations with the required
 input/output; do not work around them with SQL in a button handler. Do not add
 React, JavaFX, Electron, a new database, or extra frameworks for this pilot.
 
-## Proposed desktop integration contract
+## Current desktop integration contract
 
-These are NEW interfaces/classes to implement, not claims about existing code.
-Inspect current main first; reuse an equivalent contract if Charles has already
-merged it, and coordinate changes before editing shared files.
-
-- Charles owns DesktopApplication and shell/context classes in
-  `cm.sji.innova.desktop.shell`.
-- Willy owns `cm.sji.innova.desktop.products.ProductPanel`, a JPanel whose public
-  constructor accepts `(ProductService products, UUID shopId, ResourceBundle messages)`.
-- Charles constructs/injects the real ProductService and one stable shop UUID;
-  he integrates the panel after Willy's PR. Until then show an honest placeholder.
-- Pascal owns UTF-8 resource bundles at
-  `desktop/src/main/resources/cm/sji/innova/desktop/i18n/messages_en.properties`
-  and `messages_fr.properties`. Bundle base name:
-  `cm.sji.innova.desktop.i18n.messages`.
-- For the first milestone select French or English at startup using a documented
-  option or configuration. Live language switching is a later task.
-- No PR should require an unmerged class to compile: use a placeholder until the
-  dependency merges. Coordinate any new translation keys with Pascal.
+Current assignments are in docs/team/README.md, CHARLES.md and WILLY.md.
+Patrick owns existing products/ProductPanel; Willy owns new stock/ panels;
+Charles owns new sales/ panels and shared shell/context/startup files.
+The completed Products shell integration must be preserved, not recreated.
+AppContext currently exposes the catalog service only; Charles adds stock/sales
+services and a stable development device ID from the same local database.
+Agree panel injection contracts before editing; merge wiring before dependent
+screens. Pascal coordinates the existing French/English bundles (base name
+`cm.sji.innova.desktop.i18n.messages`). Translate labels while preserving canonical
+unit codes. No PR may require unmerged classes to compile.
 
 ## Database and application context
 
