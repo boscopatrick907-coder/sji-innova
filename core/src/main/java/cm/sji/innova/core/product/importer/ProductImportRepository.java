@@ -59,4 +59,8 @@ public interface ProductImportRepository {
      * Transactionally creates a product and records its import row mapping in the same commit.
      */
     Product insertImportedProduct(UUID operationId, int rowNumber, String rowHash, Product product) throws SQLException;
+    default Product insertImportedProduct(UUID operationId,int rowNumber,String rowHash,Product product,
+                                          boolean allowDuplicates)throws SQLException {
+        return insertImportedProduct(operationId,rowNumber,rowHash,product);
+    }
 }

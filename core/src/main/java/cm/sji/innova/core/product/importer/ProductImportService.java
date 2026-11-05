@@ -3,15 +3,11 @@ package cm.sji.innova.core.product.importer;
 import cm.sji.innova.core.product.Product;
 import java.io.IOException;
 import java.io.Reader;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -68,6 +64,7 @@ public final class ProductImportService {
         for (int i = 0; i < headerCols.size(); i++) {
             String col = headerCols.get(i).trim().toLowerCase(Locale.ROOT);
             if (col.isEmpty()) {
+                fileErrors.add("Blank header at column " + (i + 1));
                 continue;
             }
             if (colIndexMap.containsKey(col)) {
@@ -116,7 +113,6 @@ public final class ProductImportService {
         int validCount = 0;
         int invalidCount = 0;
         int warningCount = 0;
-        StringBuilder contentToHash = new StringBuilder();
 
         for (int i = 1; i < records.size(); i++) {
             Rfc4180CsvReader.CsvRecord rec = records.get(i);
@@ -124,6 +120,9 @@ public final class ProductImportService {
             List<String> fields = rec.fields();
             List<String> rowErrors = new ArrayList<>();
             List<String> rowWarnings = new ArrayList<>();
+            if (fields.size() != headerCols.size()) {
+                rowErrors.add("Expected " + headerCols.size() + " columns but found " + fields.size());
+            }
 
             String rawName = getColValue(fields, colIndexMap.get("name"));
             String rawModelRef = getColValue(fields, colIndexMap.get("model_reference"));
@@ -226,7 +225,6 @@ public final class ProductImportService {
             }
 
             parsedRows.add(parsed);
-            contentToHash.append(parsed.rowHash()).append(";");
 
             if (parsed.isValid()) {
                 validCount++;
@@ -238,11 +236,21 @@ public final class ProductImportService {
             }
         }
 
-        String contentHash = sha256(contentToHash.toString());
+        String contentHash = ImportFingerprint.content(parsedRows);
 
         return new ImportPreview(
-                UUID.randomUUID(), shopId, parsedRows.size(), validCount,
+                ImportFingerprint.previewId(shopId, contentHash), shopId, parsedRows.size(), validCount,
                 invalidCount, warningCount, parsedRows, List.of(), contentHash);
+    }
+
+    /** Preferred API: keeps the reviewed shop/preview and rows together. */
+    public ImportResult confirmImport(UUID shopId,ConfirmedImportRequest request,ImportPreview preview) throws SQLException {
+        Objects.requireNonNull(preview,"preview");
+        if(!shopId.equals(preview.shopId()) || !request.previewId().equals(preview.previewId())
+                || !request.contentHash().equals(preview.contentHash()) || !preview.fileErrors().isEmpty()) {
+            throw new IllegalArgumentException("Confirmation does not match the reviewed preview");
+        }
+        return confirmImport(shopId,request,preview.rows());
     }
 
     /**
@@ -257,6 +265,23 @@ public final class ProductImportService {
         Objects.requireNonNull(request, "request must not be null");
         Objects.requireNonNull(reviewedRows, "reviewedRows must not be null");
 
+        String actualContent = ImportFingerprint.content(reviewedRows);
+        if (!actualContent.equals(request.contentHash())
+                || !ImportFingerprint.previewId(shopId, actualContent).equals(request.previewId())) {
+            throw new IllegalArgumentException("Confirmation does not match the reviewed preview/shop");
+        }
+        Map<Integer,ParsedRow> verified = new HashMap<>();
+        for (ParsedRow row : reviewedRows) {
+            if (row.rowNumber()<1 || verified.putIfAbsent(row.rowNumber(),row)!=null)
+                throw new IllegalArgumentException("Preview contains invalid or duplicate row numbers");
+        }
+        for(int number:request.selectedRowNumbers()) {
+            if(!verified.containsKey(number))throw new IllegalArgumentException("Selected row not in preview: "+number);
+        }
+        String requestIdentity = ImportFingerprint.request(shopId,request);
+        // Atomic registration checks the entire request, including selection/duplicate consent.
+        repository.recordOperation(request.operationId(), shopId, requestIdentity, request.selectedRowNumbers().size());
+
         // 1. Idempotency check: verify if operation ID already exists
         Optional<ProductImportRepository.ImportOperationRecord> existingOp = repository.findOperation(request.operationId());
         if (existingOp.isPresent()) {
@@ -264,7 +289,7 @@ public final class ProductImportService {
             if (!op.shopId().equals(shopId)) {
                 throw new IllegalArgumentException("Operation " + request.operationId() + " belongs to a different shop.");
             }
-            if (!op.contentHash().equals(request.contentHash())) {
+            if (!op.contentHash().equals(requestIdentity)) {
                 throw new IllegalArgumentException("Operation " + request.operationId()
                         + " was already executed with different file content or row selection.");
             }
@@ -296,7 +321,7 @@ public final class ProductImportService {
             }
         } else {
             // First time this operation is executed: record operation header
-            repository.recordOperation(request.operationId(), shopId, request.contentHash(), request.selectedRowNumbers().size());
+            repository.recordOperation(request.operationId(), shopId, requestIdentity, request.selectedRowNumbers().size());
         }
 
         // 2. Perform per-row atomic imports for remaining uncommitted selected rows
@@ -341,6 +366,11 @@ public final class ProductImportService {
                 continue;
             }
 
+            if (!request.allowDuplicates() && row.hasWarnings()) {
+                rowResults.add(new ImportedRowResult(rowNum,null,ImportedRowResult.Status.SKIPPED,"Duplicate candidate requires explicit confirmation"));
+                skippedCount++;
+                continue;
+            }
             Instant now = Instant.now();
             Product toCreate = new Product(
                     UUID.randomUUID(), shopId, row.name(), row.sellingPrice(), now, now, 1,
@@ -349,13 +379,16 @@ public final class ProductImportService {
 
             try {
                 Product saved = repository.insertImportedProduct(
-                        request.operationId(), row.rowNumber(), row.rowHash(), toCreate);
+                        request.operationId(), row.rowNumber(), row.rowHash(), toCreate, request.allowDuplicates());
                 rowResults.add(new ImportedRowResult(
                         rowNum, saved.id(), ImportedRowResult.Status.SUCCESS, "Imported with reference " + saved.reference()));
                 importedCount++;
+            } catch (DuplicateImportException duplicate) {
+                rowResults.add(new ImportedRowResult(rowNum,null,ImportedRowResult.Status.SKIPPED,"Duplicate candidate requires explicit confirmation"));
+                skippedCount++;
             } catch (SQLException ex) {
                 rowResults.add(new ImportedRowResult(
-                        rowNum, null, ImportedRowResult.Status.FAILED, "Database error: " + ex.getMessage()));
+                        rowNum, null, ImportedRowResult.Status.FAILED, "Import could not be confirmed. Retry the same operation."));
                 failedCount++;
             }
         }
@@ -378,13 +411,4 @@ public final class ProductImportService {
         return Long.parseLong(text);
     }
 
-    private static String sha256(String input) {
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] digest = md.digest(input.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(digest);
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 not available", e);
-        }
-    }
 }

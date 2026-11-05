@@ -88,7 +88,8 @@ CREATE INDEX product_import_rows_hash ON product_import_rows(shop_id, row_hash);
   2. Existing products in the current shop catalog (matching `name` or `model_reference`).
   3. Previously imported row content hashes (`product_import_rows.row_hash`).
 * Cella **never silently merges or overwrites** an existing product.
-* In the desktop UI, candidate duplicates have warning messages attached and default to unselected. If the shopkeeper explicitly checks them, Cella creates distinct products with unique references (`P-0001`, `P-0002`).
+* In the desktop UI, candidate duplicates have warning messages attached and default to unselected. If the shopkeeper explicitly confirms creating duplicates, the request must set
+  `allowDuplicates=true`; selecting a row alone does not grant that consent. Cella then creates distinct products with unique references (`P-0001`, `P-0002`).
 
 ### Atomic Per-Row Transaction Policy
 * Confirmed imports execute per-row commits.
@@ -160,19 +161,21 @@ public void previewCsv(UUID shopId, Path csvFile, Consumer<ImportPreview> onPrev
 ```java
 public void confirmImport(
         UUID shopId,
+        UUID operationId, // allocate/store once per logical import, reuse on retry
         ImportPreview preview,
         List<Integer> selectedRowNumbers,
+        boolean allowDuplicateCandidates,
         Consumer<ImportResult> onImportComplete,
         Consumer<String> onError) {
 
-    UUID operationId = UUID.randomUUID();
     ConfirmedImportRequest request = new ConfirmedImportRequest(
-            operationId, preview.previewId(), preview.contentHash(), selectedRowNumbers);
+            operationId, preview.previewId(), preview.contentHash(), selectedRowNumbers,
+            allowDuplicateCandidates);
 
     new SwingWorker<ImportResult, Void>() {
         @Override
         protected ImportResult doInBackground() throws Exception {
-            return importService.confirmImport(shopId, request, preview.rows());
+            return importService.confirmImport(shopId, request, preview);
         }
 
         @Override
@@ -187,3 +190,45 @@ public void confirmImport(
     }.execute();
 }
 ```
+
+
+## Review fixes: confirmation and retry identity
+
+Emmanuel's original commits are retained. Follow-up fixes use versioned,
+length-prefixed SHA-256 fingerprints: delimiters/newlines/null values cannot alias
+field boundaries. Preview IDs are deterministic identities of shop + exact reviewed
+snapshot, not authentication tokens. Preview remains read-only. The service checks
+the supplied snapshot/hash/shop before any operation registration; the preferred
+confirmation overload receives ImportPreview rather than a detached list of rows.
+
+ConfirmedImportRequest has a five-argument constructor with `allowDuplicates`.
+The original four-argument constructor defaults to false. ImportOptions' duplicate
+flag is only a UI preference, not permission to bypass confirmation. Duplicate
+candidates are skipped by default and rechecked against current catalog data under
+the row-write lock. Explicit consent permits a distinct product; nothing updates
+existing products. Product references remain automatic and stock is unchanged.
+
+The operation table's existing `content_hash` column now stores a `request-v2:`
+fingerprint covering shop, preview, content, the exact selected row set and explicit
+duplicate consent. A changed selection, content, shop or consent cannot reuse the
+operation ID. Registration/conflict checking is transactional. Row insertion checks
+for an existing mapping after acquiring the write lock, so concurrent identical
+requests return the same saved product instead of an extra product or false failure.
+A different operation ID is a new request, not a retry.
+
+Persist/reuse the original operation ID, request and reviewed snapshot in the
+future desktop import workflow. Do not re-read a changed file under an old
+confirmation or allocate a new ID after an uncertain response. Backend records
+support process restart; a durable desktop pending-import UI is separate work.
+Per-row commits remain the policy: failures do not undo earlier successful rows.
+Skipped duplicate candidates create no product/mapping; retries re-evaluate them.
+Legacy unmerged-branch operation hashes do not match request-v2 and are rejected
+rather than silently treated as the new protocol. Never reset a real shop database.
+
+Every row must match the header's column count; blank headers and ragged rows
+produce diagnostics instead of discarded fields. Commas inside quoted values,
+multiline fields, BOM and semicolon selection remain supported.
+
+Regressions cover changed preview rows/shop/ID, changed retry selection/consent,
+ragged records, ambiguous field values, duplicate revalidation and concurrent
+identical/conflicting confirmations. No CSV button or desktop screen is introduced.

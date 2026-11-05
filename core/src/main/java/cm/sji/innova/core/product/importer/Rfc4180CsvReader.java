@@ -160,7 +160,7 @@ public final class Rfc4180CsvReader {
         StringBuilder sample = new StringBuilder();
         int ch;
         int count = 0;
-        while ((ch = in.read()) != -1 && count < 2048) {
+        while (count < 2048 && (ch = in.read()) != -1) {
             sample.append((char) ch);
             count++;
             if (ch == '\n') {

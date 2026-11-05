@@ -1,9 +1,5 @@
 package cm.sji.innova.core.product.importer;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -52,20 +48,11 @@ public record ParsedRow(
      * Computes a deterministic SHA-256 hash of the normalized product fields for duplicate tracking.
      */
     public String rowHash() {
-        String normName = name != null ? name.trim().toLowerCase(Locale.ROOT) : "";
-        String normRef = modelReference != null ? modelReference.trim().toLowerCase(Locale.ROOT) : "";
-        String normCat = category != null ? category.trim().toLowerCase(Locale.ROOT) : "";
-        String normUnit = unit != null ? unit.trim().toLowerCase(Locale.ROOT) : "";
-        String normBuy = buyingPrice != null ? String.valueOf(buyingPrice) : "null";
-        String normSell = sellingPrice != null ? String.valueOf(sellingPrice) : "0";
-
-        String payload = String.join("|", normName, normRef, normCat, normUnit, normBuy, normSell);
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] digest = md.digest(payload.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(digest);
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 not available", e);
-        }
+        return ImportFingerprint.hash(java.util.Arrays.asList(
+                normalized(name),normalized(modelReference),normalized(category),normalized(unit),
+                buyingPrice==null?null:buyingPrice.toString(),sellingPrice==null?null:sellingPrice.toString()));
+    }
+    private static String normalized(String value) {
+        return value==null?null:value.strip().toLowerCase(Locale.ROOT);
     }
 }

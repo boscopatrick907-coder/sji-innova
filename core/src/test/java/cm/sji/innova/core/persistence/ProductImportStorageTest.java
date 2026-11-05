@@ -188,7 +188,7 @@ class ProductImportStorageTest {
         // Confirming creates distinct products and does NOT overwrite existing product
         UUID opId = UUID.randomUUID();
         ConfirmedImportRequest req = new ConfirmedImportRequest(
-                opId, preview.previewId(), preview.contentHash(), List.of(1, 2));
+                opId, preview.previewId(), preview.contentHash(), List.of(1, 2), true);
 
         ImportResult result = importService.confirmImport(shopId, req, preview.rows());
         assertEquals(2, result.importedCount());

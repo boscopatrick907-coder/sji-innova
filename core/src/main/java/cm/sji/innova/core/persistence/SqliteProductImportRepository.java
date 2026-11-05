@@ -2,6 +2,7 @@ package cm.sji.innova.core.persistence;
 
 import cm.sji.innova.core.product.Product;
 import cm.sji.innova.core.product.importer.ProductImportRepository;
+import cm.sji.innova.core.product.importer.DuplicateImportException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -80,18 +81,28 @@ public final class SqliteProductImportRepository implements ProductImportReposit
 
     @Override
     public void recordOperation(UUID operationId, UUID shopId, String contentHash, int totalSelected) throws SQLException {
-        try (Connection c = database.open();
-             PreparedStatement s = c.prepareStatement("""
-                     INSERT INTO product_import_operations (id, shop_id, content_hash, total_selected, created_at)
-                     VALUES (?, ?, ?, ?, ?)
-                     ON CONFLICT(id) DO NOTHING
-                     """)) {
-            s.setString(1, operationId.toString());
-            s.setString(2, shopId.toString());
-            s.setString(3, contentHash);
-            s.setInt(4, totalSelected);
-            s.setString(5, Instant.now().toString());
-            s.executeUpdate();
+        try (Connection c = database.open()) {
+            c.setAutoCommit(false);
+            try {
+                try(var insert=c.prepareStatement("""
+                        INSERT INTO product_import_operations(id,shop_id,content_hash,total_selected,created_at)
+                        VALUES(?,?,?,?,?) ON CONFLICT(id) DO NOTHING
+                        """)) {
+                    insert.setString(1,operationId.toString());insert.setString(2,shopId.toString());
+                    insert.setString(3,contentHash);insert.setInt(4,totalSelected);insert.setString(5,Instant.now().toString());insert.executeUpdate();
+                }
+                try(var check=c.prepareStatement("SELECT shop_id,content_hash,total_selected FROM product_import_operations WHERE id=?")) {
+                    check.setString(1,operationId.toString());
+                    try(var row=check.executeQuery()) {
+                        if(!row.next() || !shopId.toString().equals(row.getString(1))
+                                || !contentHash.equals(row.getString(2)) || totalSelected!=row.getInt(3))
+                            throw new IllegalArgumentException("Operation ID was already used with different shop, content, selection or duplicate consent");
+                    }
+                }
+                c.commit();
+            }catch(SQLException|RuntimeException failure){
+                try{c.rollback();}catch(SQLException rollback){failure.addSuppressed(rollback);}throw failure;
+            }
         }
     }
 
@@ -122,9 +133,54 @@ public final class SqliteProductImportRepository implements ProductImportReposit
 
     @Override
     public Product insertImportedProduct(UUID operationId, int rowNumber, String rowHash, Product product) throws SQLException {
+        return insertImportedProduct(operationId,rowNumber,rowHash,product,false);
+    }
+
+    @Override
+    public Product insertImportedProduct(UUID operationId, int rowNumber, String rowHash, Product product,
+                                         boolean allowDuplicates) throws SQLException {
         try (Connection connection = database.open()) {
             connection.setAutoCommit(false);
             try {
+                // Acquire the SQLite write lock before checking replay and duplicate candidates.
+                try(var lock=connection.prepareStatement("UPDATE product_import_operations SET total_selected=total_selected WHERE id=? AND shop_id=?")) {
+                    lock.setString(1,operationId.toString());lock.setString(2,product.shopId().toString());
+                    if(lock.executeUpdate()!=1)throw new IllegalArgumentException("Import operation not found in this shop");
+                }
+                try(var replay=connection.prepareStatement("""
+                        SELECT p.*,r.row_hash FROM product_import_rows r JOIN products p ON p.id=r.product_id
+                        WHERE r.operation_id=? AND r.row_number=? AND r.shop_id=?
+                        """)) {
+                    replay.setString(1,operationId.toString());replay.setInt(2,rowNumber);replay.setString(3,product.shopId().toString());
+                    try(var row=replay.executeQuery()) {
+                        if(row.next()) {
+                            if(!rowHash.equals(row.getString("row_hash")))throw new IllegalArgumentException("Imported row content changed");
+                            long cost=row.getLong("cost_price");Long buying=row.wasNull()?null:cost;
+                            Product saved=new Product(UUID.fromString(row.getString("id")),product.shopId(),row.getString("name"),
+                                    row.getLong("unit_price"),Instant.parse(row.getString("created_at")),Instant.parse(row.getString("updated_at")),
+                                    row.getLong("version"),row.getString("model_reference"),buying,row.getString("category"),row.getString("unit"),
+                                    java.util.Map.of(),row.getString("family_id")==null?null:UUID.fromString(row.getString("family_id")),row.getString("reference"));
+                            connection.commit();return saved;
+                        }
+                    }
+                }
+                if(!allowDuplicates) {
+                    try(var candidates=connection.prepareStatement("SELECT name,model_reference FROM products WHERE shop_id=?")) {
+                        candidates.setString(1,product.shopId().toString());
+                        try(var rows=candidates.executeQuery()) {
+                            while(rows.next()) {
+                                String reference=rows.getString(2);
+                                if(rows.getString(1).strip().equalsIgnoreCase(product.name()) ||
+                                        (product.modelReference()!=null && reference!=null && reference.strip().equalsIgnoreCase(product.modelReference())))
+                                    throw new DuplicateImportException();
+                            }
+                        }
+                    }
+                    try(var prior=connection.prepareStatement("SELECT 1 FROM product_import_rows WHERE shop_id=? AND row_hash=? LIMIT 1")) {
+                        prior.setString(1,product.shopId().toString());prior.setString(2,rowHash);
+                        try(var rows=prior.executeQuery()){if(rows.next())throw new DuplicateImportException();}
+                    }
+                }
                 long next;
                 try (var sequence = connection.prepareStatement("""
                         INSERT INTO product_reference_sequences(shop_id,last_value) VALUES (?,1)
@@ -185,7 +241,7 @@ public final class SqliteProductImportRepository implements ProductImportReposit
 
                 connection.commit();
                 return saved;
-            } catch (SQLException failure) {
+            } catch (SQLException | RuntimeException failure) {
                 try {
                     connection.rollback();
                 } catch (SQLException rollbackFailure) {

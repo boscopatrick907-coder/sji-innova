@@ -16,12 +16,21 @@ public record ConfirmedImportRequest(
         UUID operationId,
         UUID previewId,
         String contentHash,
-        List<Integer> selectedRowNumbers
+        List<Integer> selectedRowNumbers,
+        boolean allowDuplicates
 ) {
+    /** Duplicate candidates are skipped unless the caller explicitly acknowledges them. */
+    public ConfirmedImportRequest(UUID operationId,UUID previewId,String contentHash,List<Integer> selectedRowNumbers) {
+        this(operationId,previewId,contentHash,selectedRowNumbers,false);
+    }
     public ConfirmedImportRequest {
         Objects.requireNonNull(operationId, "operationId must not be null");
         Objects.requireNonNull(previewId, "previewId must not be null");
         Objects.requireNonNull(contentHash, "contentHash must not be null");
         selectedRowNumbers = List.copyOf(Objects.requireNonNull(selectedRowNumbers, "selectedRowNumbers must not be null"));
+        if(selectedRowNumbers.isEmpty() || selectedRowNumbers.stream().anyMatch(n->n<1)
+                || new java.util.HashSet<>(selectedRowNumbers).size()!=selectedRowNumbers.size()) {
+            throw new IllegalArgumentException("Select unique positive row numbers");
+        }
     }
 }
