@@ -1,6 +1,8 @@
-# Emmanuel — Step 2: persistent product photos
+# Emmanuel — product photos (delivered backend brief)
 
-Priority: NEXT, after CSV import is reviewed. Owner: Emmanuel.
+Historical assignment: backend delivered in `5a3c942`, with follow-up review fixes.
+For current work read [EMMANUEL.md](EMMANUEL.md); CSV import is next.
+Owner: Emmanuel.
 Patrick owns the photo controls in Products; Charles/Willy retain Sales/Stock.
 Branch suggestion: `backend/product-photos` from updated main, not an old branch.
 This is a proposed new feature. CSV image URLs/remote downloads are out of scope.
