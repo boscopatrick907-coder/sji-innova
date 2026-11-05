@@ -58,7 +58,8 @@ public final class DesktopApplication {
                     () -> AppContextLoader.load(location), () -> System.exit(0));
             frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
             frame.setContentPane(shell);
-            frame.setSize(960, 600);
+            frame.setSize(1100, 720);
+            frame.setMinimumSize(new java.awt.Dimension(960, 600));
             frame.setLocationRelativeTo(null);
             frame.setVisible(true);
             shell.start();   // opens the database in the background
