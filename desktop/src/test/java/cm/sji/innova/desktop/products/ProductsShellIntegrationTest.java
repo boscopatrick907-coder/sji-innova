@@ -53,13 +53,19 @@ class ProductsShellIntegrationTest {
             if(loaded.get().size()==1)break;Thread.sleep(20);
         }
         Product original=first.products().list(first.shopId()).getFirst();assertEquals(3000,original.unitPrice());assertNotNull(original.familyId());assertEquals("P-0001",original.reference());assertNull(original.costPrice());
+        AtomicReference<CompletionStage<Void>> firstPhoto=new AtomicReference<>();
+        SwingUtilities.invokeAndWait(()->{var photo=find(window.catalog,ProductPhotoPanel.class,null);if(photo!=null)firstPhoto.set(photo.initialLoadCompletion());});
+        if(firstPhoto.get()!=null)firstPhoto.get().toCompletableFuture().get(5,TimeUnit.SECONDS);
         var reopened=AppContextLoader.load(location);var second=open(reopened);second.shell.productsReady().toCompletableFuture().get(5,TimeUnit.SECONDS);
+        AtomicReference<CompletionStage<Void>> photoReady=new AtomicReference<>();
         SwingUtilities.invokeAndWait(()->{
             assertEquals(List.of(original),second.catalog.loadedProducts());
             second.catalog.showFamily(original.familyId());assertEquals(1,second.catalog.variantTable().getRowCount());
             second.catalog.showProduct(original.id()); // Existing stock is displayed from the real service.
             assertFalse(find(second.catalog,JToggleButton.class,null).isSelected());
+            photoReady.set(find(second.catalog,ProductPhotoPanel.class,null).initialLoadCompletion());
         });
+        photoReady.get().toCompletableFuture().get(5,TimeUnit.SECONDS);
         assertEquals(0,reopened.stock().current(reopened.shopId(),original.id()).quantityMilli());
     }
     @Test void startupReadinessReportsProductLoadingFailureWithoutAModalDialog()throws Exception{

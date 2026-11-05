@@ -184,11 +184,11 @@ See [the sales contract](docs/backend/SALES.md) before wiring checkout screens.
 
 ## Product families and variants
 
-The backend now supports families such as Riz, independently stocked variants,
-automatic shop references, catalog search and whole-bag units. See the
+The backend and desktop support families such as Riz, independently stocked
+variants, automatic shop references, catalog search and whole-bag units. See the
 [family integration guide](docs/backend/PRODUCT_FAMILIES.md). Existing products
-remain accessible as ungrouped items; the current desktop has not yet been updated
-to browse families or select bags. CSV and photos remain separate work.
+remain accessible as ungrouped items. CSV review/import and product photos are
+connected through the catalog controls described below.
 
 ## Family catalog desktop
 
@@ -201,8 +201,7 @@ by authentication. Details read real stock and movement history off the UI threa
 Stock errors show “Unavailable”, not zero. Refresh reloads the catalog/stock.
 
 The sidebar uses the chosen green gradient and simple line icon. French and
-English bundles cover the catalog. Start with `--lang fr` for French. Photos show
-a placeholder until persistent photo storage is implemented; CSV import and
+English bundles cover the catalog. Start with `--lang fr` for French. Product details now support managed photos, and CSV import has a review screen.
 The Stock receipt screen is connected; Sales entry remains separate work.
 Normal startup does not seed data.
 
@@ -217,3 +216,16 @@ kg/litres may have three decimal places. A failed uncertain receipt retains its
 original details for retry within the same session. Durable restart recovery,
 manual corrections and editable thresholds are Willy's next milestones; do not
 assume those controls are implemented. See docs/team/WILLY_NEXT_STOCK.md.
+
+
+## Import products and attach photos
+
+In Products, choose **Import CSV** to export a template, preview a UTF-8 CSV and
+confirm selected valid rows. Duplicate candidates require explicit consent.
+Pending imports resume safely from their original reviewed request after restart;
+no import runs automatically. See [the desktop workflow guide](docs/desktop/CATALOG.md).
+
+Open a saved product to choose, replace or remove a JPEG/PNG photo. Images are
+copied into the shop data folder. Keep the complete folder in backups. CSV input
+creates standalone products; family mapping, .xlsx and family photos remain future
+work. These features use the existing backend and do not seed demo data.

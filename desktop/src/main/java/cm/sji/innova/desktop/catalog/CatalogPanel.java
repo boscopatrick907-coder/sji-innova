@@ -20,6 +20,9 @@ public final class CatalogPanel extends JPanel {
     private final StockService stock;
     private final UUID shop;
     private final ResourceBundle messages;
+    private final cm.sji.innova.core.product.importer.ProductImportService imports;
+    private final cm.sji.innova.core.product.photo.ProductPhotoService photos;
+    private final java.nio.file.Path dataDirectory;
     private final CompletableFuture<Void> initial = new CompletableFuture<>();
     private final JPanel body = CatalogStyle.panel(new BorderLayout(0,20));
     private final JPanel breadcrumbs = CatalogStyle.panel(new FlowLayout(FlowLayout.LEFT,6,0));
@@ -41,7 +44,13 @@ public final class CatalogPanel extends JPanel {
     private final NumberFormat numbers;
     public CatalogPanel(ProductService products, ProductFamilyService families, StockService stock,
                         UUID shop, ResourceBundle messages) {
+        this(products,families,stock,shop,messages,null,null,null);
+    }
+    public CatalogPanel(ProductService products,ProductFamilyService families,StockService stock,UUID shop,
+                        ResourceBundle messages,cm.sji.innova.core.product.importer.ProductImportService imports,
+                        cm.sji.innova.core.product.photo.ProductPhotoService photos,java.nio.file.Path dataDirectory) {
         super(new BorderLayout(0,18));
+        this.imports=imports;this.photos=photos;this.dataDirectory=dataDirectory;
         this.products=products;this.families=families;this.stock=stock;this.shop=shop;this.messages=messages;
         numbers=NumberFormat.getNumberInstance(messages.getLocale()!=null && messages.getLocale().getLanguage().equals("fr")?Locale.FRANCE:Locale.ENGLISH);
         setBackground(CatalogStyle.PAPER);setBorder(BorderFactory.createEmptyBorder(24,30,24,30));
@@ -101,6 +110,8 @@ public final class CatalogPanel extends JPanel {
         JButton b=new JButton(text);b.setBorderPainted(false);b.setContentAreaFilled(false);b.setForeground(CatalogStyle.MUTED);b.addActionListener(e->action.run());breadcrumbs.add(b);
     }
     private void render(){
+        ((BorderLayout)getLayout()).getLayoutComponent(BorderLayout.NORTH).setVisible(true);
+        error.setVisible(true);
         body.removeAll();breadcrumbs.removeAll();crumb(t("catalog.products"),this::showFamilies);
         if(variants||selected!=null)crumb(groupName(family),()->showFamily(family));
         Product p=items.stream().filter(i->i.id().equals(selected)).findFirst().orElse(null);
@@ -113,7 +124,9 @@ public final class CatalogPanel extends JPanel {
     private void renderBrowse(){
         JPanel north=CatalogStyle.panel(new BorderLayout(0,22));JPanel title=CatalogStyle.panel(new BorderLayout());
         title.add(CatalogStyle.label(variants?groupName(family):t("catalog.products"),28,false),BorderLayout.WEST);
-        JButton add=CatalogStyle.button(t(variants?"catalog.addVariant":"catalog.addProduct"),true);add.addActionListener(e->showForm(variants?family:null));title.add(add,BorderLayout.EAST);north.add(title,BorderLayout.NORTH);
+        JButton add=CatalogStyle.button(t(variants?"catalog.addVariant":"catalog.addProduct"),true);add.addActionListener(e->showForm(variants?family:null));JPanel actions=CatalogStyle.panel(new FlowLayout(FlowLayout.RIGHT,8,0));
+        if(imports!=null&&!variants){JButton csv=CatalogStyle.button(t("csv.title"),false);csv.setName("openCsvImport");csv.addActionListener(e->showImport());actions.add(csv);}
+        actions.add(add);title.add(actions,BorderLayout.EAST);north.add(title,BorderLayout.NORTH);
         if(!variants){JPanel tools=CatalogStyle.panel(new BorderLayout(12,0));search.setPreferredSize(new Dimension(200,38));tools.add(search,BorderLayout.CENTER);tools.add(category,BorderLayout.EAST);north.add(tools,BorderLayout.SOUTH);}
         body.add(north,BorderLayout.NORTH);renderResults();
     }
@@ -162,7 +175,8 @@ public final class CatalogPanel extends JPanel {
     private void renderDetails(Product p){
         JPanel layout=CatalogStyle.panel(new GridLayout(1,2,24,0));
         JPanel imageColumn=CatalogStyle.panel(new BorderLayout());
-        imageColumn.add(new CatalogStyle.PhotoPlaceholder(t("catalog.noPhoto")),BorderLayout.NORTH);
+        if(photos==null)imageColumn.add(new CatalogStyle.PhotoPlaceholder(t("catalog.noPhoto")),BorderLayout.NORTH);
+        else imageColumn.add(new ProductPhotoPanel(photos,shop,p.id(),messages,pending->{saving=pending;refresh.setEnabled(!pending);for(Component crumb:breadcrumbs.getComponents())crumb.setEnabled(!pending);}),BorderLayout.NORTH);
         layout.add(imageColumn);
         JPanel text=CatalogStyle.panel(new GridBagLayout());GridBagConstraints d=new GridBagConstraints();d.gridx=0;d.gridy=0;d.weightx=1;d.fill=GridBagConstraints.HORIZONTAL;d.anchor=GridBagConstraints.NORTHWEST;d.insets=new Insets(0,0,16,0);
         text.add(CatalogStyle.label(t("catalog.reference")+" "+p.reference(),11,false),d);d.gridy++;JTextArea name=new JTextArea(p.name());name.setLineWrap(true);name.setWrapStyleWord(true);name.setEditable(false);name.setOpaque(false);name.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,25));name.setForeground(CatalogStyle.INK);text.add(name,d);
@@ -192,6 +206,15 @@ public final class CatalogPanel extends JPanel {
             protected void done(){try{var rows=get();if(request!=historySequence)return;body.removeAll();JTextArea text=new JTextArea();text.setEditable(false);for(var m:rows)text.append(m.createdAt()+"  "+numbers.format(BigDecimal.valueOf(m.quantityMilli(),3))+" "+unit(p.unit())+"  "+m.reason()+"\n");if(rows.isEmpty())text.setText(t("catalog.noMovements"));body.add(new JScrollPane(text),BorderLayout.CENTER);JButton back=CatalogStyle.button(t("catalog.back"),false);back.addActionListener(e->showProduct(p.id()));body.add(back,BorderLayout.SOUTH);}catch(Exception ex){if(request==historySequence){render();error.setText(t("catalog.stockError"));}}finally{if(request==historySequence){refresh.setEnabled(true);body.revalidate();body.repaint();}}}
         }.execute();
     }
+    private void showImport(){
+        ((BorderLayout)getLayout()).getLayoutComponent(BorderLayout.NORTH).setVisible(false);
+        error.setVisible(false);
+        body.removeAll();selected=null;refresh.setEnabled(false);
+        for(Component crumb:breadcrumbs.getComponents())crumb.setEnabled(false);
+        var flow=new cm.sji.innova.desktop.catalog.importing.CsvImportPanel(imports,shop,dataDirectory,messages,
+                ()->{refresh.setEnabled(true);render();},()->{refresh.setEnabled(true);reload();},pending->saving=pending);
+        body.add(flow,BorderLayout.CENTER);body.revalidate();body.repaint();
+    }
     private void showForm(UUID familyId){
         body.removeAll();selected=null;refresh.setEnabled(false);
         for(Component crumb:breadcrumbs.getComponents())crumb.setEnabled(false);
@@ -210,7 +233,7 @@ public final class CatalogPanel extends JPanel {
     /** Reload on re-entry only when no unfinished product form is displayed. */
     public void refreshIfBrowsing() {
         if (saving) return;
-        for (Component component : body.getComponents()) if (component instanceof VariantForm) return;
+        for (Component component : body.getComponents()) if (component instanceof VariantForm || component instanceof cm.sji.innova.desktop.catalog.importing.CsvImportPanel) return;
         reload();
     }
     // Test-facing controls reflect the actual visible catalog, not a parallel mock UI.
