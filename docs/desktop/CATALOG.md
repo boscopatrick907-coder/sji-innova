@@ -35,3 +35,36 @@ save/reopen through the shell, family search/back navigation, stock-error recove
 and failed-variant retry without duplicate family. Temporary shop only. Headless
 Swing renders at 1280x800 and 960x600 are provided for visual review; they are not
 a substitute for an actual Windows GUI check of fonts, scrolling and keyboard flow.
+
+## CSV and photo controls
+
+Products now includes Import CSV. Choose a UTF-8 CSV (comma/semicolon/automatic),
+review row diagnostics and select valid rows. Invalid rows cannot be selected;
+duplicate candidates are unselected by default and require explicit consent to
+create distinct products. Save template exports the packaged CSV format. Imports
+create ungrouped sellable products; family mapping and direct Excel .xlsx are not
+included. Results remain on screen before returning to the refreshed catalog.
+
+Before submission, pending-csv.properties stores the immutable request and reviewed
+snapshot using atomic replacement. The same operation is restored on the next
+Import CSV opening after restart; it never runs automatically. Partial/uncertain
+results keep the request frozen for safe retry. A successful confirmation clears
+pending state. A damaged/wrong-shop file is preserved and import is blocked for
+recovery. A local .csv-import.lock prevents two import flows in the same folder.
+Do not remove an active lock file. The store is local-filesystem only; it is not
+multi-device synchronization. Input is limited to 10 MiB and persisted snapshots
+to 16 MiB; oversized snapshots block submission rather than run untracked.
+
+Choose/replace/remove photo controls live on each saved product's detail page.
+The photo backend validates and copies selected JPEG/PNG files into managed storage.
+Original source files can then be moved/deleted. Failed replacement leaves the
+previous managed image; missing/corrupt images show a placeholder with recovery
+text. Images retain their aspect ratio. Add the photo after saving the product:
+the creation form does not yet contain a combined product/photo transaction.
+Family-level photo fallback is not implemented.
+
+All parsing, import, photo decoding/resizing and database operations are background
+work. English/French controls are provided; row diagnostic messages currently come
+from the backend in English. Pending import and photo files belong in full data
+folder backups. UI tests cover preview selection, lost-response restart recovery,
+corrupt/conflicting pending state and photo persistence/replacement/removal.
