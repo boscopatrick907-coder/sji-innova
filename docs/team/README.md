@@ -70,13 +70,13 @@ On Linux/macOS use `./mvnw` instead. The README's `/workspace/.setup` paths belo
 only to the prepared cloud machine; do not copy them onto a friend's PC. Use
 normal GitHub sign-in when needed; do not put credentials in code or chat.
 
-## Current assignments — 4 November 2026
+## Current assignments — 5 November 2026
 
 | Person | Owns | Current brief |
 | --- | --- | --- |
-| Patrick | Products design and implementation | Choose among the three proposals; own ProductPanel |
+| Patrick | Products design and implementation | Chosen family catalog is merged in PR #24 |
 | Willy | Stock screen | [WILLY.md](WILLY.md) |
-| Charles | Cash Sales and shared service/navigation wiring | [CHARLES.md](CHARLES.md) |
+| Charles | Visible cash checkout and sales history | [CHARLES.md](CHARLES.md) |
 | Pascal | French/English resources and cross-screen QA | [PASCAL.md](PASCAL.md) |
 | Emmanuel | CSV import first, then product photos | [Ordered backend briefs](EMMANUEL.md) |
 
@@ -87,13 +87,14 @@ visual proposals, not an application implementation.
 
 ## Coordination and merge order
 
-1. Charles delivers shared StockService/SaleService and stable device context.
+1. Shared services and device context are merged (PR #22); Charles now builds
+   the visible Ventes page. See his updated brief; do not repeat setup.
 2. Willy builds Stock in his package; Charles builds Sales in his package. Each
    screen can develop against injected existing services while wiring is reviewed.
-3. Merge shared wiring first, then Stock receipt/history so the team can prepare
+3. Shared wiring is available. Merge Stock receipt/history so the team can prepare
    test stock, then cash Sales. Each PR must compile independently. Charles owns
    shared shell edits; coordinate constructor/translation changes before coding.
-4. Patrick implements Products independently and supplies chosen visual tokens.
+4. Patrick’s chosen Products catalog is merged (PR #24); use its visual tokens.
    Review each PR before merging; test the combined application afterward.
 
 Historical review evidence remains under docs/reviews/. It describes older commits,
