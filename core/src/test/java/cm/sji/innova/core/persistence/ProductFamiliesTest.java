@@ -4,6 +4,8 @@ import cm.sji.innova.core.product.*;
 import cm.sji.innova.core.sale.*;
 import cm.sji.innova.core.stock.*;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
@@ -80,14 +82,19 @@ class ProductFamiliesTest {
         sales.voidCashSale(UUID.randomUUID(),shop,sale.id(),device,UUID.randomUUID(),"Mistake");
         assertEquals(4000,stock.current(shop,p.id()).quantityMilli());
     }
-    void legacy(SqliteDatabase db) throws Exception {
+    void legacy(SqliteDatabase db) throws Exception { legacy(db, "LF"); }
+    void legacy(SqliteDatabase db, String lineEndings) throws Exception {
         try(var in=getClass().getResourceAsStream("/schema-v5.sql");var c=db.open();var s=c.createStatement()) {
-            for(String sql:new String(in.readAllBytes(),StandardCharsets.UTF_8).split("\n-- statement\n"))s.execute(sql);
+            String schema = new String(in.readAllBytes(),StandardCharsets.UTF_8);
+            if (lineEndings.equals("CRLF")) schema = schema.replace("\r\n", "\n").replace("\n", "\r\n");
+            for(String sql:schema.split("\\R-- statement\\R"))s.execute(sql);
             s.execute("INSERT INTO products VALUES('"+UUID.randomUUID()+"','"+shop+"','Old rice',500,'2026-01-01T00:00:00Z','2026-01-01T00:00:00Z',7,'R-OLD',NULL,'Food','piece',10000,2000)");
         }
     }
-    @Test void schemaFiveUpgradePreservesHistoricalSalesVoidsAndReferencesOnRepeat() throws Exception {
-        var db=new SqliteDatabase(directory.resolve("legacy.db"));legacy(db);
+    @ParameterizedTest
+    @ValueSource(strings = {"LF", "CRLF"})
+    void schemaFiveUpgradePreservesHistoricalSalesVoidsAndReferencesOnRepeat(String lineEndings) throws Exception {
+        var db=new SqliteDatabase(directory.resolve("legacy.db"));legacy(db, lineEndings);
         UUID id;
         try(var c=db.open();var s=c.createStatement();var rows=s.executeQuery("SELECT id FROM products")){rows.next();id=UUID.fromString(rows.getString(1));}
         // Old sales service can persist directly using a snapshot without reading new catalog columns.
