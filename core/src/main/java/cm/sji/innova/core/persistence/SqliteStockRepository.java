@@ -53,8 +53,8 @@ public final class SqliteStockRepository implements StockRepository {
     }
 
     private static void checkUnit(String unit, long quantity) {
-        if ("piece".equals(unit) && quantity % 1000 != 0) {
-            throw new IllegalArgumentException("Piece quantities must be whole pieces (multiples of 1000)");
+        if (("piece".equals(unit) || "bag".equals(unit)) && quantity % 1000 != 0) {
+            throw new IllegalArgumentException("Piece and bag quantities must be whole items (multiples of 1000)");
         }
     }
 

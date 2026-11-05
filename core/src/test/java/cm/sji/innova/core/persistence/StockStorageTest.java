@@ -195,16 +195,31 @@ class StockStorageTest {
         }
         var original = products.list(shop).getFirst();
         var legacyProducts = new ProductService(new SqliteProductRepository(old));
-        legacyProducts.create(shop, "Legacy blue shirt", 3000, "Classic V2", 2000L,
-                "Clothing", "piece", Map.of("color", "blue", "size", "M"));
-        var before = legacyProducts.list(shop);
+        UUID legacyId = UUID.randomUUID();
+        // Seed the frozen schema through SQL, not the current-schema repository.
+        try (var c = old.open(); var stmt = c.prepareStatement("""
+                INSERT INTO products(id,shop_id,name,unit_price,created_at,updated_at,version,
+                                     model_reference,cost_price,category,unit)
+                VALUES(?,?,'Legacy blue shirt',3000,'2026-01-01T00:00:00Z','2026-01-01T00:00:00Z',1,
+                       'Classic V2',2000,'Clothing','piece')
+                """)) {
+            stmt.setString(1,legacyId.toString()); stmt.setString(2,shop.toString()); stmt.executeUpdate();
+            try(var specs=c.createStatement()) {
+                specs.execute("INSERT INTO product_specifications VALUES('"+legacyId+"','color','blue'),('"+legacyId+"','size','M')");
+            }
+        }
         old.initialize();
         old.initialize();
-        assertEquals(before, legacyProducts.list(shop));
+        var migrated = legacyProducts.list(shop).getFirst();
+        assertEquals(legacyId, migrated.id());
+        assertEquals("Legacy blue shirt", migrated.name());
+        assertEquals(2000L, migrated.costPrice());
+        assertEquals(Map.of("color","blue","size","M"), migrated.specifications());
+        assertNotNull(migrated.reference());
         var legacyStock = new StockService(new SqliteStockRepository(old));
         assertEquals(0, legacyStock.list(shop).getFirst().quantityMilli());
         assertEquals(0, legacyStock.list(shop).getFirst().minimumMilli());
-        assertTrue(legacyStock.history(shop, before.getFirst().id()).isEmpty());
+        assertTrue(legacyStock.history(shop, legacyId).isEmpty());
         assertEquals(original, products.list(shop).getFirst());
     }
 
