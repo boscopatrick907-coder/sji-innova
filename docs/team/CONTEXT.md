@@ -18,7 +18,7 @@ Snapshot updated with cash-sale retry and rounding corrections. Verify the branc
 and current main before relying on these additions. Available on this branch:
 
 - core Product, ProductService, ProductRepository, SqliteDatabase and
-  SqliteProductRepository; schema version 6 migrates older databases.
+  SqliteProductRepository; schema version 7 migrates older databases on the photo branch; inspect current main before upgrading.
 - Product creation and shop-scoped listing; no product edit/delete yet.
 - Product fields: id/shopId UUIDs, name, unitPrice (SELLING price), optional
   costPrice (BUYING price), optional modelReference/category, unit, specifications,
@@ -127,3 +127,7 @@ state exactly what remains for a collaborator to verify.
 PR description: user-visible behavior, service dependencies, how tested, screenshot
 when possible, and limitations. Do not mark stock, checkout, auth or cloud complete
 because there is a navigation placeholder. Stop after the assigned milestone.
+
+Photo backend: see docs/backend/PRODUCT_PHOTOS.md for managed storage and recovery.
+The desktop photo picker remains separate. Emmanuel’s current task is CSV import
+as specified in docs/team/EMMANUEL.md; do not repeat completed photo/void work.

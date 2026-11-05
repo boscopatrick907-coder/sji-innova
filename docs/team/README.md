@@ -78,7 +78,7 @@ normal GitHub sign-in when needed; do not put credentials in code or chat.
 | Willy | Stock screen | [WILLY.md](WILLY.md) |
 | Charles | Visible cash checkout and sales history | [CHARLES.md](CHARLES.md) |
 | Pascal | French/English resources and cross-screen QA | [PASCAL.md](PASCAL.md) |
-| Emmanuel | CSV import first, then product photos | [Ordered backend briefs](EMMANUEL.md) |
+| Emmanuel | CSV import next; photo backend delivered with review fixes | [Ordered backend briefs](EMMANUEL.md) |
 
 The old Charles/Willy assignments have been replaced in place: these are the
 only current briefs for them. Products and shell already work on main. Photo
