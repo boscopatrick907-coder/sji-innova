@@ -58,8 +58,8 @@ public final class SqliteSaleRepository implements SaleRepository {
                         }
                     }
 
-                    if ("piece".equals(unit) && item.quantityMilli() % 1000 != 0) {
-                        throw new IllegalArgumentException("Piece quantities must be whole pieces (multiples of 1000)");
+                    if (("piece".equals(unit) || "bag".equals(unit)) && item.quantityMilli() % 1000 != 0) {
+                        throw new IllegalArgumentException("Piece and bag quantities must be whole items (multiples of 1000)");
                     }
 
                     if (currentStock < item.quantityMilli()) {
@@ -255,8 +255,8 @@ public final class SqliteSaleRepository implements SaleRepository {
                         }
                     }
 
-                    if ("piece".equals(unit) && item.quantityMilli() % 1000 != 0) {
-                        throw new IllegalArgumentException("Piece quantities must be whole pieces (multiples of 1000)");
+                    if (("piece".equals(unit) || "bag".equals(unit)) && item.quantityMilli() % 1000 != 0) {
+                        throw new IllegalArgumentException("Piece and bag quantities must be whole items (multiples of 1000)");
                     }
 
                     long afterStock = Math.addExact(currentStock, item.quantityMilli());

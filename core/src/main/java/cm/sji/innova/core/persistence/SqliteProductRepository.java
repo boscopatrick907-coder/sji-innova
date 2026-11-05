@@ -20,14 +20,28 @@ public final class SqliteProductRepository implements ProductRepository {
 
     @Override
     public void insert(Product product) throws SQLException {
+        insertAndReturn(product);
+    }
+
+    @Override
+    public Product insertAndReturn(Product product) throws SQLException {
         try (var connection = database.open()) {
             // Save the product and every specification together, or none of them.
             connection.setAutoCommit(false);
             try {
+                long next;
+                try (var sequence = connection.prepareStatement("""
+                        INSERT INTO product_reference_sequences(shop_id,last_value) VALUES (?,1)
+                        ON CONFLICT(shop_id) DO UPDATE SET last_value=last_value+1
+                        RETURNING last_value
+                        """)) {
+                    sequence.setString(1, product.shopId().toString());
+                    try (var rows = sequence.executeQuery()) { rows.next(); next = rows.getLong(1); }
+                }
                 try (var statement = connection.prepareStatement("""
                         INSERT INTO products (id, shop_id, name, unit_price, created_at, updated_at,
-                                              version, model_reference, cost_price, category, unit)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                              version, model_reference, cost_price, category, unit, family_id, reference)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """)) {
                     statement.setString(1, product.id().toString());
                     statement.setString(2, product.shopId().toString());
@@ -41,6 +55,8 @@ public final class SqliteProductRepository implements ProductRepository {
                     else statement.setLong(9, product.costPrice());
                     statement.setString(10, product.category());
                     statement.setString(11, product.unit());
+                    statement.setString(12, product.familyId() == null ? null : product.familyId().toString());
+                    statement.setString(13, "P-" + String.format(java.util.Locale.ROOT, "%04d", next));
                     statement.executeUpdate();
                 }
                 try (var statement = connection.prepareStatement(
@@ -52,7 +68,12 @@ public final class SqliteProductRepository implements ProductRepository {
                         statement.executeUpdate();
                     }
                 }
+                Product saved = new Product(product.id(), product.shopId(), product.name(), product.unitPrice(),
+                        product.createdAt(), product.updatedAt(), product.version(), product.modelReference(),
+                        product.costPrice(), product.category(), product.unit(), product.specifications(),
+                        product.familyId(), "P-" + String.format(java.util.Locale.ROOT, "%04d", next));
                 connection.commit();
+                return saved;
             } catch (SQLException failure) {
                 try { connection.rollback(); }
                 catch (SQLException rollbackFailure) { failure.addSuppressed(rollbackFailure); }
@@ -83,7 +104,9 @@ public final class SqliteProductRepository implements ProductRepository {
                                 Instant.parse(result.getString("created_at")),
                                 Instant.parse(result.getString("updated_at")), result.getLong("version"),
                                 result.getString("model_reference"), buyingPrice,
-                                result.getString("category"), result.getString("unit"), Map.of()));
+                                result.getString("category"), result.getString("unit"), Map.of(),
+                                result.getString("family_id") == null ? null : UUID.fromString(result.getString("family_id")),
+                                result.getString("reference")));
                     }
                     String key = result.getString("specification_name");
                     if (key != null) specifications.get(id).put(key, result.getString("specification_value"));
@@ -91,7 +114,7 @@ public final class SqliteProductRepository implements ProductRepository {
                 return products.stream().map(product -> new Product(product.id(), product.shopId(),
                         product.name(), product.unitPrice(), product.createdAt(), product.updatedAt(),
                         product.version(), product.modelReference(), product.costPrice(),
-                        product.category(), product.unit(), specifications.get(product.id()))).toList();
+                        product.category(), product.unit(), specifications.get(product.id()), product.familyId(), product.reference())).toList();
             }
         }
     }

@@ -177,3 +177,11 @@ Identical retries keep the original sale and stock unchanged; changed checkout
 details are rejected. New fractional cash-sale lines round to nearest whole FCFA
 with halves up, then sum the rounded lines. Existing sales are not recalculated.
 See [the sales contract](docs/backend/SALES.md) before wiring checkout screens.
+
+## Product families and variants
+
+The backend now supports families such as Riz, independently stocked variants,
+automatic shop references, catalog search and whole-bag units. See the
+[family integration guide](docs/backend/PRODUCT_FAMILIES.md). Existing products
+remain accessible as ungrouped items; the current desktop has not yet been updated
+to browse families or select bags. CSV and photos remain separate work.
