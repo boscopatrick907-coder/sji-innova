@@ -131,6 +131,7 @@ public final class SalesPanel extends JPanel {
     private boolean loading;
     private boolean needsRecovery = true;
     private boolean quantityRefused;
+    private boolean resultChosenWithArrows;
     private long generation;                    // only the newest load may update the page
     private int activeWorkers;
 
@@ -288,6 +289,7 @@ public final class SalesPanel extends JPanel {
             showNotice(t("sales.error.tooLarge"), true);
             return;
         }
+        resultChosenWithArrows = false;
         refreshBasketView();
         int addedRow = basket.lines().stream().map(BasketLine::productId).toList().indexOf(product.id());
         basketTable.changeSelection(addedRow, COLUMN_QUANTITY, false, false);
@@ -465,8 +467,15 @@ public final class SalesPanel extends JPanel {
                 .toList();
         resultsModel.fireTableDataChanged();
         if (!visible.isEmpty()) results.setRowSelectionInterval(0, 0);
+        resultChosenWithArrows = false;
         updateResultsHint();
         applyState();
+    }
+
+    /** With nothing typed, Enter adds only a result chosen with the arrow keys, never the first one. */
+    private void addFromSearchBox() {
+        if (search.getText().isBlank() && !resultChosenWithArrows) return;
+        addSelectedProduct();
     }
 
     /** Every typed word must appear somewhere, ignoring case and accents. */
@@ -615,7 +624,7 @@ public final class SalesPanel extends JPanel {
         discardButton.addActionListener(event -> discardSale());
         setAsideButton.addActionListener(event -> setAsideDamagedFile());
 
-        search.addActionListener(event -> addSelectedProduct());
+        search.addActionListener(event -> addFromSearchBox());
         search.getDocument().addDocumentListener(new DocumentListener() {
             @Override public void insertUpdate(DocumentEvent event) { applyFilter(); }
             @Override public void removeUpdate(DocumentEvent event) { applyFilter(); }
@@ -638,6 +647,7 @@ public final class SalesPanel extends JPanel {
         int row = Math.floorMod(results.getSelectedRow() + step, visible.size());
         results.setRowSelectionInterval(row, row);
         results.scrollRectToVisible(results.getCellRect(row, 0, true));
+        resultChosenWithArrows = true;
     }
 
     private static void bind(JComponent component, int condition, String key, String name, Runnable action) {

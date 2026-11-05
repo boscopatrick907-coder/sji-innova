@@ -273,6 +273,40 @@ class SalesPanelTest {
     }
 
     @Test
+    void enterInAnEmptySearchBoxAddsNothing() throws Exception {
+        products.create(shop, "Beans", 500);
+        SalesPanel panel = open();
+        edt(() -> search(panel).postActionEvent());
+        assertEquals(0, (int) edt(() -> basket(panel).getRowCount()));
+
+        // The box empties after adding: a second Enter must not add the first product in the list.
+        edt(() -> {
+            search(panel).setText("beans");
+            search(panel).postActionEvent();
+            search(panel).postActionEvent();
+        });
+        assertEquals(1, (int) edt(() -> basket(panel).getRowCount()));
+        assertEquals("Beans", edt(() -> basket(panel).getValueAt(0, 0)));
+        assertEquals("1", edt(() -> basket(panel).getValueAt(0, SalesPanel.COLUMN_QUANTITY)));
+    }
+
+    @Test
+    void theArrowKeysChooseAResultEvenWithAnEmptySearchBox() throws Exception {
+        products.create(shop, "Beans", 500);
+        SalesPanel panel = open();
+        edt(() -> {
+            search(panel).getActionMap().get("nextResult").actionPerformed(null);
+            search(panel).postActionEvent();
+        });
+        assertEquals(1, (int) edt(() -> basket(panel).getRowCount()));
+        assertEquals(edt(() -> results(panel).getValueAt(1, 0)), edt(() -> basket(panel).getValueAt(0, 0)));
+
+        // The choice is used once: another Enter adds nothing.
+        edt(() -> search(panel).postActionEvent());
+        assertEquals("1", edt(() -> basket(panel).getValueAt(0, SalesPanel.COLUMN_QUANTITY)));
+    }
+
+    @Test
     void aWrongQuantityShowsAMessageAndKeepsTheLine() throws Exception {
         SalesPanel panel = open();
         addToBasket(panel, "rice", "2");
