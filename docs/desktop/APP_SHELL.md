@@ -29,11 +29,52 @@ If `cella.db` exists but `shop-id.txt` is missing, start-up also stops with an e
 no new ID is created, because a new ID would hide the shop's existing products. To recover,
 put the old `shop-id.txt` back in the data folder and click **Retry**.
 
+## Development device identity
+
+`device-id.txt`, next to `shop-id.txt`, holds one UUID for this computer's copy of Cella
+(one per data folder). Stock movements and sales record it, so each operation can be traced
+to the computer that made it. It is **not** the shop ID and **not** a user login.
+
+- **Creation:** made at the first launch, then reused at every launch.
+- **Upgrade:** a data folder made before device IDs existed simply gets a new
+  `device-id.txt`. Products, stock and sales belong to the shop, not to the device, so
+  the shop ID and all data stay the same.
+- **Damaged file:** start-up stops with a clear error and the file is left untouched.
+  To recover, fix the UUID in the file, or move the file away: Cella then creates a new
+  device ID at the next start. Sales already saved keep the device ID they were made with.
+
+## Services for the screens (`AppContext`)
+
+`AppContextLoader` opens **one** `SqliteDatabase` and builds every service on it, so a sale
+and the stock it removes are always saved together.
+
+| Accessor | What it is |
+|---|---|
+| `location()` | the data folder (`LocalAppData`) |
+| `shopId()` | development shop UUID (`shop-id.txt`) |
+| `deviceId()` | development device UUID (`device-id.txt`) |
+| `products()` | `ProductService` (catalog) |
+| `stock()` | `StockService` (receipts, adjustments, levels, history) |
+| `sales()` | `SaleService` (cash sales, sale queries) |
+
+Panel constructors proposed to Willy (Stock) and used for Sales; the shell builds them from
+the context. Constructors do no database work: loading happens in a `SwingWorker`.
+
+```java
+new StockPanel(context.stock(), context.products(), context.shopId(), context.deviceId(), messages.bundle())
+new SalesPanel(context.sales(), context.products(), context.stock(), context.shopId(), context.deviceId(), messages.bundle())
+```
+
+Neither panel exists on main yet, so the navigation still shows Products only. Each entry is
+added when its panel is merged. Screen tests that only need a fake `ProductService` build
+their context with the test helper `TestAppContexts.withProducts(location, products)`.
+
 ## Start-up behaviour
 
 1. The window opens on a loading page.
 2. In a background thread (not the Swing event thread): create the folder, read or create
-   the shop ID, run `SqliteDatabase.initialize()`, build `ProductService`.
+   the shop ID and the device ID, run `SqliteDatabase.initialize()`, then build
+   `ProductService`, `StockService` and `SaleService` on that one database.
 3. Success: main page (navigation on the left, Products on the right).
 4. Failure: error page with the data folder, the message, **Retry** and **Exit**.
    Nothing is deleted or replaced.

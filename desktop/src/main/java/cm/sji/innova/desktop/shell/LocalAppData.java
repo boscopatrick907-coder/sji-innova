@@ -17,6 +17,9 @@ public record LocalAppData(Path directory) {
 
     public Path databaseFile() { return directory.resolve("cella.db"); }
 
+    /** This computer's development device ID (see {@link DeviceIdentity}). */
+    public Path deviceIdFile() { return directory.resolve("device-id.txt"); }
+
     public Path shopIdFile() { return directory.resolve("shop-id.txt"); }
 
     /** The folder used when the user did not choose one. */

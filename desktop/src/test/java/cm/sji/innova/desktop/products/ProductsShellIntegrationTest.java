@@ -110,7 +110,7 @@ class ProductsShellIntegrationTest {
                 throw new SQLException("Simulated load failure");
             }
         };
-        var context = new AppContext(new LocalAppData(directory), UUID.randomUUID(), new ProductService(failing));
+        var context = TestAppContexts.withProducts(new LocalAppData(directory), new ProductService(failing));
         var window = open(context);
         ExecutionException failure = assertThrows(ExecutionException.class,
                 () -> window.shell().productsReady().toCompletableFuture().get(5, TimeUnit.SECONDS));

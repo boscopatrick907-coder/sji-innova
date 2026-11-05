@@ -2,13 +2,18 @@ package cm.sji.innova.desktop.shell;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import cm.sji.innova.core.product.Product;
+import cm.sji.innova.core.sale.Sale;
+import cm.sji.innova.core.sale.SaleItemRequest;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -79,5 +84,61 @@ class AppContextLoaderTest {
         AppContext recovered = AppContextLoader.load(location);
         assertEquals(oldId, recovered.shopId());
         assertEquals(1, recovered.products().list(recovered.shopId()).size());
+    }
+
+    @Test
+    void theDeviceIdIsCreatedOnceAndKeptAfterRestart() throws Exception {
+        LocalAppData location = new LocalAppData(folder.resolve("cella"));
+        AppContext first = AppContextLoader.load(location);
+        AppContext second = AppContextLoader.load(location);   // "restart"
+        assertTrue(Files.exists(location.deviceIdFile()));
+        assertEquals(first.deviceId(), second.deviceId());
+        assertNotEquals(first.shopId(), first.deviceId(), "the device ID is not the shop ID");
+    }
+
+    @Test
+    void anExistingShopWithoutADeviceFileStillStartsWithItsProductsAndShopId() throws Exception {
+        LocalAppData location = new LocalAppData(folder.resolve("cella"));
+        AppContext before = AppContextLoader.load(location);
+        before.products().create(before.shopId(), "Rice 1 kg", 500);
+
+        // Like a data folder made before device IDs existed
+        Files.delete(location.deviceIdFile());
+
+        AppContext after = AppContextLoader.load(location);
+        assertEquals(before.shopId(), after.shopId());
+        assertEquals(1, after.products().list(after.shopId()).size());
+        assertTrue(Files.exists(location.deviceIdFile()), "a new device ID file is created");
+    }
+
+    @Test
+    void aDamagedDeviceIdFileStopsStartupAndIsLeftUntouched() throws Exception {
+        LocalAppData location = new LocalAppData(folder.resolve("cella"));
+        Files.createDirectories(location.directory());
+        Files.writeString(location.deviceIdFile(), "garbage", StandardCharsets.UTF_8);
+        assertThrows(IOException.class, () -> AppContextLoader.load(location));
+        assertEquals("garbage", Files.readString(location.deviceIdFile(), StandardCharsets.UTF_8));
+        assertFalse(Files.exists(location.databaseFile()), "no database is opened next to a damaged device ID");
+    }
+
+    @Test
+    void stockAndSalesUseTheSameDatabaseAsProductsAndSurviveRestart() throws Exception {
+        LocalAppData location = new LocalAppData(folder.resolve("cella"));
+        AppContext context = AppContextLoader.load(location);
+        UUID shop = context.shopId();
+
+        // Receive 10 pieces, then sell 2 (quantities in thousandths: 1 piece = 1000)
+        Product rice = context.products().create(shop, "Rice 1 kg", 500);
+        context.stock().receive(UUID.randomUUID(), shop, rice.id(), context.deviceId(), 10_000, "Test delivery");
+        context.sales().makeCashSale(UUID.randomUUID(), shop, context.deviceId(), "TEST-001",
+                List.of(new SaleItemRequest(rice.id(), 2_000)));
+        assertEquals(8_000, context.stock().current(shop, rice.id()).quantityMilli());
+
+        AppContext restarted = AppContextLoader.load(location);   // "restart"
+        assertEquals(8_000, restarted.stock().current(shop, rice.id()).quantityMilli());
+        List<Sale> sales = restarted.sales().listSales(shop);
+        assertEquals(1, sales.size());
+        assertEquals(1_000, sales.get(0).totalAmount());               // 2 x 500 FCFA
+        assertEquals(context.deviceId(), sales.get(0).deviceId());     // the sale remembers this computer
     }
 }
