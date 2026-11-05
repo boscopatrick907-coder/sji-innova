@@ -1,8 +1,9 @@
 # Cella (SJI Innova)
 
 Offline-first inventory and sales software for Cameroonian shops. The desktop
-currently supports product entry and listing. Stock, cash sales and voids have
-backend services; their cashier screens are still to be integrated.
+currently supports the family catalog, product entry, stock receipts and movement
+history. Cash sales and voids have backend services; their cashier screens remain
+to be integrated.
 See [the project master file](SJI_INNOVA_PROJECT.md) for current decisions
 and [the detailed v0.3 plan](SJI_INNOVA_PROJECT_v03.md) for the revised scope
 and event-sync design. The master file confirms the Cella name and Spring Boot;
@@ -43,7 +44,8 @@ On Windows PowerShell:
 This builds both modules and runs SQLite integration and desktop tests. Storage
 tests use temporary databases. Product, stock, cash-sale and cash-void backends
 are implemented; synchronization is not. The Products form is connected to the
-main window; stock, checkout and void screens are not yet connected.
+main window, alongside Stock receipts/history. Checkout and void screens are not
+yet connected.
 
 The prepared cloud environment also supplies proxy settings outside the checkout.
 Use this build command there:
@@ -85,7 +87,8 @@ Do not delete its shop-id.txt; see [startup/recovery notes](docs/desktop/APP_SHE
 - `.github/workflows/build.yml`: Linux and Windows builds and packaged startup checks.
 
 Local stock receipts, adjustments, history and low-stock thresholds are implemented.
-Next: stock and checkout screen integration, then the remaining offline workflows
+Next: durable stock retry recovery, corrections/threshold controls and checkout
+screen integration, then the remaining offline workflows
 before cloud sync. Spring Boot is the selected cloud framework; its module will be added later. SQLite is embedded; no separate database installation, credentials, or external
 services are needed. Windows CI is configured; a real Windows GUI/installer test
 remains a separate quality gate.
@@ -141,7 +144,7 @@ Database files are ignored by Git; never commit a shop's live data.
 Charles, Willy and Pascal: start with [the team guide](docs/team/README.md).
 It contains AI prompts, local setup instructions, shared boundaries and individual
 assignments for Claude Code or Antigravity. The shell and Products screen are
-connected. Patrick owns Products design; [Willy builds Stock](docs/team/WILLY.md) and
+connected. Patrick owns Products design; [Willy builds Stock](docs/team/WILLY_NEXT_STOCK.md) and
 [Charles builds Sales and shared wiring](docs/team/CHARLES.md). Mockup references
 remain in `docs/design/`.
 
@@ -156,7 +159,8 @@ and print/save all stages as PDF. Status is a manual snapshot, not live tracking
 
 See [the stock service guide](docs/backend/STOCK.md) for the Java interface,
 quantity rules, retry handling, database upgrade and desktop integration notes.
-No stock screen is implemented yet; Products is the first connected screen. To try a receipt without a screen, build and
+Use Stock in the sidebar for receipts and history. To try a receipt from the
+command line instead, build and
 run twice against a disposable database:
 
 ```sh
@@ -199,4 +203,17 @@ Stock errors show “Unavailable”, not zero. Refresh reloads the catalog/stock
 The sidebar uses the chosen green gradient and simple line icon. French and
 English bundles cover the catalog. Start with `--lang fr` for French. Photos show
 a placeholder until persistent photo storage is implemented; CSV import and
-Stock/Sales entry screens remain separate work. This change does not seed data.
+The Stock receipt screen is connected; Sales entry remains separate work.
+Normal startup does not seed data.
+
+
+## Stock screen
+
+After this PR, choose Stock in the sidebar to view quantities, record a positive
+receipt and browse signed movement history. Select the exact variant/reference,
+enter quantity and a delivery reason, then save. The panel uses existing services
+and refreshes the catalog stock when returning to Products. Bags/pieces are whole;
+kg/litres may have three decimal places. A failed uncertain receipt retains its
+original details for retry within the same session. Durable restart recovery,
+manual corrections and editable thresholds are Willy's next milestones; do not
+assume those controls are implemented. See docs/team/WILLY_NEXT_STOCK.md.

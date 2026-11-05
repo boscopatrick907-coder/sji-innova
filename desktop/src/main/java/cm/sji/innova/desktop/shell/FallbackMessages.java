@@ -64,6 +64,7 @@ public final class FallbackMessages extends ListResourceBundle {
             {"unit.bag", "Bag"},
             {"shell.catalog", "Catalog"},
             {"shell.tagline", "Shop management"},
+            {"shell.nav.stock", "Stock"},
         };
     }
 }
