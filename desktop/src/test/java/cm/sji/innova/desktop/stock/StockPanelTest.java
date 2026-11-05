@@ -330,4 +330,88 @@ class StockPanelTest {
         assertEquals(1, stock.list(shopId).size());
         assertEquals(1, stock.list(anotherShop).size());
     }
+    @Test
+    void fractionalBagsAreEditableAfterRejectionAndWholeBagsCanBeReceived() throws Exception {
+        Product bag = products.create(shopId,"Rice bag",28000,null,null,null,"bag",java.util.Map.of());
+        StockPanel panel = createPanelAndWaitForLoad();
+        onEdt(() -> {
+            for(int i=0;i<panel.productSelector().getItemCount();i++)
+                if(panel.productSelector().getItemAt(i).id().equals(bag.id()))panel.productSelector().setSelectedIndex(i);
+            panel.quantityField().setText("1.5");panel.reasonField().setText("Delivery");
+            panel.receiveButton().doClick();
+            assertFalse(panel.hasPendingReceipt());assertTrue(panel.quantityField().isEnabled());
+            assertEquals("1.5",panel.quantityField().getText());
+        });
+        CountDownLatch receipt=new CountDownLatch(1),loaded=new CountDownLatch(1),history=new CountDownLatch(1);
+        onEdt(() -> {
+            panel.setOnReceiptWorkerDone(receipt::countDown);panel.setOnLoadWorkerDone(loaded::countDown);panel.setOnHistoryWorkerDone(history::countDown);
+            panel.quantityField().setText("2");panel.receiveButton().doClick();
+        });
+        waitFor(receipt,"Bag receipt");waitFor(loaded,"Bag stock reload");waitFor(history,"Bag history reload");
+        assertEquals(2000,stock.current(shopId,bag.id()).quantityMilli());
+    }
+
+    @Test
+    void refreshKeepsTheOriginalPendingProductAndSuccessfulReceiptHistory() throws Exception {
+        products.create(shopId,"AAA Other product",100);
+        StockPanel panel=createPanelAndWaitForLoad();
+        CountDownLatch initialHistory=new CountDownLatch(1);
+        onEdt(() -> {panel.setOnHistoryWorkerDone(initialHistory::countDown);panel.productSelector().setSelectedIndex(1);});
+        waitFor(initialHistory,"Selected product history");
+        try(var c=database.open();var statement=c.createStatement()){
+            statement.execute("CREATE TRIGGER fail_receipt BEFORE UPDATE OF current_stock_milli ON products BEGIN SELECT RAISE(ABORT,'test failure'); END");
+        }
+        CountDownLatch failed=new CountDownLatch(1);
+        onEdt(() -> {panel.setOnReceiptWorkerDone(failed::countDown);panel.quantityField().setText("10");panel.reasonField().setText("T-shirt delivery");panel.receiveButton().doClick();});
+        waitFor(failed,"Failed receipt");
+        CountDownLatch loaded=new CountDownLatch(1),history=new CountDownLatch(1);
+        onEdt(() -> {panel.setOnLoadWorkerDone(loaded::countDown);panel.setOnHistoryWorkerDone(history::countDown);panel.refreshButton().doClick();});
+        waitFor(loaded,"Pending refresh");waitFor(history,"Pending history");
+        onEdt(() -> {assertEquals(product.id(),((Product)panel.productSelector().getSelectedItem()).id());assertFalse(panel.quantityField().isEnabled());assertEquals("10",panel.quantityField().getText());});
+        try(var c=database.open();var statement=c.createStatement()){statement.execute("DROP TRIGGER fail_receipt");}
+        CountDownLatch saved=new CountDownLatch(1),reloaded=new CountDownLatch(1),shown=new CountDownLatch(1);
+        onEdt(() -> {panel.setOnReceiptWorkerDone(saved::countDown);panel.setOnLoadWorkerDone(reloaded::countDown);panel.setOnHistoryWorkerDone(shown::countDown);panel.receiveButton().doClick();});
+        waitFor(saved,"Retry receipt");waitFor(reloaded,"Retry reload");waitFor(shown,"Retry history");
+        onEdt(() -> {assertEquals(product.id(),((Product)panel.productSelector().getSelectedItem()).id());assertEquals("T-shirt delivery",panel.historyTable().getValueAt(0,3));});
+        assertEquals(10000,stock.current(shopId,product.id()).quantityMilli());
+    }
+
+    @Test
+    void historyPreservesNegativeAndPositiveAdjustmentSigns() throws Exception {
+        stock.receive(UUID.randomUUID(),shopId,product.id(),deviceId,10000,"Opening");
+        stock.adjust(UUID.randomUUID(),shopId,product.id(),deviceId,-2000,"Damage");
+        stock.adjust(UUID.randomUUID(),shopId,product.id(),deviceId,1000,"Correction");
+        StockPanel panel=createPanelAndWaitForLoad();
+        onEdt(() -> {assertEquals("-2",panel.historyTable().getValueAt(1,2));assertEquals("1",panel.historyTable().getValueAt(2,2));});
+    }
+
+    @Test
+    void deterministicServiceOverflowLeavesInputEditableInsteadOfRetryTrap() throws Exception {
+        stock.receive(UUID.randomUUID(),shopId,product.id(),deviceId,(Long.MAX_VALUE/1000)*1000,"Opening");
+        StockPanel panel=createPanelAndWaitForLoad();CountDownLatch receipt=new CountDownLatch(1);
+        onEdt(() -> {panel.setOnReceiptWorkerDone(receipt::countDown);panel.quantityField().setText("10");panel.reasonField().setText("Overflow");panel.receiveButton().doClick();});
+        waitFor(receipt,"Overflow response");
+        onEdt(() -> {assertFalse(panel.hasPendingReceipt());assertTrue(panel.quantityField().isEnabled());assertEquals("10",panel.quantityField().getText());});
+        assertEquals((Long.MAX_VALUE/1000)*1000,stock.current(shopId,product.id()).quantityMilli());
+    }
+
+    private static StockPanel findStock(java.awt.Component component) {
+        if(component instanceof StockPanel panel)return panel;
+        if(component instanceof java.awt.Container parent)for(var child:parent.getComponents()){StockPanel found=findStock(child);if(found!=null)return found;}
+        return null;
+    }
+
+    @Test
+    void stockIsReachableThroughTheRealShellWithInjectedServices() throws Exception {
+        var context=cm.sji.innova.desktop.shell.AppContextLoader.load(new cm.sji.innova.desktop.shell.LocalAppData(tempDir.resolve("visible-shop")));
+        context.products().create(context.shopId(),"Visible product",500);
+        AtomicReference<cm.sji.innova.desktop.shell.ShellPanel> shell=new AtomicReference<>();
+        onEdt(() -> {var window=new cm.sji.innova.desktop.shell.ShellPanel(cm.sji.innova.desktop.shell.Messages.load(java.util.Locale.FRENCH),context.location(),()->context,()->{});window.showMain(context);shell.set(window);});
+        shell.get().productsReady().toCompletableFuture().get(5,TimeUnit.SECONDS);
+        AtomicReference<StockPanel> opened=new AtomicReference<>();CountDownLatch history=new CountDownLatch(1);
+        onEdt(() -> {shell.get().selectScreen("stock");StockPanel panel=findStock(shell.get());assertNotNull(panel);panel.setErrorHandler(text->{});panel.setOnHistoryWorkerDone(history::countDown);opened.set(panel);assertEquals("stock",shell.get().selectedScreenId());});
+        opened.get().initialLoadCompletion().toCompletableFuture().get(5,TimeUnit.SECONDS);waitFor(history,"Visible stock history");
+        onEdt(() -> {assertEquals(1,opened.get().stockTable().getRowCount());assertEquals("Enregistrer la réception",opened.get().receiveButton().getText());});
+    }
+
 }

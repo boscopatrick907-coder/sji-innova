@@ -207,6 +207,12 @@ public final class CatalogPanel extends JPanel {
         public boolean getScrollableTracksViewportWidth(){return true;}
         public boolean getScrollableTracksViewportHeight(){return false;}
     }
+    /** Reload on re-entry only when no unfinished product form is displayed. */
+    public void refreshIfBrowsing() {
+        if (saving) return;
+        for (Component component : body.getComponents()) if (component instanceof VariantForm) return;
+        reload();
+    }
     // Test-facing controls reflect the actual visible catalog, not a parallel mock UI.
     public JTextField searchField(){return search;}
     public JTable variantTable(){return table;}

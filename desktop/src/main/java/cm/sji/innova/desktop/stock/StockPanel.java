@@ -54,6 +54,7 @@ public final class StockPanel extends JPanel {
     private Consumer<String> errorHandler = this::displayErrorDialog;
 
     private PendingReceipt pendingReceipt;
+    private Product pendingProduct;
 
     private long loadGeneration;
     private long historyGeneration;
@@ -135,7 +136,8 @@ public final class StockPanel extends JPanel {
 
         JLabel title = new JLabel(
                 message("stock.title", "Stock Management"));
-        title.setFont(new Font("Arial", Font.BOLD, 22));
+        title.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 25));
+        setBackground(cm.sji.innova.desktop.catalog.CatalogStyle.PAPER);
 
         JLabel subtitle = new JLabel(message(
                 "stock.subtitle",
@@ -184,7 +186,8 @@ public final class StockPanel extends JPanel {
                         list, value, index, selected, focused);
 
                 if (value instanceof Product product) {
-                    setText(product.name() + " (" + product.unit() + ")");
+                    setText((product.reference() == null ? "" : product.reference() + " · ")
+                            + product.name() + " (" + message("unit." + product.unit(), product.unit()) + ")");
                 }
 
                 return this;
@@ -233,7 +236,10 @@ public final class StockPanel extends JPanel {
         c.gridwidth = 1;
         c.weightx = 0;
 
-        panel.add(new JLabel(label + ":"), c);
+        JLabel fieldLabel = new JLabel(label + ":");
+        fieldLabel.setLabelFor(component);
+        component.getAccessibleContext().setAccessibleName(label);
+        panel.add(fieldLabel, c);
 
         c.gridx = 1;
         c.gridwidth = 2;
@@ -277,6 +283,10 @@ public final class StockPanel extends JPanel {
     }
 
     public void loadProductsAndStock() {
+        if (receiptPending) return;
+        Product previous = (Product) productSelector.getSelectedItem();
+        UUID selectedId = pendingReceipt != null ? pendingReceipt.productId()
+                : previous == null ? null : previous.id();
         long generation = ++loadGeneration;
 
         refreshButton.setEnabled(false);
@@ -313,7 +323,20 @@ public final class StockPanel extends JPanel {
                         productSelector.addItem(product);
                     }
 
+                    if (selectedId != null) {
+                        boolean found = false;
+                        for (int i = 0; i < productSelector.getItemCount(); i++) {
+                            if (selectedId.equals(productSelector.getItemAt(i).id())) {
+                                productSelector.setSelectedIndex(i); found = true; break;
+                            }
+                        }
+                        if (!found && pendingProduct != null) {
+                            productSelector.addItem(pendingProduct);
+                            productSelector.setSelectedItem(pendingProduct);
+                        }
+                    }
                     loadingProducts = false;
+                    setReceiptControlsEnabled(pendingReceipt == null && !data.products().isEmpty());
 
                     displayStock(data.levels());
 
@@ -377,7 +400,7 @@ public final class StockPanel extends JPanel {
         for (StockLevel level : levels) {
             stockModel.addRow(new Object[]{
                     level.productName(),
-                    level.unit(),
+                    message("unit." + level.unit(), level.unit()),
                     formatQuantity(level.quantityMilli()),
                     formatQuantity(level.minimumMilli()),
                     level.lowStock()
@@ -429,12 +452,8 @@ public final class StockPanel extends JPanel {
                     for (StockMovement movement : movements) {
                         historyModel.addRow(new Object[]{
                                 movement.createdAt(),
-                                movement.type(),
-                                formatQuantity(
-                                        BigDecimal.valueOf(
-                                                movement.quantityMilli())
-                                                .abs()
-                                                .longValueExact()),
+                                message("stock.type." + movement.type().name().toLowerCase(java.util.Locale.ROOT), movement.type().name()),
+                                formatQuantity(movement.quantityMilli()),
                                 movement.reason()
                         });
                     }
@@ -501,6 +520,7 @@ public final class StockPanel extends JPanel {
                 return;
             }
 
+            pendingProduct = selected;
             pendingReceipt = new PendingReceipt(
                     UUID.randomUUID(),
                     selected.id(),
@@ -549,6 +569,7 @@ public final class StockPanel extends JPanel {
 
                     // The service confirmed this exact receipt.
                     pendingReceipt = null;
+                    pendingProduct = null;
                     receiptPending = false;
 
                     setReceiptControlsEnabled(true);
@@ -577,12 +598,23 @@ public final class StockPanel extends JPanel {
                             "Receipt outcome uncertain. Retry the same receipt."));
 
                 } catch (ExecutionException exception) {
-                    preservePendingReceipt();
-
+                    Throwable cause = exception.getCause();
+                    if (cause instanceof IllegalArgumentException || cause instanceof ArithmeticException) {
+                        // These are deterministic service rejections, not uncertain commits.
+                        pendingReceipt = null;
+                        pendingProduct = null;
+                        receiptPending = false;
+                        setReceiptControlsEnabled(true);
+                        receiveButton.setEnabled(true);
+                        refreshButton.setEnabled(true);
+                        receiveButton.setText(message("stock.action.receive", "Receive Stock"));
+                    } else {
+                        preservePendingReceipt();
+                    }
                     showError(message(
                             "error.stock.receipt",
                             "Receipt failed or its outcome is uncertain")
-                            + ": " + errorMessage(exception.getCause()));
+                            + ": " + errorMessage(cause));
 
                 } finally {
                     notifyReceiptWorkerDone();
@@ -638,10 +670,10 @@ public final class StockPanel extends JPanel {
                     .movePointRight(3)
                     .longValueExact();
 
-            if ("piece".equals(unit) && milli % 1000 != 0) {
+            if (("piece".equals(unit) || "bag".equals(unit)) && milli % 1000 != 0) {
                 throw new IllegalArgumentException(message(
                         "error.stock.wholePieces",
-                        "Piece quantities must be whole numbers."));
+                        "Piece and bag quantities must be whole numbers."));
             }
 
             return milli;
