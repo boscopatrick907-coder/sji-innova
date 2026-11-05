@@ -26,7 +26,7 @@ import javax.imageio.ImageIO;
  *   <li>Original source files are never mutated; Cella copies images into its managed folder.</li>
  *   <li>Deleting or moving the original source file never affects Cella's copy.</li>
  *   <li>Stored references are always relative to the data directory for portability.</li>
- *   <li>Two-phase commit: files are staged and published first; on database failure, newly staged
+ *   <li>Staged publication: files are staged and published first; on database failure, newly staged
  *       files are cleaned up and the previous photo remains intact.</li>
  *   <li>Old files are only cleaned up AFTER successful database commit.</li>
  * </ul>
@@ -100,28 +100,13 @@ public final class ProductPhotoService {
                     photo, thumbFile, "The thumbnail file could not be found in Cella's data folder: " + thumbFile);
         }
 
-        // Verify the file can be decoded without errors
-        try (var in = ImageIO.createImageInputStream(mainFile.toFile())) {
-            if (in == null) {
-                return new PhotoLoadResult.CorruptFile(photo, mainFile, "Unable to read image stream.");
-            }
-            var readers = ImageIO.getImageReaders(in);
-            if (!readers.hasNext()) {
-                return new PhotoLoadResult.CorruptFile(photo, mainFile, "No decoder found for image format; file is damaged.");
-            }
-            var reader = readers.next();
+        for (Path image : List.of(mainFile, thumbFile)) {
             try {
-                reader.setInput(in, true, true);
-                int w = reader.getWidth(0);
-                int h = reader.getHeight(0);
-                if (w <= 0 || h <= 0) {
-                    return new PhotoLoadResult.CorruptFile(photo, mainFile, "Invalid image dimensions in stored file.");
-                }
-            } finally {
-                reader.dispose();
+                PhotoValidator.verifyStoredImage(image);
+            } catch (IOException | RuntimeException failure) {
+                return new PhotoLoadResult.CorruptFile(photo, image,
+                        "The stored image cannot be decoded: " + failure.getMessage());
             }
-        } catch (Exception ex) {
-            return new PhotoLoadResult.CorruptFile(photo, mainFile, "Corrupted image file: " + ex.getMessage());
         }
 
         return new PhotoLoadResult.Loaded(photo, mainFile, thumbFile);
@@ -134,6 +119,12 @@ public final class ProductPhotoService {
      * photo is preserved intact and no corrupt files are referenced.
      */
     public ProductPhoto setPhoto(UUID shopId, UUID productId, Path sourceFile) throws IOException, SQLException {
+        try (var lock = PhotoStoreLock.acquire(dataDirectory)) {
+            return setPhotoLocked(shopId, productId, sourceFile);
+        }
+    }
+
+    private ProductPhoto setPhotoLocked(UUID shopId, UUID productId, Path sourceFile) throws IOException, SQLException {
         verifyProductOwnership(shopId, productId);
         Objects.requireNonNull(sourceFile, "sourceFile must not be null");
 
@@ -154,7 +145,7 @@ public final class ProductPhotoService {
             Path shopDir = photosDirectory.resolve(shopId.toString());
             Files.createDirectories(shopDir);
 
-            String token = UUID.randomUUID().toString().replace("-", "").substring(0, 8);
+            String token = UUID.randomUUID().toString();
             String mainFilename = productId + "_" + token + "." + validated.fileExtension();
             String thumbFilename = productId + "_" + token + "_thumb." + validated.fileExtension();
 
@@ -181,10 +172,25 @@ public final class ProductPhotoService {
             try {
                 repository.savePhoto(newPhoto);
             } catch (SQLException dbFailure) {
-                // Rollback published files on database failure to avoid orphan files
-                try { Files.deleteIfExists(publishedMain); } catch (IOException ignored) { }
-                try { Files.deleteIfExists(publishedThumb); } catch (IOException ignored) { }
-                throw dbFailure;
+                // Auto-commit may have succeeded before a close/response error. Reconcile
+                // under the store lock before deciding whether these files are unreferenced.
+                Optional<ProductPhoto> committed;
+                try {
+                    committed = repository.findPhoto(shopId, productId);
+                } catch (SQLException uncertain) {
+                    dbFailure.addSuppressed(uncertain);
+                    // Retain files when the outcome cannot be established. Safe cleanup can
+                    // reclaim them later; deleting a committed image would lose user data.
+                    throw dbFailure;
+                }
+                boolean saved = committed.filter(p -> p.relativePath().equals(relMain)
+                        && p.thumbnailPath().equals(relThumb)).isPresent();
+                if (!saved) {
+                    try { Files.deleteIfExists(publishedMain); } catch (IOException cleanup) { dbFailure.addSuppressed(cleanup); }
+                    try { Files.deleteIfExists(publishedThumb); } catch (IOException cleanup) { dbFailure.addSuppressed(cleanup); }
+                    throw dbFailure;
+                }
+                newPhoto = committed.orElseThrow();
             }
 
             // 6. Post-commit cleanup: remove old photo files
@@ -212,9 +218,22 @@ public final class ProductPhotoService {
     public ProductPhoto setPhoto(UUID shopId, UUID productId, InputStream inputStream, String filenameHint)
             throws IOException, SQLException {
         Objects.requireNonNull(inputStream, "inputStream must not be null");
-        Path tempFile = Files.createTempFile("cella_upload_", "_" + (filenameHint != null ? filenameHint : "upload.tmp"));
+        verifyProductOwnership(shopId, productId);
+        // Hints are display text, never filesystem paths. Bound the stream while copying.
+        Path tempFile = Files.createTempFile("cella_upload_", ".image");
         try {
-            Files.copy(inputStream, tempFile, StandardCopyOption.REPLACE_EXISTING);
+            try (var output = Files.newOutputStream(tempFile)) {
+                byte[] buffer = new byte[8192];
+                long total = 0;
+                int count;
+                while ((count = inputStream.read(buffer)) != -1) {
+                    total += count;
+                    if (total > PhotoValidator.MAX_FILE_SIZE_BYTES) {
+                        throw new PhotoValidationException("Image exceeds the maximum allowed limit of 5 MiB");
+                    }
+                    output.write(buffer, 0, count);
+                }
+            }
             return setPhoto(shopId, productId, tempFile);
         } finally {
             try { Files.deleteIfExists(tempFile); } catch (IOException ignored) { }
@@ -227,6 +246,12 @@ public final class ProductPhotoService {
      * @return true if a photo was removed, false if no photo was attached.
      */
     public boolean removePhoto(UUID shopId, UUID productId) throws SQLException, IOException {
+        try (var lock = PhotoStoreLock.acquire(dataDirectory)) {
+            return removePhotoLocked(shopId, productId);
+        }
+    }
+
+    private boolean removePhotoLocked(UUID shopId, UUID productId) throws SQLException, IOException {
         verifyProductOwnership(shopId, productId);
         Optional<ProductPhoto> deleted = repository.deletePhoto(shopId, productId);
         if (deleted.isEmpty()) {
@@ -248,6 +273,13 @@ public final class ProductPhotoService {
      * Performs maintenance by removing orphaned files in staging and unreferenced files in the shop folder.
      */
     public OrphanCleanupReport cleanupOrphans(UUID shopId) throws SQLException, IOException {
+        Objects.requireNonNull(shopId, "shopId");
+        try (var lock = PhotoStoreLock.acquire(dataDirectory)) {
+            return cleanupOrphansLocked(shopId);
+        }
+    }
+
+    private OrphanCleanupReport cleanupOrphansLocked(UUID shopId) throws SQLException, IOException {
         int stagingCleaned = 0;
         int unreferencedCleaned = 0;
         List<String> cleanedPaths = new ArrayList<>();

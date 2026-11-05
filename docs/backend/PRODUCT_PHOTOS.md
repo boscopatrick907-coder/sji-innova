@@ -94,7 +94,11 @@ Filesystem operations and SQLite transactions cannot execute as a single atomic 
 2. **Staging:** The normalized image and thumbnail are written to temporary staging files (`photos/.staging/<uuid>_main.ext`).
 3. **Publishing:** Staged files are moved into the shop directory with unique revision tokens (`photos/<shopId>/<productId>_<token>.ext`).
 4. **Database Transaction:** `INSERT ... ON CONFLICT(product_id) DO UPDATE ...` executes in SQLite.
-5. **Failure Rollback:** If the database write fails, the newly published files are immediately deleted. The existing photo on disk and in SQLite is untouched.
+5. **Failure reconciliation:** A write error may occur after auto-commit. Read the metadata
+   again before deleting published files. If it points at the new revision, return that
+   committed photo. If the read cannot establish the outcome, retain the files and
+   surface the error; later safe cleanup can reclaim genuine orphans. Delete the new
+   revision only when it is known not to be referenced.
 6. **Post-Commit Cleanup:** Only *after* the SQLite commit succeeds, the old photo's files on disk are safely deleted.
 
 ---
@@ -213,3 +217,28 @@ To make a complete, portable backup of Cella:
    * Place the backed up folder into the target computer's `%APPDATA%\Cella` (or pass the path via `--data-dir <path>`).
    * When Cella starts up, all relative references (`photos/<shopId>/...`) resolve identically against the new location, restoring all products, stock, sales, and photos seamlessly.
 
+
+
+## Review corrections and maintenance protocol
+
+Emmanuel's original commit `5a3c942` is retained. Follow-up corrections serialize
+set/replace/remove and orphan cleanup with a data-directory lock. A JVM-local lock
+coordinates service instances and an OS file lock on `.photo-store.lock` coordinates
+processes on the same local filesystem. Leave that lock file in place; deleting it
+while the app is running can break coordination. Maintenance waits for active
+writes, including writes in other shops sharing the staging folder. These calls
+may block and must stay off the Swing EDT. A crash releases the OS lock, allowing
+later cleanup; only unreferenced files are removed. Network-shared folders and
+external writers that ignore the protocol are unsupported.
+
+Loading now checks both the main image and thumbnail, including actual raster
+decoding with dimension bounds; intact headers alone no longer count as success.
+The InputStream upload overload checks shop/product ownership before copying,
+limits bytes as they arrive, and treats filenameHint only as display text.
+It leaves the caller-owned input stream open. Path uploads retain the 5 MiB/20 MP
+limits; normalized stored files are dimension-bounded on loading.
+
+Regressions cover active-save cleanup across instances and another JVM, a lost
+successful-commit response, an unavailable reconciliation query, truncated main
+pixels, corrupt thumbnails and oversized stream input. Photos are still a backend
+service; the desktop photo picker is separate integration work.

@@ -125,6 +125,27 @@ public final class PhotoValidator {
         return new ValidatedImage(format, contentType, extension, width, height, normalized, thumbnail);
     }
 
+    /** Validate both main and thumbnail files on load, bounded before raster allocation. */
+    static void verifyStoredImage(Path file) throws IOException {
+        if (detectMagicFormat(file) == null) throw new PhotoValidationException("Unsupported stored image content");
+        try (ImageInputStream in = ImageIO.createImageInputStream(file.toFile())) {
+            if (in == null) throw new PhotoValidationException("Cannot open image");
+            var readers = ImageIO.getImageReaders(in);
+            if (!readers.hasNext()) throw new PhotoValidationException("Image format is damaged or unsupported");
+            ImageReader reader = readers.next();
+            try {
+                reader.setInput(in, true, true);
+                int width = reader.getWidth(0), height = reader.getHeight(0);
+                if (width <= 0 || height <= 0 || (long) width * height > MAX_PIXELS) {
+                    throw new PhotoValidationException("Stored image dimensions exceed limits");
+                }
+                if (reader.read(0) == null) throw new PhotoValidationException("Cannot decode image pixels");
+            } finally {
+                reader.dispose();
+            }
+        }
+    }
+
     private static String detectMagicFormat(Path file) throws IOException {
         byte[] magic = new byte[8];
         try (InputStream in = Files.newInputStream(file)) {
