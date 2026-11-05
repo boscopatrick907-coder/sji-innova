@@ -31,7 +31,7 @@ class ShellPanelTest {
     void mainPageSelectsTheProductsEntry() {
         LocalAppData location = new LocalAppData(Path.of("data"));
         ShellPanel panel = newPanel(location);
-        panel.showMain(new AppContext(location, UUID.randomUUID(), new ProductService(EMPTY)));
+        panel.showMain(TestAppContexts.withProducts(location, new ProductService(EMPTY)));
         assertEquals(ShellPanel.Page.MAIN, panel.currentPage());
         assertEquals("products", panel.selectedScreenId());
     }
@@ -42,7 +42,7 @@ class ShellPanelTest {
         ShellPanel panel = newPanel(location);
         panel.showError(new java.io.IOException("disk is full"));
         assertEquals(ShellPanel.Page.ERROR, panel.currentPage());
-        panel.showMain(new AppContext(location, UUID.randomUUID(), new ProductService(EMPTY)));
+        panel.showMain(TestAppContexts.withProducts(location, new ProductService(EMPTY)));
         assertEquals(ShellPanel.Page.MAIN, panel.currentPage());
     }
 }

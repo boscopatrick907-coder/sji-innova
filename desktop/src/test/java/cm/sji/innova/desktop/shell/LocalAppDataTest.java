@@ -8,6 +8,12 @@ import org.junit.jupiter.api.Test;
 
 class LocalAppDataTest {
     @Test
+    void theDeviceIdFileSitsNextToTheShopIdFile() {
+        LocalAppData data = new LocalAppData(Path.of("data"));
+        assertEquals(data.directory().resolve("device-id.txt"), data.deviceIdFile());
+    }
+
+    @Test
     void windowsDefaultIsInsideAppData() {
         Path dir = LocalAppData.defaultDirectory("Windows 11", Map.of("APPDATA", "C:\\Users\\a\\AppData\\Roaming"),
                 Path.of("home"));
