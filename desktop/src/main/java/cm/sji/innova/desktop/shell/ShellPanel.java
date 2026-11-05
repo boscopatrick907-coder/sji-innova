@@ -1,5 +1,6 @@
 package cm.sji.innova.desktop.shell;
 
+import cm.sji.innova.desktop.sales.SalesPanel;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.FlowLayout;
@@ -55,6 +56,8 @@ public final class ShellPanel extends JPanel {
     private final CardLayout screens = new CardLayout();
     private final JPanel screenArea = new JPanel(screens);
     private final JLabel statusLine = new JLabel(" ");
+    private final JLabel screenHeading = new JLabel();
+    private SalesPanel salesPanel;
     private Page currentPage;
     private CompletionStage<Void> productsReady;
     private AppContext activeContext;
@@ -105,10 +108,13 @@ public final class ShellPanel extends JPanel {
         catalog = products;
         productsReady = products.initialLoadCompletion();
         screenArea.add(products, "products");
+        salesPanel = SalesSlot.create(context, messages);       // it reads nothing until it is opened
+        screenArea.add(salesPanel, "sales");
         DefaultListModel<NavItem> model = (DefaultListModel<NavItem>) navigation.getModel();
         model.clear();
         model.addElement(new NavItem("products", messages.get("shell.nav.products")));
         model.addElement(new NavItem("stock", messages.get("shell.nav.stock")));
+        model.addElement(new NavItem("sales", messages.get("shell.nav.sales")));
         navigation.setSelectedIndex(0);
         statusLine.setText(" ");
         show(Page.MAIN);
@@ -204,8 +210,11 @@ public final class ShellPanel extends JPanel {
                     } else stockPanel.loadProductsAndStock();
                 } else if ("products".equals(item.id()) && catalog != null && productsReady.toCompletableFuture().isDone()) {
                     catalog.refreshIfBrowsing();
+                } else if ("sales".equals(item.id())) {
+                    salesPanel.reload();    // stock may have changed since this screen was last open
                 }
                 screens.show(screenArea, item.id());
+                screenHeading.setText("products".equals(item.id()) ? messages.get("shell.catalog") : item.label());
             }
         });
         JPanel sidebar = new JPanel(new BorderLayout(0, 32)) {
@@ -236,8 +245,8 @@ public final class ShellPanel extends JPanel {
         JPanel page = new JPanel(new BorderLayout());
         page.add(sidebar, BorderLayout.WEST);
         JPanel content=new JPanel(new BorderLayout());
-        JLabel catalogHeading=new JLabel(messages.get("shell.catalog"));catalogHeading.setBorder(BorderFactory.createEmptyBorder(18,30,18,20));catalogHeading.setOpaque(true);catalogHeading.setBackground(java.awt.Color.WHITE);
-        content.add(catalogHeading,BorderLayout.NORTH);content.add(screenArea,BorderLayout.CENTER);
+        screenHeading.setText(messages.get("shell.catalog"));screenHeading.setBorder(BorderFactory.createEmptyBorder(18,30,18,20));screenHeading.setOpaque(true);screenHeading.setBackground(java.awt.Color.WHITE);
+        content.add(screenHeading,BorderLayout.NORTH);content.add(screenArea,BorderLayout.CENTER);
         page.add(content,BorderLayout.CENTER);
         return page;
     }

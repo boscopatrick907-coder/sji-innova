@@ -1,0 +1,766 @@
+package cm.sji.innova.desktop.sales;
+
+import cm.sji.innova.core.product.Product;
+import cm.sji.innova.core.product.ProductFamily;
+import cm.sji.innova.core.product.ProductFamilyService;
+import cm.sji.innova.core.product.ProductService;
+import cm.sji.innova.core.sale.Sale;
+import cm.sji.innova.core.sale.SaleService;
+import cm.sji.innova.core.stock.StockLevel;
+import cm.sji.innova.core.stock.StockService;
+import cm.sji.innova.desktop.catalog.CatalogStyle;
+import cm.sji.innova.desktop.sales.Checkout.Outcome;
+import cm.sji.innova.desktop.sales.Checkout.Recovery;
+import cm.sji.innova.desktop.sales.Quantities.InvalidQuantityException;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.GridLayout;
+import java.awt.KeyboardFocusManager;
+import java.awt.event.ActionEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.io.IOException;
+import java.nio.file.Path;
+import java.sql.SQLException;
+import java.text.MessageFormat;
+import java.text.Normalizer;
+import java.text.NumberFormat;
+import java.time.LocalDate;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.ResourceBundle;
+import java.util.UUID;
+import java.util.concurrent.ExecutionException;
+import java.util.function.Function;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import javax.swing.AbstractAction;
+import javax.swing.BorderFactory;
+import javax.swing.DefaultCellEditor;
+import javax.swing.JButton;
+import javax.swing.JComponent;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JTable;
+import javax.swing.JTextArea;
+import javax.swing.JTextField;
+import javax.swing.KeyStroke;
+import javax.swing.ListSelectionModel;
+import javax.swing.SwingWorker;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
+import javax.swing.table.AbstractTableModel;
+import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.TableCellEditor;
+import javax.swing.text.JTextComponent;
+
+/**
+ * The Ventes page: search for a variant, build a basket, confirm cash, save the sale.
+ *
+ * <p>The constructor touches no database. The page loads when it is opened, in a background thread,
+ * so stock is fresh each time. All methods must be called on the Swing event thread. The safety rules
+ * live in {@link Checkout}; this class only decides what the cashier can click at each moment:
+ * <ul>
+ *   <li>CHECKING: looking for a sale left unfinished by an earlier run; everything is locked,</li>
+ *   <li>EDITING: the basket can be changed,</li>
+ *   <li>CONFIRMING: waiting for the cashier to confirm the cash,</li>
+ *   <li>SENDING: a background step is running; everything is locked, so a double-click does nothing,</li>
+ *   <li>UNCERTAIN: no certain answer; the basket is locked until the sale is retried or cancelled,</li>
+ *   <li>DAMAGED: the saved file cannot be read; no new sale until it is set aside.</li>
+ * </ul>
+ */
+public final class SalesPanel extends JPanel {
+    private enum PageState { CHECKING, EDITING, CONFIRMING, SENDING, UNCERTAIN, DAMAGED }
+
+    private static final Logger LOG = Logger.getLogger(SalesPanel.class.getName());
+    private static final Color PROBLEM = new Color(0xA43B2D);
+    static final int COLUMN_QUANTITY = 3;
+
+    /** One consistent picture of the shop, read in the background. */
+    private record Snapshot(List<Product> products, Map<UUID, String> familyNames,
+                            Map<UUID, StockLevel> levels, boolean stockFailed) { }
+
+    private record Loaded(Recovery recovery, Snapshot snapshot, Exception failure) { }
+
+    private final ProductService products;
+    private final ProductFamilyService families;
+    private final StockService stock;
+    private final UUID shopId;
+    private final UUID deviceId;
+    private final ResourceBundle messages;
+    private final Checkout checkout;
+    private final Locale locale;
+    private final NumberFormat money;
+
+    private final Basket basket = new Basket();
+    private final ResultsModel resultsModel;
+    private final BasketModel basketModel;
+    private final JTextField search = new JTextField();
+    private final JButton refresh;
+    private final JTable results;
+    private final JLabel resultsHint = new JLabel(" ");
+    private final JButton addButton;
+    private final JTable basketTable;
+    private final JButton removeButton;
+    private final JLabel basketHint = new JLabel(" ");
+    private final JLabel totalLabel = CatalogStyle.label(" ", 20, true);
+    private final JTextArea notice = new JTextArea(2, 20);
+    private final JButton checkoutButton;
+    private final JButton confirmButton;
+    private final JButton backButton;
+    private final JButton retryButton;
+    private final JButton discardButton;
+    private final JButton setAsideButton;
+
+    private PageState state = PageState.CHECKING;
+    private PendingCheckout draft;              // the sale being sent; kept until the answer is certain
+    private List<Product> catalog = List.of();
+    private List<Product> visible = List.of();
+    private Map<UUID, String> familyNames = new HashMap<>();
+    private Map<UUID, StockLevel> levels = new HashMap<>();
+    private boolean stockFailed;
+    private boolean loadFailed;
+    private boolean loading;
+    private boolean needsRecovery = true;
+    private boolean quantityRefused;
+    private long generation;                    // only the newest load may update the page
+    private int activeWorkers;
+
+    public SalesPanel(SaleService sales, ProductService products, ProductFamilyService families,
+                      StockService stock, UUID shopId, UUID deviceId,
+                      PendingCheckoutStore pendingStore, ResourceBundle messages) {
+        super(new BorderLayout(0, 10));
+        this.products = Objects.requireNonNull(products, "products");
+        this.families = Objects.requireNonNull(families, "families");
+        this.stock = Objects.requireNonNull(stock, "stock");
+        this.shopId = Objects.requireNonNull(shopId, "shopId");
+        this.deviceId = Objects.requireNonNull(deviceId, "deviceId");
+        this.messages = Objects.requireNonNull(messages, "messages");
+        this.checkout = new Checkout(sales, pendingStore, shopId);
+        boolean french = "fr".equals(messages.getLocale().getLanguage());
+        this.locale = french ? Locale.FRANCE : Locale.ENGLISH;
+        this.money = NumberFormat.getIntegerInstance(locale);
+
+        resultsModel = new ResultsModel();
+        basketModel = new BasketModel();
+        results = styledTable(new JTable(resultsModel), "salesResults");
+        basketTable = styledTable(new QuantityTable(basketModel), "salesBasket");
+        refresh = named(CatalogStyle.button(t("catalog.refresh"), false), "salesRefresh");
+        addButton = named(CatalogStyle.button(t("sales.add"), false), "salesAdd");
+        removeButton = named(CatalogStyle.button(t("sales.removeLine"), false), "salesRemove");
+        checkoutButton = named(CatalogStyle.button(t("sales.checkout"), true), "salesCheckout");
+        confirmButton = named(CatalogStyle.button(t("sales.confirm.yes"), true), "salesConfirm");
+        backButton = named(CatalogStyle.button(t("sales.confirm.back"), false), "salesBack");
+        retryButton = named(CatalogStyle.button(t("sales.retry"), true), "salesRetry");
+        discardButton = named(CatalogStyle.button(t("sales.discard"), false), "salesDiscard");
+        setAsideButton = named(CatalogStyle.button(t("sales.setAside"), false), "salesSetAside");
+        search.setName("salesSearch");
+        totalLabel.setName("salesTotal");
+        notice.setName("salesNotice");
+        resultsHint.setName("salesResultsHint");
+
+        setBackground(CatalogStyle.PAPER);
+        setBorder(BorderFactory.createEmptyBorder(14, 30, 14, 30));
+        JPanel areas = CatalogStyle.panel(new GridLayout(2, 1, 0, 10));
+        areas.add(buildResultsArea());
+        areas.add(buildBasketArea());
+        add(areas, BorderLayout.CENTER);
+        add(buildFooter(), BorderLayout.SOUTH);
+        connectControls();
+        refreshBasketView();
+        applyState();
+        resultsHint.setText(t("catalog.loading"));
+    }
+
+    /** Reads products and stock again, and on first opening looks for an unfinished sale. */
+    public void reload() {
+        long request = ++generation;
+        // A damaged file is looked at again each time, in case someone has fixed or moved it.
+        boolean recover = needsRecovery || state == PageState.DAMAGED;
+        needsRecovery = false;
+        loading = true;
+        updateResultsHint();
+        applyState();
+        activeWorkers++;
+        new SwingWorker<Loaded, Void>() {
+            @Override protected Loaded doInBackground() {
+                Recovery recovery = recover ? checkout.recover() : null;
+                try {
+                    return new Loaded(recovery, loadSnapshot(), null);
+                } catch (SQLException | RuntimeException failure) {
+                    return new Loaded(recovery, null, failure);
+                }
+            }
+
+            @Override protected void done() {
+                activeWorkers--;
+                Loaded loaded;
+                try {
+                    loaded = get();
+                } catch (InterruptedException | ExecutionException failure) {
+                    needsRecovery = needsRecovery || recover;       // Refresh will look again
+                    loaded = new Loaded(null, null, failure);
+                }
+                if (loaded.recovery() != null) applyRecovery(loaded.recovery());
+                if (request == generation) applyLoaded(loaded);
+                applyState();
+            }
+        }.execute();
+    }
+
+    /** For tests: true while a background step is still running. */
+    boolean isBusy() { return activeWorkers > 0; }
+
+    private Snapshot loadSnapshot() throws SQLException {
+        List<Product> allProducts = products.list(shopId);
+        Map<UUID, String> names = new HashMap<>();
+        for (ProductFamily family : families.list(shopId)) names.put(family.id(), family.name());
+        Map<UUID, StockLevel> stockLevels = new HashMap<>();
+        boolean failed = false;
+        try {
+            for (StockLevel level : stock.list(shopId)) stockLevels.put(level.productId(), level);
+        } catch (SQLException | RuntimeException failure) {
+            // Unknown stock must not look like zero, and the database still checks every sale.
+            LOG.log(Level.WARNING, "Could not read stock levels", failure);
+            failed = true;
+        }
+        return new Snapshot(allProducts, names, stockLevels, failed);
+    }
+
+    private void applyLoaded(Loaded loaded) {
+        loading = false;
+        loadFailed = loaded.snapshot() == null;
+        if (loadFailed) {
+            LOG.log(Level.WARNING, "Could not load the Sales page", loaded.failure());
+        } else {
+            catalog = loaded.snapshot().products();
+            familyNames = loaded.snapshot().familyNames();
+            levels = loaded.snapshot().levels();
+            stockFailed = loaded.snapshot().stockFailed();
+            applyFilter();
+            refreshBasketView();
+        }
+        updateResultsHint();
+    }
+
+    private void applyRecovery(Recovery recovery) {
+        switch (recovery) {
+            case Recovery.Nothing nothing -> state = PageState.EDITING;
+            case Recovery.AlreadySaved saved -> {
+                state = PageState.EDITING;
+                showSale("sales.recovered.saved", saved.sale());
+            }
+            case Recovery.Unfinished unfinished -> {
+                draft = unfinished.pending();
+                basket.replaceWith(draft.lines());
+                state = PageState.UNCERTAIN;
+                showNotice(t("sales.recovered.unfinished", draft.receiptNumber(), money.format(draft.total())), true);
+            }
+            case Recovery.Damaged damaged -> {
+                LOG.log(Level.WARNING, damaged.cause(), () -> "Unfinished sale file unusable: " + damaged.file());
+                state = PageState.DAMAGED;
+                showNotice(t("sales.damaged", damaged.file()), true);
+            }
+        }
+        refreshBasketView();
+    }
+
+    private void addSelectedProduct() {
+        if (state != PageState.EDITING) return;
+        int row = results.getSelectedRow();
+        if (row < 0) {
+            showNotice(t("sales.pickProduct"), true);
+            return;
+        }
+        Product product = visible.get(row);
+        try {
+            basket.add(BasketLine.oneOf(product, familyNames.get(product.familyId())));
+            showNotice(" ", false);
+        } catch (ArithmeticException tooLarge) {
+            showNotice(t("sales.error.tooLarge"), true);
+            return;
+        }
+        refreshBasketView();
+        int addedRow = basket.lines().stream().map(BasketLine::productId).toList().indexOf(product.id());
+        basketTable.changeSelection(addedRow, COLUMN_QUANTITY, false, false);
+        search.setText("");
+        search.requestFocusInWindow();
+        applyState();
+    }
+
+    private void removeSelectedLine() {
+        if (state != PageState.EDITING) return;
+        int row = basketTable.getSelectedRow();
+        if (row < 0) {
+            showNotice(t("sales.pickLine"), true);
+            return;
+        }
+        stopQuantityEdit();
+        basket.remove(basket.lines().get(row).productId());
+        refreshBasketView();
+        applyState();
+    }
+
+    private void beginCheckout() {
+        if (state != PageState.EDITING || !stopQuantityEdit() || basket.isEmpty()) return;
+        state = PageState.CONFIRMING;
+        showNotice(t("sales.confirm.question", money.format(basket.total())), false);
+        applyState();
+        confirmButton.requestFocusInWindow();
+    }
+
+    private void backToBasket() {
+        if (state != PageState.CONFIRMING) return;
+        state = PageState.EDITING;
+        showNotice(" ", false);
+        applyState();
+        checkoutButton.requestFocusInWindow();
+    }
+
+    private void confirmSale() {
+        if (state != PageState.CONFIRMING) return;
+        // The same basket keeps the same sale ID, so "one logical checkout" stays one ID even after a
+        // refusal. A changed basket is a new checkout, which is safe: the old ID was never saved.
+        if (draft == null || !draft.lines().equals(basket.lines())) {
+            draft = PendingCheckout.start(shopId, deviceId, basket.lines(), LocalDate.now());
+        }
+        runSaleStep(checkout::submit);
+    }
+
+    private void retrySale() {
+        if (state == PageState.UNCERTAIN) runSaleStep(checkout::retry);
+    }
+
+    private void discardSale() {
+        if (state == PageState.UNCERTAIN) runSaleStep(checkout::discard);
+    }
+
+    private void runSaleStep(Function<PendingCheckout, Outcome> step) {
+        PendingCheckout sending = draft;
+        state = PageState.SENDING;
+        showNotice(t("sales.saving"), false);
+        applyState();
+        activeWorkers++;
+        new SwingWorker<Outcome, Void>() {
+            @Override protected Outcome doInBackground() {
+                return step.apply(sending);
+            }
+
+            @Override protected void done() {
+                activeWorkers--;
+                handleOutcome(sending, resultOf(this));
+                applyState();
+            }
+        }.execute();
+    }
+
+    private static Outcome resultOf(SwingWorker<Outcome, Void> worker) {
+        try {
+            return worker.get();
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            return new Outcome.Uncertain(interrupted);
+        } catch (ExecutionException failure) {
+            return new Outcome.Uncertain(failure);
+        }
+    }
+
+    private void handleOutcome(PendingCheckout sent, Outcome outcome) {
+        switch (outcome) {
+            case Outcome.Saved saved -> {
+                basket.clear();
+                draft = null;
+                state = PageState.EDITING;
+                showSale("sales.success", saved.sale());
+                refreshBasketView();
+                reload();
+                search.requestFocusInWindow();
+            }
+            case Outcome.NotSent notSent -> {
+                LOG.log(Level.WARNING, "Could not save the unfinished sale file", notSent.cause());
+                state = PageState.EDITING;
+                showNotice(t("sales.error.notSent"), true);
+            }
+            case Outcome.Rejected rejected -> {
+                LOG.log(Level.INFO, rejected.cause(), () -> "Sale refused: " + sent.receiptNumber());
+                state = PageState.EDITING;
+                showNotice(t(rejected.reason() == Checkout.Reason.NOT_ENOUGH_STOCK
+                        ? "sales.error.notEnoughStock" : "sales.error.refused"), true);
+                reload();       // the stock column now shows why
+            }
+            case Outcome.Uncertain uncertain -> {
+                LOG.log(Level.WARNING, uncertain.cause(), () -> "Sale not confirmed: " + sent.receiptNumber());
+                state = PageState.UNCERTAIN;
+                showNotice(t("sales.uncertain", sent.receiptNumber()), true);
+            }
+            case Outcome.Discarded discarded -> {
+                draft = null;
+                state = PageState.EDITING;
+                showNotice(t("sales.discarded"), false);
+            }
+        }
+    }
+
+    private void setAsideDamagedFile() {
+        if (state != PageState.DAMAGED) return;
+        state = PageState.SENDING;
+        applyState();
+        activeWorkers++;
+        new SwingWorker<Path, Void>() {
+            @Override protected Path doInBackground() throws IOException {
+                return checkout.setAsideDamagedFile();
+            }
+
+            @Override protected void done() {
+                activeWorkers--;
+                try {
+                    Path kept = get();
+                    showNotice(t("sales.setAside.done", kept.getFileName()), false);
+                    state = PageState.CHECKING;
+                    needsRecovery = true;
+                    reload();
+                } catch (InterruptedException | ExecutionException failure) {
+                    LOG.log(Level.WARNING, "Could not set the damaged file aside", failure);
+                    state = PageState.DAMAGED;
+                    showNotice(t("sales.setAside.failed"), true);
+                }
+                applyState();
+            }
+        }.execute();
+    }
+
+    /** The one place that decides what can be clicked. */
+    private void applyState() {
+        boolean editing = state == PageState.EDITING;
+        search.setEnabled(editing);
+        results.setEnabled(editing);
+        addButton.setEnabled(editing && !visible.isEmpty());
+        basketTable.setEnabled(editing);
+        removeButton.setEnabled(editing && !basket.isEmpty());
+        checkoutButton.setEnabled(editing && !basket.isEmpty());
+        checkoutButton.setVisible(state != PageState.CONFIRMING && state != PageState.UNCERTAIN && state != PageState.DAMAGED);
+        confirmButton.setVisible(state == PageState.CONFIRMING);
+        backButton.setVisible(state == PageState.CONFIRMING);
+        retryButton.setVisible(state == PageState.UNCERTAIN);
+        discardButton.setVisible(state == PageState.UNCERTAIN);
+        setAsideButton.setVisible(state == PageState.DAMAGED);
+        refresh.setEnabled(!loading && state != PageState.SENDING);
+        notice.setRows(state == PageState.DAMAGED ? 3 : 2);     // the damaged message shows a long path
+        revalidate();
+        repaint();
+    }
+
+    private void applyFilter() {
+        String query = search.getText();
+        visible = catalog.stream()
+                .filter(product -> matches(product, familyNames.get(product.familyId()), query))
+                .toList();
+        resultsModel.fireTableDataChanged();
+        if (!visible.isEmpty()) results.setRowSelectionInterval(0, 0);
+        updateResultsHint();
+        applyState();
+    }
+
+    /** Every typed word must appear somewhere, ignoring case and accents. */
+    static boolean matches(Product product, String familyName, String query) {
+        String text = fold(String.join(" ", product.name(),
+                Objects.toString(product.reference(), ""), Objects.toString(product.modelReference(), ""),
+                Objects.toString(product.category(), ""), Objects.toString(familyName, ""),
+                String.join(" ", product.specifications().keySet()),
+                String.join(" ", product.specifications().values())));
+        return Arrays.stream(fold(query).strip().split("\\s+")).allMatch(text::contains);
+    }
+
+    private static String fold(String text) {
+        return Normalizer.normalize(text, Normalizer.Form.NFD).replaceAll("\\p{M}+", "").toLowerCase(Locale.ROOT);
+    }
+
+    private void updateResultsHint() {
+        if (loading) resultsHint.setText(t("catalog.loading"));
+        else if (loadFailed) resultsHint.setText(t("catalog.loadError") + " " + t("catalog.retryHint"));
+        else if (stockFailed) resultsHint.setText(t("catalog.stockError"));
+        else if (catalog.isEmpty()) resultsHint.setText(t("catalog.empty"));
+        else if (visible.isEmpty()) resultsHint.setText(t("catalog.noMatches"));
+        else resultsHint.setText(t("sales.addHint"));
+    }
+
+    private void refreshBasketView() {
+        int selected = basketTable.getSelectedRow();
+        basketModel.fireTableDataChanged();
+        if (selected >= 0 && selected < basket.lines().size()) {
+            basketTable.changeSelection(selected, COLUMN_QUANTITY, false, false);
+        }
+        totalLabel.setText(t("sales.total", money.format(basket.total())));
+        basketHint.setText(t(basket.isEmpty() ? "sales.basket.empty" : "sales.quantityHint"));
+    }
+
+    /** Finishes a quantity being typed. Returns false if what was typed was refused. */
+    private boolean stopQuantityEdit() {
+        quantityRefused = false;
+        if (basketTable.isEditing()) basketTable.getCellEditor().stopCellEditing();
+        return !quantityRefused;
+    }
+
+    private void showSale(String messageKey, Sale sale) {
+        showNotice(t(messageKey, sale.receiptNumber(), money.format(sale.totalAmount())), false);
+    }
+
+    private void showNotice(String text, boolean problem) {
+        notice.setForeground(problem ? PROBLEM : CatalogStyle.GREEN);
+        notice.setText(text);
+    }
+
+    private String t(String key, Object... arguments) {
+        String pattern = messages.getString(key);
+        return arguments.length == 0 ? pattern : new MessageFormat(pattern, locale).format(arguments);
+    }
+
+    private String stockText(UUID productId, String unit) {
+        StockLevel level = levels.get(productId);
+        if (stockFailed || level == null) return t("catalog.unavailable");
+        long quantity = level.quantityMilli();
+        String name = unitName(unit);
+        boolean plural = !"kg".equals(unit) && Math.abs(quantity) != Quantities.ONE;
+        return Quantities.format(quantity, locale) + " " + name + (plural ? "s" : "");
+    }
+
+    private String unitName(String unit) {
+        return "kg".equals(unit) ? "kg" : t("unit." + unit).toLowerCase(locale);
+    }
+
+    private JComponent buildResultsArea() {
+        search.putClientProperty("JTextField.placeholderText", t("catalog.search"));
+        search.getAccessibleContext().setAccessibleName(t("catalog.search"));
+        results.getAccessibleContext().setAccessibleName(t("sales.results"));
+        results.getColumnModel().getColumn(0).setPreferredWidth(260);
+
+        JPanel searchRow = CatalogStyle.panel(new BorderLayout(12, 0));
+        search.setPreferredSize(new Dimension(200, 34));
+        searchRow.add(search, BorderLayout.CENTER);
+        searchRow.add(refresh, BorderLayout.EAST);
+
+        JPanel below = CatalogStyle.panel(new BorderLayout(12, 0));
+        below.add(resultsHint, BorderLayout.CENTER);
+        below.add(addButton, BorderLayout.EAST);
+
+        JPanel area = CatalogStyle.panel(new BorderLayout(0, 6));
+        area.add(searchRow, BorderLayout.NORTH);
+        area.add(new JScrollPane(results), BorderLayout.CENTER);
+        area.add(below, BorderLayout.SOUTH);
+        return area;
+    }
+
+    private JComponent buildBasketArea() {
+        basketTable.getAccessibleContext().setAccessibleName(t("sales.basket"));
+        basketTable.getColumnModel().getColumn(0).setPreferredWidth(240);
+        DefaultCellEditor quantityEditor = new DefaultCellEditor(new JTextField());
+        quantityEditor.setClickCountToStart(1);
+        basketTable.getColumnModel().getColumn(COLUMN_QUANTITY).setCellEditor(quantityEditor);
+        basketTable.getColumnModel().getColumn(COLUMN_QUANTITY).setCellRenderer(new QuantityRenderer());
+        basketTable.putClientProperty("terminateEditOnFocusLost", Boolean.TRUE);
+        basketTable.setSurrendersFocusOnKeystroke(true);
+
+        JPanel below = CatalogStyle.panel(new BorderLayout(12, 0));
+        below.add(removeButton, BorderLayout.WEST);
+        below.add(basketHint, BorderLayout.CENTER);
+        below.add(totalLabel, BorderLayout.EAST);
+
+        JPanel area = CatalogStyle.panel(new BorderLayout(0, 6));
+        area.add(new JScrollPane(basketTable), BorderLayout.CENTER);
+        area.add(below, BorderLayout.SOUTH);
+        return area;
+    }
+
+    private JComponent buildFooter() {
+        notice.setEditable(false);
+        notice.setLineWrap(true);
+        notice.setWrapStyleWord(true);
+        notice.setOpaque(false);
+        notice.setFocusable(false);
+        notice.setBorder(BorderFactory.createEmptyBorder());
+        notice.setFont(notice.getFont().deriveFont(13f));
+
+        JPanel actions = CatalogStyle.panel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        // FlowLayout also adds its gap after the last button; this keeps the right edge in line.
+        actions.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, -8));
+        actions.add(setAsideButton);
+        actions.add(discardButton);
+        actions.add(retryButton);
+        actions.add(backButton);
+        actions.add(confirmButton);
+        actions.add(checkoutButton);
+
+        JPanel footer = CatalogStyle.panel(new BorderLayout(0, 4));
+        footer.add(notice, BorderLayout.CENTER);
+        footer.add(actions, BorderLayout.SOUTH);
+        return footer;
+    }
+
+    private void connectControls() {
+        refresh.addActionListener(event -> reload());
+        addButton.addActionListener(event -> addSelectedProduct());
+        removeButton.addActionListener(event -> removeSelectedLine());
+        checkoutButton.addActionListener(event -> beginCheckout());
+        confirmButton.addActionListener(event -> confirmSale());
+        backButton.addActionListener(event -> backToBasket());
+        retryButton.addActionListener(event -> retrySale());
+        discardButton.addActionListener(event -> discardSale());
+        setAsideButton.addActionListener(event -> setAsideDamagedFile());
+
+        search.addActionListener(event -> addSelectedProduct());
+        search.getDocument().addDocumentListener(new DocumentListener() {
+            @Override public void insertUpdate(DocumentEvent event) { applyFilter(); }
+            @Override public void removeUpdate(DocumentEvent event) { applyFilter(); }
+            @Override public void changedUpdate(DocumentEvent event) { applyFilter(); }
+        });
+        // Up and Down move through the results while the cursor stays in the search box.
+        bind(search, JComponent.WHEN_FOCUSED, "DOWN", "nextResult", () -> moveResult(1));
+        bind(search, JComponent.WHEN_FOCUSED, "UP", "previousResult", () -> moveResult(-1));
+        bind(results, JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT, "ENTER", "addToBasket", this::addSelectedProduct);
+        results.addMouseListener(new MouseAdapter() {
+            @Override public void mouseClicked(MouseEvent event) {
+                if (event.getClickCount() == 2) addSelectedProduct();
+            }
+        });
+        bind(basketTable, JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT, "DELETE", "removeLine", this::removeSelectedLine);
+    }
+
+    private void moveResult(int step) {
+        if (visible.isEmpty() || state != PageState.EDITING) return;
+        int row = Math.floorMod(results.getSelectedRow() + step, visible.size());
+        results.setRowSelectionInterval(row, row);
+        results.scrollRectToVisible(results.getCellRect(row, 0, true));
+    }
+
+    private static void bind(JComponent component, int condition, String key, String name, Runnable action) {
+        component.getInputMap(condition).put(KeyStroke.getKeyStroke(key), name);
+        component.getActionMap().put(name, new AbstractAction() {
+            @Override public void actionPerformed(ActionEvent event) { action.run(); }
+        });
+    }
+
+    private static <T extends JComponent> T named(T component, String name) {
+        component.setName(name);
+        return component;
+    }
+
+    private static <T extends JTable> T styledTable(T table, String name) {
+        table.setName(name);
+        table.setRowHeight(30);
+        table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        table.setShowVerticalLines(false);
+        table.setGridColor(CatalogStyle.LINE);
+        table.setFillsViewportHeight(true);
+        // Tab leaves the table instead of walking through its cells.
+        table.setFocusTraversalKeys(KeyboardFocusManager.FORWARD_TRAVERSAL_KEYS, null);
+        table.setFocusTraversalKeys(KeyboardFocusManager.BACKWARD_TRAVERSAL_KEYS, null);
+        return table;
+    }
+
+    /** Typing a quantity replaces the old one: without this, typing 2 over 1 would give 12. */
+    private static final class QuantityTable extends JTable {
+        QuantityTable(BasketModel model) { super(model); }
+
+        @Override public Component prepareEditor(TableCellEditor editor, int row, int column) {
+            Component component = super.prepareEditor(editor, row, column);
+            if (component instanceof JTextComponent text) text.selectAll();
+            return component;
+        }
+    }
+
+    /** Draws the quantity like a small input box while it can be changed, so it invites a click. */
+    private static final class QuantityRenderer extends DefaultTableCellRenderer {
+        @Override public Component getTableCellRendererComponent(JTable table, Object value, boolean selected,
+                                                                 boolean focused, int row, int column) {
+            Component cell = super.getTableCellRendererComponent(table, value, selected, focused, row, column);
+            if (table.isCellEditable(row, column)) {
+                setBorder(BorderFactory.createLineBorder(CatalogStyle.MUTED));
+                if (!selected) setBackground(Color.WHITE);
+            }
+            return cell;
+        }
+    }
+
+    /** The search results. Families are not listed: only a variant can be sold. */
+    private final class ResultsModel extends AbstractTableModel {
+        private final String[] columns = {t("catalog.variant"), t("catalog.reference"),
+            t("sales.column.characteristics"), t("catalog.available"), t("catalog.price")};
+
+        @Override public int getRowCount() { return visible.size(); }
+        @Override public int getColumnCount() { return columns.length; }
+        @Override public String getColumnName(int column) { return columns[column]; }
+
+        @Override public Object getValueAt(int row, int column) {
+            Product product = visible.get(row);
+            return switch (column) {
+                case 0 -> BasketLine.oneOf(product, familyNames.get(product.familyId())).label();
+                case 1 -> Objects.toString(product.reference(), "");
+                case 2 -> String.join(", ", product.specifications().values());
+                case 3 -> stockText(product.id(), product.unit());
+                default -> money.format(product.unitPrice()) + " FCFA / " + unitName(product.unit());
+            };
+        }
+    }
+
+    /** The basket. Only the quantity can be edited, and only while the basket is not locked. */
+    private final class BasketModel extends AbstractTableModel {
+        private final String[] columns = {t("sales.column.product"), t("catalog.reference"), t("sales.column.unit"),
+            t("sales.column.quantity"), t("sales.column.unitPrice"), t("sales.column.lineTotal"), t("sales.column.stock")};
+
+        @Override public int getRowCount() { return basket.lines().size(); }
+        @Override public int getColumnCount() { return columns.length; }
+        @Override public String getColumnName(int column) { return columns[column]; }
+        @Override public Class<?> getColumnClass(int column) { return String.class; }
+
+        @Override public boolean isCellEditable(int row, int column) {
+            return column == COLUMN_QUANTITY && state == PageState.EDITING;
+        }
+
+        @Override public Object getValueAt(int row, int column) {
+            BasketLine line = basket.lines().get(row);
+            return switch (column) {
+                case 0 -> line.label();
+                case 1 -> line.reference();
+                case 2 -> unitName(line.unit());
+                case COLUMN_QUANTITY -> Quantities.format(line.quantityMilli(), locale);
+                case 4 -> money.format(line.unitPrice());
+                case 5 -> money.format(line.total());
+                default -> stockText(line.productId(), line.unit());
+            };
+        }
+
+        @Override public void setValueAt(Object value, int row, int column) {
+            BasketLine line = basket.lines().get(row);
+            try {
+                basket.setQuantity(line.productId(), Quantities.parseMilli(String.valueOf(value), line.unit()));
+                showNotice(" ", false);
+            } catch (InvalidQuantityException invalid) {
+                quantityRefused = true;
+                showNotice(quantityProblem(invalid.problem()), true);
+            } catch (ArithmeticException tooLarge) {
+                quantityRefused = true;
+                showNotice(t("sales.error.tooLarge"), true);
+            }
+            refreshBasketView();
+        }
+
+        private String quantityProblem(Quantities.Problem problem) {
+            return t(switch (problem) {
+                case BLANK -> "sales.quantity.blank";
+                case NOT_A_NUMBER -> "sales.quantity.notANumber";
+                case NOT_POSITIVE -> "sales.quantity.notPositive";
+                case MUST_BE_WHOLE -> "sales.quantity.mustBeWhole";
+                case TOO_MANY_DECIMALS -> "sales.quantity.tooManyDecimals";
+                case TOO_LARGE -> "sales.error.tooLarge";
+            });
+        }
+    }
+}

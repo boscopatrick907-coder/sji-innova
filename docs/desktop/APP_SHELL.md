@@ -10,8 +10,9 @@ The shell is the Cella main window, its navigation, and the local start-up
 | Windows | `%APPDATA%\Cella` (for example `C:\Users\you\AppData\Roaming\Cella`) |
 | Other | `~/.cella` |
 
-Files inside: `cella.db` (SQLite database), `shop-id.txt` (the development shop ID)
-and `logs/cella-0.log` (error log, see below).
+Files inside: `cella.db` (SQLite database), `shop-id.txt` (the development shop ID),
+`logs/cella-0.log` (error log, see below) and, only while a sale is being sent,
+`pending-checkout.txt` (see [the sales screen](SALES_SCREEN.md)).
 
 **Override (for tests and developers)**, in this order of priority:
 
@@ -58,16 +59,17 @@ and the stock it removes are always saved together.
 | `stock()` | `StockService` (receipts, adjustments, levels, history) |
 | `sales()` | `SaleService` (cash sales, sale queries) |
 
-Panel constructors proposed to Willy (Stock) and used for Sales; the shell builds them from
-the context. Constructors do no database work: loading happens in a `SwingWorker`.
+The shell builds the Stock and Sales panels from the context. They read the database in a
+`SwingWorker`, never on the Swing event thread. The Sales panel also needs the product families
+and the pending sale file, so `SalesSlot` builds it.
 
 ```java
 new StockPanel(context.stock(), context.products(), context.shopId(), context.deviceId(), messages.bundle())
-new SalesPanel(context.sales(), context.products(), context.stock(), context.shopId(), context.deviceId(), messages.bundle())
+SalesSlot.create(context, messages)
 ```
 
-Neither panel exists on main yet, so the navigation still shows Products only. Each entry is
-added when its panel is merged. Screen tests that only need a fake `ProductService` build
+The navigation shows Products, Stock and Ventes (Sales). An entry is added only when its panel
+exists. Screen tests that only need a fake `ProductService` build
 their context with the test helper `TestAppContexts.withProducts(location, products)`.
 
 ## Start-up behaviour
@@ -99,7 +101,8 @@ Texts come from Pascal's bundle `cm.sji.innova.desktop.i18n.messages`. Until a k
 there, `FallbackMessages` (English) is used, so the window never shows a missing key.
 
 **Keys the shell uses (Pascal: please add them to `messages_en` and `messages_fr`):**
-`app.title`, `shell.nav.accessibleName`, `shell.nav.products`, `shell.loading`,
+`app.title`, `shell.nav.accessibleName`, `shell.nav.products`, `shell.nav.stock`,
+`shell.nav.sales`, `shell.loading`,
 `shell.error.title`, `shell.error.dataFolder` (`{0}` = folder), `shell.error.retry`,
 `shell.error.exit`, `shell.devShop` (`{0}` = shop ID).
 The Products panel uses the product/action/unit keys listed in docs/team/PASCAL.md.
@@ -124,6 +127,6 @@ human checking; a rendered preview is not a Windows GUI test.
 ## Limitations
 
 - No login, no shop registration, no live language switching.
-- Only one navigation entry (Products). Sales and Customers come later.
+- Three navigation entries: Products, Stock and Ventes (Sales). Customers come later.
 - The loading, error and main pages were checked as images without a screen; the real
   window, keyboard navigation and restart behaviour still need a manual check on Windows.

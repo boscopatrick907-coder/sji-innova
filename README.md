@@ -2,8 +2,8 @@
 
 Offline-first inventory and sales software for Cameroonian shops. The desktop
 currently supports the family catalog, product entry, stock receipts and movement
-history. Cash sales and voids have backend services; their cashier screens remain
-to be integrated.
+history, and offline cash checkout. Voids have a backend service; their cashier
+screen remains to be integrated.
 See [the project master file](SJI_INNOVA_PROJECT.md) for current decisions
 and [the detailed v0.3 plan](SJI_INNOVA_PROJECT_v03.md) for the revised scope
 and event-sync design. The master file confirms the Cella name and Spring Boot;
@@ -44,8 +44,8 @@ On Windows PowerShell:
 This builds both modules and runs SQLite integration and desktop tests. Storage
 tests use temporary databases. Product, stock, cash-sale and cash-void backends
 are implemented; synchronization is not. The Products form is connected to the
-main window, alongside Stock receipts/history. Checkout and void screens are not
-yet connected.
+main window, alongside Stock receipts/history and the Ventes cash checkout. Void
+screens are not yet connected.
 
 The prepared cloud environment also supplies proxy settings outside the checkout.
 Use this build command there:
@@ -87,8 +87,8 @@ Do not delete its shop-id.txt; see [startup/recovery notes](docs/desktop/APP_SHE
 - `.github/workflows/build.yml`: Linux and Windows builds and packaged startup checks.
 
 Local stock receipts, adjustments, history and low-stock thresholds are implemented.
-Next: durable stock retry recovery, corrections/threshold controls and checkout
-screen integration, then the remaining offline workflows
+Next: durable stock retry recovery, corrections/threshold controls and saved
+sales history, then the remaining offline workflows
 before cloud sync. Spring Boot is the selected cloud framework; its module will be added later. SQLite is embedded; no separate database installation, credentials, or external
 services are needed. Windows CI is configured; a real Windows GUI/installer test
 remains a separate quality gate.
@@ -202,7 +202,7 @@ Stock errors show “Unavailable”, not zero. Refresh reloads the catalog/stock
 
 The sidebar uses the chosen green gradient and simple line icon. French and
 English bundles cover the catalog. Start with `--lang fr` for French. Product details now support managed photos, and CSV import has a review screen.
-The Stock receipt screen is connected; Sales entry remains separate work.
+The Stock receipt and Ventes checkout screens are connected.
 Normal startup does not seed data.
 
 
@@ -229,3 +229,13 @@ Open a saved product to choose, replace or remove a JPEG/PNG photo. Images are
 copied into the shop data folder. Keep the complete folder in backups. CSV input
 creates standalone products; family mapping, .xlsx and family photos remain future
 work. These features use the existing backend and do not seed demo data.
+
+## Sales screen
+
+Choose Ventes (Sales) in the sidebar to sell for cash offline. Search for the exact
+variant/reference, add it, change the quantity, then confirm the cash. SaleService
+saves the sale and removes the stock together, and the screen shows the saved
+receipt reference and total. If the result is uncertain or Cella closes during a
+sale, the same sale can be retried without creating a second one, even after a
+restart; nothing is ever sent by itself. Saved sales history is the next delivery.
+See docs/desktop/SALES_SCREEN.md.

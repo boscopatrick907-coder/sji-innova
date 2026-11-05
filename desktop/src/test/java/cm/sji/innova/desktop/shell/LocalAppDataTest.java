@@ -37,5 +37,6 @@ class LocalAppDataTest {
         assertEquals(data.directory().resolve("cella.db"), data.databaseFile());
         assertEquals(data.directory().resolve("shop-id.txt"), data.shopIdFile());
         assertEquals(data.directory().resolve("logs"), data.logDirectory());
+        assertEquals(data.directory().resolve("pending-checkout.txt"), data.pendingCheckoutFile());
     }
 }
