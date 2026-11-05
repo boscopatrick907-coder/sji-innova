@@ -30,5 +30,6 @@ class LocalAppDataTest {
         LocalAppData data = new LocalAppData(Path.of("data"));
         assertEquals(data.directory().resolve("cella.db"), data.databaseFile());
         assertEquals(data.directory().resolve("shop-id.txt"), data.shopIdFile());
+        assertEquals(data.directory().resolve("logs"), data.logDirectory());
     }
 }

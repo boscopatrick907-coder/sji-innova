@@ -2,6 +2,7 @@ package cm.sji.innova.desktop;
 
 import cm.sji.innova.desktop.shell.AppContext;
 import cm.sji.innova.desktop.shell.AppContextLoader;
+import cm.sji.innova.desktop.shell.AppLogging;
 import cm.sji.innova.desktop.shell.LocalAppData;
 import cm.sji.innova.desktop.shell.Messages;
 import cm.sji.innova.desktop.shell.ShellPanel;
@@ -16,6 +17,7 @@ import java.util.Locale;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.logging.Logger;
 import javax.swing.JFrame;
 import javax.swing.SwingUtilities;
 
@@ -27,6 +29,8 @@ import javax.swing.SwingUtilities;
  * database). Normal launch never inserts demo products.
  */
 public final class DesktopApplication {
+    private static final Logger LOG = Logger.getLogger(DesktopApplication.class.getName());
+
     private DesktopApplication() { }
 
     public static void main(String[] args) throws Exception {
@@ -43,6 +47,9 @@ public final class DesktopApplication {
             throw new IllegalStateException("A graphical desktop is required. Use --smoke-test for a headless startup check.");
         }
         LocalAppData location = LocalAppData.forOptions(options);
+        // From here on, errors are also written to logs/cella-0.log in the data folder.
+        AppLogging.install(location);
+        LOG.info(() -> "Starting Cella with data folder " + location.directory());
         Messages messages = Messages.load(options.locale());
         SwingUtilities.invokeAndWait(() -> {
             setUpLookAndFeel();

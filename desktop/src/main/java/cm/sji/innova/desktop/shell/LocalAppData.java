@@ -19,6 +19,8 @@ public record LocalAppData(Path directory) {
 
     public Path shopIdFile() { return directory.resolve("shop-id.txt"); }
 
+    public Path logDirectory() { return directory.resolve("logs"); }
+
     /** The folder used when the user did not choose one. */
     public static Path defaultDirectory(String osName, Map<String, String> environment, Path userHome) {
         if (osName.toLowerCase(java.util.Locale.ROOT).contains("win")) {

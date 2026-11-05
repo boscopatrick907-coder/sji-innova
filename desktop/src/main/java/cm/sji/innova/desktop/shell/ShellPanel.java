@@ -8,6 +8,8 @@ import java.awt.GridBagLayout;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutionException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
@@ -33,6 +35,8 @@ import javax.swing.SwingWorker;
  */
 public final class ShellPanel extends JPanel {
     public enum Page { LOADING, ERROR, MAIN }
+
+    private static final Logger LOG = Logger.getLogger(ShellPanel.class.getName());
 
     /** One entry of the navigation list. Add more entries here when new screens exist. */
     private record NavItem(String id, String label) {
@@ -105,7 +109,8 @@ public final class ShellPanel extends JPanel {
     }
 
     public void showError(Throwable failure) {
-        failure.printStackTrace();               // full details for developers
+        // Full details for developers go to the log (console and logs/cella-0.log); the page shows a summary.
+        LOG.log(Level.SEVERE, failure, () -> "Start-up failed for data folder " + location.directory());
         String message = failure.getMessage() == null ? failure.getClass().getSimpleName()
                 : failure.getMessage();
         errorDetail.setText(messages.get("shell.error.dataFolder", location.directory())
