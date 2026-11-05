@@ -1,6 +1,6 @@
 # Emmanuel — Step 1: CSV product import
 
-Priority: FIRST. Owner: Emmanuel. Desktop integration: Patrick.
+Priority: CURRENT NEXT TASK (updated 5 November 2026). Owner: Emmanuel. Desktop integration: Patrick.
 This is a new backend assignment, not a claim that CSV import exists today.
 Branch suggestion: `backend/csv-product-import`.
 
@@ -28,7 +28,7 @@ Riz parfumé,RIZ-001,Alimentation,kg,600,800
 Câble USB-C,USB-02,Accessoires,piece,,2500
 ```
 
-Required values: name, canonical unit (`piece`, `kg`, `litre`) and selling price.
+Required values: name, canonical unit (`piece`, `bag`, `kg`, `litre`) and selling price.
 Other listed values may be blank; blank buying price means unknown, not zero.
 Zero is valid; buying price may exceed selling price. Prices must be nonnegative
 whole FCFA within long range. Reuse core product validation rather than inventing
@@ -107,3 +107,28 @@ Explain each step simply; do not claim a proposed interface already exists.
 > the format/interface first, then implement preview and safe confirmed import
 > in reviewable milestones. Preserve stock and existing products. Supply template,
 > tests and a calling guide for Patrick. Do not push or merge without my request.
+
+
+## Current baseline after photo delivery
+
+Start from updated main AFTER the photo correction branch merges. Inspect the
+actual schema version; families/references are schema 6 and managed photos add
+schema 7. Never hardcode an older version or reset the database to obtain a clean
+import. Read docs/backend/PRODUCT_FAMILIES.md and PRODUCT_PHOTOS.md first.
+
+- ProductService.create now returns a persisted product with an automatically
+  assigned internal reference. Do not import or overwrite that internal reference.
+  model_reference remains optional supplier/model text, not a unique barcode.
+- Support canonical `bag` along with `piece`, `kg`, `litre`. Bag contents such as
+  25 kg are not stock quantities. Importing products never records opening stock.
+- Existing families and product photo links must survive unchanged. Version 1 of
+  the CSV format can create standalone products discoverable as ungrouped items;
+  clearly label that in the template/guide. Do not guess families from names or
+  create variants with invented attributes. Agree an explicit future family/variant
+  column format with Patrick before expanding the importer.
+- Reuse product validation and reference allocation. If durable import row tracking
+  requires a repository-level transaction extension, propose it explicitly: saving
+  a product and its import mapping in separate commits does not prevent duplicates
+  after a crash. Preserve existing service callers and add migration rollback tests.
+- This assignment is backend only. Deliver the preview/result API so Patrick can
+  connect it to the chosen catalog without another parallel UI implementation.

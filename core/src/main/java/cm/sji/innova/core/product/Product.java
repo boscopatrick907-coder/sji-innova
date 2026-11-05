@@ -11,7 +11,7 @@ import java.util.UUID;
 public record Product(UUID id, UUID shopId, String name, long unitPrice,
                       Instant createdAt, Instant updatedAt, long version,
                       String modelReference, Long costPrice, String category,
-                      String unit, Map<String, String> specifications) {
+                      String unit, Map<String, String> specifications, UUID familyId, String reference) {
     public Product {
         Objects.requireNonNull(id, "id");
         Objects.requireNonNull(shopId, "shopId");
@@ -25,8 +25,8 @@ public record Product(UUID id, UUID shopId, String name, long unitPrice,
         if (version < 1) throw new IllegalArgumentException("Version must be positive");
         modelReference = optionalText(modelReference);
         category = optionalText(category);
-        if (!java.util.List.of("piece", "kg", "litre").contains(unit)) {
-            throw new IllegalArgumentException("Unit must be piece, kg or litre");
+        if (!java.util.List.of("piece", "kg", "litre", "bag").contains(unit)) {
+            throw new IllegalArgumentException("Unit must be piece, kg, litre or bag");
         }
         TreeMap<String, String> normalized = new TreeMap<>();
         Objects.requireNonNull(specifications, "specifications").forEach((key, value) -> {
@@ -40,6 +40,15 @@ public record Product(UUID id, UUID shopId, String name, long unitPrice,
             }
         });
         specifications = Collections.unmodifiableMap(normalized);
+    }
+
+    /** Compatibility for existing catalog/desktop callers. References are assigned by persistence. */
+    public Product(UUID id, UUID shopId, String name, long unitPrice,
+                   Instant createdAt, Instant updatedAt, long version,
+                   String modelReference, Long costPrice, String category, String unit,
+                   Map<String, String> specifications) {
+        this(id, shopId, name, unitPrice, createdAt, updatedAt, version,
+                modelReference, costPrice, category, unit, specifications, null, null);
     }
 
     /** Existing callers can still create a basic product. */

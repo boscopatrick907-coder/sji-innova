@@ -103,7 +103,7 @@ public final class ShellPanel extends JPanel {
         model.clear();
         model.addElement(new NavItem("products", messages.get("shell.nav.products")));
         navigation.setSelectedIndex(0);
-        statusLine.setText(messages.get("shell.devShop", context.shopId()));
+        statusLine.setText(" ");
         show(Page.MAIN);
         navigation.requestFocusInWindow();
     }
@@ -180,13 +180,37 @@ public final class ShellPanel extends JPanel {
             NavItem item = navigation.getSelectedValue();
             if (!event.getValueIsAdjusting() && item != null) screens.show(screenArea, item.id());
         });
-        JScrollPane navigationScroll = new JScrollPane(navigation);
-        navigationScroll.setPreferredSize(new java.awt.Dimension(180, 0));
-        statusLine.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
+        JPanel sidebar = new JPanel(new BorderLayout(0, 32)) {
+            @Override protected void paintComponent(java.awt.Graphics graphics) {
+                java.awt.Graphics2D g = (java.awt.Graphics2D) graphics.create();
+                g.setPaint(new java.awt.GradientPaint(0,0,new java.awt.Color(0x328767),
+                        getWidth(),getHeight(),new java.awt.Color(0x103A2D)));
+                g.fillRect(0,0,getWidth(),getHeight()); g.dispose();
+            }
+        };
+        sidebar.setBorder(BorderFactory.createEmptyBorder(30,16,24,16));
+        sidebar.setPreferredSize(new java.awt.Dimension(182,0));
+        JPanel brand = new JPanel(new java.awt.GridLayout(0,1,0,10));brand.setOpaque(false);
+        JLabel wordmark = new JLabel("cella.");wordmark.setFont(new java.awt.Font(java.awt.Font.SERIF,java.awt.Font.PLAIN,37));wordmark.setForeground(java.awt.Color.WHITE);
+        JLabel tagline = new JLabel(messages.get("shell.tagline"));tagline.setFont(tagline.getFont().deriveFont(11f));tagline.setForeground(new java.awt.Color(0xD8E7DC));
+        brand.add(wordmark);brand.add(tagline);sidebar.add(brand,BorderLayout.NORTH);
+        navigation.setOpaque(false);navigation.setForeground(java.awt.Color.WHITE);navigation.setFixedCellHeight(48);
+        navigation.setCellRenderer(new javax.swing.DefaultListCellRenderer(){
+            @Override public java.awt.Component getListCellRendererComponent(JList<?> list,Object value,int index,boolean selected,boolean focus){
+                JLabel label=(JLabel)super.getListCellRendererComponent(list,value,index,selected,focus);
+                label.setOpaque(selected);label.setBackground(new java.awt.Color(0x3B8067));label.setForeground(java.awt.Color.WHITE);
+                label.setBorder(BorderFactory.createEmptyBorder(10,12,10,8));label.setIcon(new cm.sji.innova.desktop.catalog.CatalogStyle.BoxIcon());label.setIconTextGap(12);
+                return label;
+            }
+        });
+        JPanel navHolder=new JPanel(new BorderLayout());navHolder.setOpaque(false);navHolder.add(navigation,BorderLayout.NORTH);sidebar.add(navHolder,BorderLayout.CENTER);
+        statusLine.setText(" "); // The technical development UUID stays in the data folder, not the ordinary UI.
         JPanel page = new JPanel(new BorderLayout());
-        page.add(navigationScroll, BorderLayout.WEST);
-        page.add(screenArea, BorderLayout.CENTER);
-        page.add(statusLine, BorderLayout.SOUTH);
+        page.add(sidebar, BorderLayout.WEST);
+        JPanel content=new JPanel(new BorderLayout());
+        JLabel catalogHeading=new JLabel(messages.get("shell.catalog"));catalogHeading.setBorder(BorderFactory.createEmptyBorder(18,30,18,20));catalogHeading.setOpaque(true);catalogHeading.setBackground(java.awt.Color.WHITE);
+        content.add(catalogHeading,BorderLayout.NORTH);content.add(screenArea,BorderLayout.CENTER);
+        page.add(content,BorderLayout.CENTER);
         return page;
     }
 }

@@ -11,7 +11,7 @@ import java.util.UUID;
 
 /** File-backed connections. Call initialize before using repositories. */
 public final class SqliteDatabase {
-    public static final int SCHEMA_VERSION = 5;
+    public static final int SCHEMA_VERSION = 7;
     private final Path file;
 
     public SqliteDatabase(Path file) {
@@ -34,6 +34,9 @@ public final class SqliteDatabase {
     public void initialize() throws SQLException, IOException {
         Files.createDirectories(file.getParent());
         try (Connection connection = open(); var statement = connection.createStatement()) {
+            // SQLite's documented table-rebuild procedure: disable FKs outside the transaction,
+            // check all references before commit, then re-enable before returning.
+            statement.execute("PRAGMA foreign_keys = OFF");
             // Acquire a write lock before reading the version, so concurrent startup is safe.
             statement.execute("BEGIN IMMEDIATE");
             try {
@@ -244,6 +247,20 @@ public final class SqliteDatabase {
                     statement.execute("CREATE TRIGGER audit_log_no_delete BEFORE DELETE ON audit_log BEGIN SELECT RAISE(ABORT, 'Audit log is append-only'); END");
 
                     statement.execute("PRAGMA user_version = 5");
+                    version = 5;
+                }
+                if (version == 5) {
+                    ProductFamilyMigration.apply(connection);
+                    statement.execute("PRAGMA user_version = 6");
+                    version = 6;
+                }
+                if (version == 6) {
+                    ProductPhotoMigration.apply(connection);
+                    statement.execute("PRAGMA user_version = 7");
+                    version = 7;
+                }
+                try (var violations = statement.executeQuery("PRAGMA foreign_key_check")) {
+                    if (violations.next()) throw new SQLException("Migration would leave broken foreign keys");
                 }
                 statement.execute("COMMIT");
             } catch (SQLException failure) {
@@ -251,6 +268,7 @@ public final class SqliteDatabase {
                 catch (SQLException rollbackFailure) { failure.addSuppressed(rollbackFailure); }
                 throw failure;
             }
+            statement.execute("PRAGMA foreign_keys = ON");
             statement.execute("PRAGMA journal_mode = WAL");
         }
     }

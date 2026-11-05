@@ -21,11 +21,16 @@ public final class ProductService {
     public Product create(UUID shopId, String name, long sellingPrice, String modelReference,
                           Long buyingPrice, String category, String unit,
                           java.util.Map<String, String> specifications) throws SQLException {
+        return createVariant(shopId, null, name, sellingPrice, modelReference, buyingPrice, category, unit, specifications);
+    }
+
+    public Product createVariant(UUID shopId, UUID familyId, String name, long sellingPrice,
+                                 String modelReference, Long buyingPrice, String category, String unit,
+                                 java.util.Map<String, String> specifications) throws SQLException {
         Instant now = Instant.now();
         Product product = new Product(UUID.randomUUID(), shopId, name, sellingPrice, now, now, 1,
-                modelReference, buyingPrice, category, unit, specifications);
-        repository.insert(product);
-        return product;
+                modelReference, buyingPrice, category, unit, specifications, familyId, null);
+        return repository.insertAndReturn(product);
     }
 
     public List<Product> list(UUID shopId) throws SQLException {

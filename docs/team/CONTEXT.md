@@ -18,15 +18,15 @@ Snapshot updated with cash-sale retry and rounding corrections. Verify the branc
 and current main before relying on these additions. Available on this branch:
 
 - core Product, ProductService, ProductRepository, SqliteDatabase and
-  SqliteProductRepository; schema version 5 migrates older databases.
+  SqliteProductRepository; schema version 7 migrates older databases on the photo branch; inspect current main before upgrading.
 - Product creation and shop-scoped listing; no product edit/delete yet.
 - Product fields: id/shopId UUIDs, name, unitPrice (SELLING price), optional
   costPrice (BUYING price), optional modelReference/category, unit, specifications,
   timestamps and catalog version.
-- Units are `piece`, `kg`, `litre`. Prices are nonnegative whole FCFA (`long`).
+- Units are `piece`, `bag`, `kg`, `litre`; bags, like pieces, must be whole items. Prices are nonnegative whole FCFA (`long`).
   Buying price may be unknown (`null`) or zero; those mean different things.
 - Specifications are Map<String,String>, e.g. color=blue, size=M. Each sellable
-  variant is a separate product ID. There is no parent-variant feature yet.
+  variant is a separate product ID. Families are now supported in core; read docs/backend/PRODUCT_FAMILIES.md.
 - DesktopApplication now opens the shell with a connected ProductPanel, using
   the persisted development shop ID and injected ProductService. It supports
   --smoke-test and --product-demo PATH; preserve those modes. First-load readiness
@@ -127,3 +127,7 @@ state exactly what remains for a collaborator to verify.
 PR description: user-visible behavior, service dependencies, how tested, screenshot
 when possible, and limitations. Do not mark stock, checkout, auth or cloud complete
 because there is a navigation placeholder. Stop after the assigned milestone.
+
+Photo backend: see docs/backend/PRODUCT_PHOTOS.md for managed storage and recovery.
+The desktop photo picker remains separate. Emmanuel’s current task is CSV import
+as specified in docs/team/EMMANUEL.md; do not repeat completed photo/void work.

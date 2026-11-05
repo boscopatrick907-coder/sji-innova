@@ -177,3 +177,26 @@ Identical retries keep the original sale and stock unchanged; changed checkout
 details are rejected. New fractional cash-sale lines round to nearest whole FCFA
 with halves up, then sum the rounded lines. Existing sales are not recalculated.
 See [the sales contract](docs/backend/SALES.md) before wiring checkout screens.
+
+## Product families and variants
+
+The backend now supports families such as Riz, independently stocked variants,
+automatic shop references, catalog search and whole-bag units. See the
+[family integration guide](docs/backend/PRODUCT_FAMILIES.md). Existing products
+remain accessible as ungrouped items; the current desktop has not yet been updated
+to browse families or select bags. CSV and photos remain separate work.
+
+## Family catalog desktop
+
+The desktop Products screen now browses families, variants and product details.
+Search by name, internal reference, model or characteristics; existing standalone
+products remain under “Ungrouped products”. Open a row with Enter or the Open
+button. The add form supports a new/existing optional family, bags, free categories
+and custom information. Buying price is collapsed for discretion, not protected
+by authentication. Details read real stock and movement history off the UI thread.
+Stock errors show “Unavailable”, not zero. Refresh reloads the catalog/stock.
+
+The sidebar uses the chosen green gradient and simple line icon. French and
+English bundles cover the catalog. Start with `--lang fr` for French. Photos show
+a placeholder until persistent photo storage is implemented; CSV import and
+Stock/Sales entry screens remain separate work. This change does not seed data.

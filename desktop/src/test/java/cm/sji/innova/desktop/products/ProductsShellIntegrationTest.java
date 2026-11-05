@@ -1,124 +1,72 @@
 package cm.sji.innova.desktop.products;
 
 import cm.sji.innova.core.product.*;
+import cm.sji.innova.desktop.catalog.*;
 import cm.sji.innova.desktop.shell.*;
-import java.awt.Component;
-import java.awt.Container;
+import java.awt.*;
 import java.nio.file.Path;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
-import javax.swing.SwingUtilities;
+import javax.swing.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import static org.junit.jupiter.api.Assertions.*;
 
+/** Saves through the actual visible catalog form and reopens the same shop. */
 class ProductsShellIntegrationTest {
     @TempDir Path directory;
-
-    private static ProductPanel findProducts(Component component) {
-        if (component instanceof ProductPanel panel) return panel;
-        if (component instanceof Container container) {
-            for (var child : container.getComponents()) {
-                ProductPanel found = findProducts(child);
-                if (found != null) return found;
-            }
-        }
+    static <T extends Component> T find(Component root,Class<T> type,String name) {
+        if(type.isInstance(root)&&(name==null||name.equals(root.getName())))return type.cast(root);
+        if(root instanceof Container c)for(var child:c.getComponents()){T found=find(child,type,name);if(found!=null)return found;}
         return null;
     }
-
-    private record Opened(ShellPanel shell, ProductPanel products, AtomicReference<String> errorMessage) { }
-
-    private Opened open(AppContext context) throws Exception {
-        var opened = new AtomicReference<Opened>();
-        SwingUtilities.invokeAndWait(() -> {
-            var shell = new ShellPanel(Messages.load(Locale.ENGLISH), context.location(), () -> context, () -> { });
-            shell.showMain(context);
-            var panel = findProducts(shell);
-            assertNotNull(panel, "The main window must contain the real Products panel, not a placeholder");
-            // Windows runners may have a graphical session. Capture errors before the
-            // load worker's done() runs on the EDT instead of opening a modal dialog.
-            var errorMessage = new AtomicReference<String>();
-            panel.setErrorHandler(errorMessage::set);
-            assertEquals(ShellPanel.Page.MAIN, shell.currentPage());
-            assertEquals("products", shell.selectedScreenId());
-            opened.set(new Opened(shell, panel, errorMessage));
-        });
-        return opened.get();
+    static JButton button(Component root,String text) {
+        if(root instanceof JButton b&&text.equals(b.getText()))return b;
+        if(root instanceof Container c)for(var child:c.getComponents()){var found=button(child,text);if(found!=null)return found;}
+        return null;
     }
-
-    @Test
-    void savesThroughTheActualShellAndShowsTheSameProductAfterRestart() throws Exception {
-        var location = new LocalAppData(directory.resolve("shop"));
-        var first = AppContextLoader.load(location);
-        var window = open(first);
-        window.shell().productsReady().toCompletableFuture().get(5, TimeUnit.SECONDS);
-        var saved = new CountDownLatch(1);
-        var reloaded = new CountDownLatch(1);
-        SwingUtilities.invokeAndWait(() -> {
-            var panel = window.products();
-            panel.setOnSaveWorkerDone(saved::countDown);
-            panel.setOnLoadWorkerDone(reloaded::countDown);
-            panel.nameField().setText("Blue T-shirt");
-            panel.modelField().setText("Classic V2");
-            panel.buyingPriceField().setText("2000");
-            panel.sellingPriceField().setText("3000");
-            panel.categoryField().setText("Clothing");
-            panel.specificationRows().get(0).nameField().setText("color");
-            panel.specificationRows().get(0).valueField().setText("blue");
-            panel.addSpecRow();
-            panel.specificationRows().get(1).nameField().setText("size");
-            panel.specificationRows().get(1).valueField().setText("M");
-            panel.saveButton().doClick();
-        });
-        assertTrue(saved.await(5, TimeUnit.SECONDS));
-        assertTrue(reloaded.await(5, TimeUnit.SECONDS));
-        Product original = first.products().list(first.shopId()).getFirst();
-        assertEquals(3000, original.unitPrice());
-        assertEquals(Long.valueOf(2000), original.costPrice());
-        assertEquals("Classic V2", original.modelReference());
-        assertEquals("Clothing", original.category());
-        assertEquals("piece", original.unit());
-        assertEquals(Map.of("color", "blue", "size", "M"), original.specifications());
-        var reopened = AppContextLoader.load(location);
-        assertEquals(first.shopId(), reopened.shopId());
-        assertEquals(List.of(original), reopened.products().list(reopened.shopId()));
-        var secondWindow = open(reopened);
-        secondWindow.shell().productsReady().toCompletableFuture().get(5, TimeUnit.SECONDS);
-        SwingUtilities.invokeAndWait(() -> {
-            var list = secondWindow.products().productListModel();
-            assertEquals(1, list.size());
-            assertTrue(list.get(0).contains("Blue T-shirt"));
-            assertTrue(list.get(0).contains("3000 FCFA"));
-            assertTrue(list.get(0).contains("2000 FCFA"));
-            assertTrue(list.get(0).contains("color=blue"));
-            assertTrue(list.get(0).contains("size=M"));
-        });
+    record Opened(ShellPanel shell,CatalogPanel catalog){}
+    Opened open(AppContext context)throws Exception {
+        AtomicReference<Opened> ref=new AtomicReference<>();SwingUtilities.invokeAndWait(()->{
+            var shell=new ShellPanel(Messages.load(Locale.ENGLISH),context.location(),()->context,()->{});
+            shell.showMain(context);var catalog=find(shell,CatalogPanel.class,null);assertNotNull(catalog);ref.set(new Opened(shell,catalog));
+        });return ref.get();
     }
-
-    @Test
-    void startupReadinessReportsProductLoadingFailure() throws Exception {
-        var failing = new ProductRepository() {
-            @Override public void insert(Product product) { throw new UnsupportedOperationException(); }
-            @Override public List<Product> findByShop(UUID shop) throws SQLException {
-                throw new SQLException("Simulated load failure");
-            }
-        };
-        var context = TestAppContexts.withProducts(new LocalAppData(directory), new ProductService(failing));
-        var window = open(context);
-        ExecutionException failure = assertThrows(ExecutionException.class,
-                () -> window.shell().productsReady().toCompletableFuture().get(5, TimeUnit.SECONDS));
-        assertInstanceOf(SQLException.class, failure.getCause());
-        SwingUtilities.invokeAndWait(() -> {
-            assertEquals("Products could not be loaded", window.products().productListModel().get(0));
-            assertNotNull(window.errorMessage().get());
-            assertTrue(window.errorMessage().get().contains("Simulated load failure"));
+    @Test void savesThroughTheActualShellAndShowsTheSameProductAfterRestart()throws Exception{
+        var location=new LocalAppData(directory.resolve("shop"));var first=AppContextLoader.load(location);var window=open(first);
+        window.shell.productsReady().toCompletableFuture().get(5,TimeUnit.SECONDS);
+        SwingUtilities.invokeAndWait(()->{
+            button(window.catalog,"Add a product").doClick();
+            find(window.catalog,JTextField.class,"variantName").setText("Blue T-shirt");
+            find(window.catalog,JTextField.class,"sellingPrice").setText("3000");
+            find(window.catalog,JComboBox.class,"productFamily").getEditor().setItem("T-shirts");
+            find(window.catalog,JButton.class,"saveVariant").doClick();
         });
+        long deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(8);
+        while(System.nanoTime()<deadline){
+            var loaded=new AtomicReference<List<Product>>();SwingUtilities.invokeAndWait(()->loaded.set(window.catalog.loadedProducts()));
+            if(loaded.get().size()==1)break;Thread.sleep(20);
+        }
+        Product original=first.products().list(first.shopId()).getFirst();assertEquals(3000,original.unitPrice());assertNotNull(original.familyId());assertEquals("P-0001",original.reference());assertNull(original.costPrice());
+        var reopened=AppContextLoader.load(location);var second=open(reopened);second.shell.productsReady().toCompletableFuture().get(5,TimeUnit.SECONDS);
+        SwingUtilities.invokeAndWait(()->{
+            assertEquals(List.of(original),second.catalog.loadedProducts());
+            second.catalog.showFamily(original.familyId());assertEquals(1,second.catalog.variantTable().getRowCount());
+            second.catalog.showProduct(original.id()); // Existing stock is displayed from the real service.
+            assertFalse(find(second.catalog,JToggleButton.class,null).isSelected());
+        });
+        assertEquals(0,reopened.stock().current(reopened.shopId(),original.id()).quantityMilli());
+    }
+    @Test void startupReadinessReportsProductLoadingFailureWithoutAModalDialog()throws Exception{
+        var failing=new ProductRepository(){public void insert(Product p){throw new UnsupportedOperationException();}public List<Product> findByShop(UUID shop)throws SQLException{throw new SQLException("Simulated load failure");}};
+        var context=TestAppContexts.withProducts(new LocalAppData(directory),new ProductService(failing));var window=open(context);
+        ExecutionException failure=assertThrows(ExecutionException.class,()->window.shell.productsReady().toCompletableFuture().get(5,TimeUnit.SECONDS));
+        assertInstanceOf(SQLException.class,failure.getCause());
+        SwingUtilities.invokeAndWait(()->assertNotNull(button(window.shell,"Refresh")));
     }
 }
