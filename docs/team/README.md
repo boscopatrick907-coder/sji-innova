@@ -17,7 +17,7 @@ Open the repository root in your tool, then paste the matching prompt.
 
 **Willy**
 
-> Read docs/team/CONTEXT.md and docs/team/WILLY.md, then follow my current assignment.
+> Read docs/team/CONTEXT.md and docs/team/WILLY_NEXT_STOCK.md, then follow my current assignment.
 > Inspect the actual repository before editing. Explain the steps
 > in simple language and implement only my assigned milestone. Show what you
 > tested and the remaining limitations. Do not push or merge without my request.
@@ -75,7 +75,7 @@ normal GitHub sign-in when needed; do not put credentials in code or chat.
 | Person | Owns | Current brief |
 | --- | --- | --- |
 | Patrick | Products design and implementation | Chosen family catalog is merged in PR #24 |
-| Willy | Stock screen | [WILLY.md](WILLY.md) |
+| Willy | Receipt restart recovery, then corrections and thresholds | [WILLY_NEXT_STOCK.md](WILLY_NEXT_STOCK.md) |
 | Charles | Visible cash checkout and sales history | [CHARLES.md](CHARLES.md) |
 | Pascal | French/English resources and cross-screen QA | [PASCAL.md](PASCAL.md) |
 | Emmanuel | CSV import next; photo backend delivered with review fixes | [Ordered backend briefs](EMMANUEL.md) |
@@ -89,7 +89,7 @@ visual proposals, not an application implementation.
 
 1. Shared services and device context are merged (PR #22); Charles now builds
    the visible Ventes page. See his updated brief; do not repeat setup.
-2. Willy builds Stock in his package; Charles builds Sales in his package. Each
+2. Willy extends the delivered Stock receipt screen; Charles builds Sales. Each
    screen can develop against injected existing services while wiring is reviewed.
 3. Shared wiring is available. Merge Stock receipt/history so the team can prepare
    test stock, then cash Sales. Each PR must compile independently. Charles owns

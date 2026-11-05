@@ -57,6 +57,9 @@ public final class ShellPanel extends JPanel {
     private final JLabel statusLine = new JLabel(" ");
     private Page currentPage;
     private CompletionStage<Void> productsReady;
+    private AppContext activeContext;
+    private cm.sji.innova.desktop.catalog.CatalogPanel catalog;
+    private cm.sji.innova.desktop.stock.StockPanel stockPanel;
 
     public ShellPanel(Messages messages, LocalAppData location, Callable<AppContext> loader, Runnable onExit) {
         super(new BorderLayout());
@@ -96,12 +99,16 @@ public final class ShellPanel extends JPanel {
 
     public void showMain(AppContext context) {
         screenArea.removeAll();
+        activeContext = context;
+        stockPanel = null;
         var products = ProductsSlot.create(context, messages);
+        catalog = products;
         productsReady = products.initialLoadCompletion();
         screenArea.add(products, "products");
         DefaultListModel<NavItem> model = (DefaultListModel<NavItem>) navigation.getModel();
         model.clear();
         model.addElement(new NavItem("products", messages.get("shell.nav.products")));
+        model.addElement(new NavItem("stock", messages.get("shell.nav.stock")));
         navigation.setSelectedIndex(0);
         statusLine.setText(" ");
         show(Page.MAIN);
@@ -131,6 +138,16 @@ public final class ShellPanel extends JPanel {
     public String selectedScreenId() {
         NavItem item = navigation.getSelectedValue();
         return item == null ? null : item.id();
+    }
+
+    /** Select an implemented screen without exposing the navigation model. Call on the EDT. */
+    public void selectScreen(String id) {
+        for (int i = 0; i < navigation.getModel().getSize(); i++) {
+            if (navigation.getModel().getElementAt(i).id().equals(id)) {
+                navigation.setSelectedIndex(i); return;
+            }
+        }
+        throw new IllegalArgumentException("Unknown screen: " + id);
     }
 
     private void show(Page page) {
@@ -178,7 +195,18 @@ public final class ShellPanel extends JPanel {
         navigation.getAccessibleContext().setAccessibleName(messages.get("shell.nav.accessibleName"));
         navigation.addListSelectionListener(event -> {
             NavItem item = navigation.getSelectedValue();
-            if (!event.getValueIsAdjusting() && item != null) screens.show(screenArea, item.id());
+            if (!event.getValueIsAdjusting() && item != null) {
+                if ("stock".equals(item.id())) {
+                    if (stockPanel == null) {
+                        stockPanel = new cm.sji.innova.desktop.stock.StockPanel(activeContext.stock(),
+                                activeContext.products(), activeContext.shopId(), activeContext.deviceId(), messages.bundle());
+                        screenArea.add(stockPanel, "stock");
+                    } else stockPanel.loadProductsAndStock();
+                } else if ("products".equals(item.id()) && catalog != null && productsReady.toCompletableFuture().isDone()) {
+                    catalog.refreshIfBrowsing();
+                }
+                screens.show(screenArea, item.id());
+            }
         });
         JPanel sidebar = new JPanel(new BorderLayout(0, 32)) {
             @Override protected void paintComponent(java.awt.Graphics graphics) {
