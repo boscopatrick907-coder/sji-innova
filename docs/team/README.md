@@ -70,32 +70,28 @@ On Linux/macOS use `./mvnw` instead. The README's `/workspace/.setup` paths belo
 only to the prepared cloud machine; do not copy them onto a friend's PC. Use
 normal GitHub sign-in when needed; do not put credentials in code or chat.
 
-## Current assignments — 5 November 2026
+## Current assignments — 6 November 2026
 
 | Person | Owns | Current brief |
 | --- | --- | --- |
 | Patrick | Products design and implementation | Chosen family catalog is merged in PR #24 |
 | Willy | Receipt restart recovery, then corrections and thresholds | [WILLY_NEXT_STOCK.md](WILLY_NEXT_STOCK.md) |
-| Charles | Visible cash checkout and sales history | [CHARLES.md](CHARLES.md) |
+| Charles | Read-only sales history and sale details | [CHARLES.md](CHARLES.md) |
 | Pascal | French/English resources and cross-screen QA | [PASCAL.md](PASCAL.md) |
-| Emmanuel | CSV import next; photo backend delivered with review fixes | [Ordered backend briefs](EMMANUEL.md) |
+| Emmanuel | CSV and photo backends delivered; coordinate new work with Patrick | [Ordered backend briefs](EMMANUEL.md) |
 
-The old Charles/Willy assignments have been replaced in place: these are the
-only current briefs for them. Products and shell already work on main. Photo
-storage and stock/sales UI integration remain new work. `docs/design/` contains
-visual proposals, not an application implementation.
+The current briefs above replace earlier assignments. Products, CSV/photo controls,
+Stock receipt/history and cash checkout are merged (through PR #30). Do not repeat
+those implementations. docs/design/ contains visual references; current Java code
+is the actual implementation.
 
 ## Coordination and merge order
 
-1. Shared services and device context are merged (PR #22); Charles now builds
-   the visible Ventes page. See his updated brief; do not repeat setup.
-2. Willy extends the delivered Stock receipt screen; Charles builds Sales. Each
-   screen can develop against injected existing services while wiring is reviewed.
-3. Shared wiring is available. Merge Stock receipt/history so the team can prepare
-   test stock, then cash Sales. Each PR must compile independently. Charles owns
-   shared shell edits; coordinate constructor/translation changes before coding.
-4. Patrick’s chosen Products catalog is merged (PR #24); use its visual tokens.
-   Review each PR before merging; test the combined application afterward.
+1. Willy delivers durable receipt recovery using his approved injection contract.
+2. Charles delivers read-only sales history and details, preserving the basket.
+3. Willy adds stock corrections and thresholds in later small PRs after recovery.
+4. Patrick coordinates shared files, combined testing, backups and pilot preparation.
+   Review each PR before merging and test the combined application afterward.
 
 Historical review evidence remains under docs/reviews/. It describes older commits,
 not current assignments. Do not follow old correction checklists as new work

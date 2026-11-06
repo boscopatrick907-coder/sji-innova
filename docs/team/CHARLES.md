@@ -1,141 +1,105 @@
-# Charles — build the visible cash Sales screen
+# Charles — Sales history and sale details
 
-Current assignment: 5 November 2026. Shared setup is merged; start with checkout.
-Patrick chooses and implements Products. Willy owns Stock. Keep the existing
-mockups as design references; do not resume a competing Products implementation.
+Current assignment: 6 November 2026. Cash checkout is delivered and merged in
+PR #30, including the follow-up pending-file ownership fix. Do not rebuild the
+basket, shared services, recovery store or Products screen.
+
+## Goal in plain language
+
+A cashier can find a sale made earlier, open it, and see exactly what was sold,
+the quantities, charged prices, total and whether the sale was later voided.
+Restarting Cella must not lose the history. This is a read-only history milestone.
 
 ## Start
 
-Read README.md, docs/team/CONTEXT.md, docs/team/README.md and
-[the sales service contract](../backend/SALES.md). Inspect SaleService,
-SaleItemRequest, CashSaleRequest, AppContext and AppContextLoader on current main.
-With a clean checkout on updated main, create a fresh branch such as `desktop/cash-checkout-ui`.
-The old `desktop/cash-sales-screen` branch has already merged; do not build on
-its outdated tip or reset unfinished work.
-Own `desktop/src/main/java/cm/sji/innova/desktop/sales/`, related tests and shared
-shell/startup/navigation files. Do not modify Patrick's `desktop/catalog/` classes or legacy ProductPanel, or Willy's
-stock package without coordination.
+Preserve unfinished work, update main and create `desktop/sales-history`.
+Read README.md, docs/team/CONTEXT.md, docs/desktop/SALES_SCREEN.md and
+[the backend sales contract](../backend/SALES.md). Inspect SaleService,
+SaleState, SaleItem and the existing SalesPanel/Checkout before editing.
 
-## Already completed — do not repeat
+Own desktop/sales/ and its tests. Patrick owns desktop/catalog/ and Willy owns
+stock/. Coordinate shared ShellPanel changes before editing. Preserve the green
+sidebar, cash-checkout workflow, stable context and existing navigation.
 
-PR #21 added startup error logging. PR #22 merged the shared StockService and
-SaleService wiring plus a stable device UUID. AppContext now supplies products(),
-stock(), sales(), shopId() and deviceId() on the same initialized data file.
-Reuse them. Do not recreate device IDs, repositories or startup/bootstrap.
+## Milestone 1 — browse persisted sales
 
-PR #23 added product families, automatic references and canonical `bag` units.
-PR #24 connected the chosen family catalog design to the Java shell. Read
-[the family contract](../backend/PRODUCT_FAMILIES.md) and
-[the catalog implementation guide](../desktop/CATALOG.md).
+- Add an obvious “Historique des ventes” entry inside Ventes, with a clear return
+  to the cashier basket. Browsing must not clear, submit or alter an unfinished
+  basket, confirmation or uncertain checkout. Do not silently abandon pending
+  recovery; disable history temporarily during an active write if needed.
+- Load shop-scoped history through SaleService.listSaleStates off the Swing EDT.
+  Display receipt reference, date/time, total in whole FCFA and effective status.
+  Query state, not only raw Sale: immutable original sales also include voided ones.
+- Show recent sales first with a deterministic tie-breaker, without modifying
+  service history. Search by receipt reference; filter paid/voided and a date range.
+- Keep stored timestamps unchanged. Display dates in a documented local time zone
+  (shop pilot: Africa/Douala), and apply day/date filters consistently in that zone.
+- Give loading, empty, no-results, error/retry and refresh states. A database error
+  must not look like an empty sales list. Ignore superseded query results.
+- Preserve search/filter/selection when returning from details. Use French/English
+  bundles; status should be understandable text, not color alone.
 
-## Your next visible delivery — a working Ventes page
+## Milestone 2 — inspect one sale
 
-Deliver SalesPanel and wire it into ShellPanel's navigation. A background service
-alone is not completion: Patrick must see and use “Ventes” in the running app.
-Use constructor injection from AppContext; the proposed contract is:
-
-```java
-new SalesPanel(context.sales(), context.products(), context.stock(),
-        context.shopId(), context.deviceId(), messages.bundle())
-```
-
-This is a proposed new panel, not a class already present. Include the navigation
-entry only when the actual panel exists. Preserve the Products entry and current
-catalog, green sidebar and startup behavior. Coordinate ShellPanel edits with
-Willy if his Stock PR is ready. No need to wait for his screen to develop checkout:
-prepare stock through StockService in disposable test setup, never normal startup.
-
-## Suggested PR sequence
-
-1. Visible checkout: product search, basket, exact totals, confirmation, safe
-   submission/retry recovery and navigation integration. A PR which enables real
-   sales must include the durable pending-request safeguards below.
-2. Persisted sales history/detail, if that keeps the first PR reviewable. Track it
-   explicitly as outstanding; the complete assignment includes both deliveries.
-
-## Milestone 1 — offline cash checkout
-
-- Search/select sellable variants and build a basket. Match name, internal reference,
-  family/model and characteristics so similar rice bags are distinguishable. Show
-  reference, family/variant label and unit; a family itself cannot be sold.
-- Add, change quantity and remove lines. Repeated addition of the same variant
-  should have predictable behavior; keep submitted line structure fixed on retry.
-- Show unit, quantity, selling price, each line total and total in FCFA. Buying
-  prices must not appear in checkout. Show stock for guidance; backend validation
-  remains authoritative if another operation changes it.
-- Use exact integer-thousandths quantities and HALF_UP whole-FCFA rounding PER
-  LINE, then sum. Avoid floating point and check overflow. No discounts, custom
-  price override or tax feature in this milestone.
-- Confirm cash payment and call SaleService.makeCashSale once. Do NOT call
-  StockService.adjust separately: the sale service atomically saves/deducts stock.
-- Allocate one sale UUID and receipt reference per logical checkout. Preserve
-  the full submitted request, IDs and reference while retrying an uncertain result;
-  disable double-clicks. Never generate a fresh sale just because a timeout occurs.
-  Keep pending checkout retry details across restart, without automatically
-  submitting on startup; test recovery. Document the local pending-request format and coordinate any missing contract
-  with Patrick (Emmanuel is currently unavailable). Do not block on Emmanuel or
-  alter core/introduce a second stock ledger without review. If pending state
-  cannot be persisted safely, block confirmation rather than submit an untracked
-  sale. Preserve saved data and show clear recovery options for damaged state.
-- Preserve the basket on errors. Clearly resolve an uncertain request before
-  discarding/changing it. Clear only after confirmed success; show the persisted
-  receipt reference and totals. Ensure receipt references remain unique on restart.
-- Refresh stock after success. Do not silently reprice an already submitted retry.
-- Provide a simple persisted sales list/detail using existing SaleService queries,
-  showing effective PAID/VOIDED state where applicable. No void action yet.
+- Open a selected receipt with Enter, double-click or a labelled Open action.
+- Use persisted sale-item snapshots: product name, unit, quantity, charged unit
+  price and line subtotal. Never rebuild an old receipt using today's catalog
+  price/name or recalculate its saved total. A changed/grouped product must not
+  change what the historical sale displays.
+- Show receipt, sale date, cash payment, saved total and PAID/VOIDED effective state.
+  Buying prices must not appear. Piece/bag quantities are whole; kg/litre can be
+  fractional. Render quantities from integer thousandths, never float arithmetic.
+- For a voided sale, show its recorded reason/date from the event state; clearly
+  identify it as cancelled. Do not erase the original sale or label it paid.
+- Add a clear back action to the filtered list, then back to the preserved basket.
+  Read-only browsing must not change stock, sale events or pending checkout files.
 
 ## Acceptance Patrick can demonstrate
 
-- Launch the current app; the green sidebar includes working Products and Ventes.
-- Open Ventes, search for a precise variant/reference, add it, change quantity,
-  remove a line, and see understandable FCFA totals. No barcode is required.
-- Start with 10 pieces, sell 2, see 8 and one recorded sale, restart,
-  and see the same sale and balance. Repeated clicks/identical retry must not create
-  a second sale. Insufficient stock or a storage failure leaves a usable basket and
-  no partial sale. Test fractional rounding, overflow and uncertain-retry recovery.
+1. Prepare disposable stock, complete two cash sales, restart Cella and find both
+   in history with their exact references and totals.
+2. Search one reference, open its detail and verify every saved line, fractional
+   rounding result and total against the service result.
+3. Create a void through the existing backend in test setup: show that sale as
+   VOIDED with its recorded reason, while retaining the original lines. Stock
+   and audit/history remain unchanged by opening the screen.
+4. Change a catalog price/name in controlled test setup: historical details still
+   show the original saved values. Do not implement product editing just for this.
+5. Preserve a nonempty editable basket across history/detail/back navigation.
+   Preserve an uncertain checkout's request/ID and recovery safeguards too.
+6. Cover date-boundary filtering in Africa/Douala, both status filters, wrong-shop
+   isolation, empty/error/retry and stale background query completion.
 
-## Boundaries
+## Boundaries and safety
 
-No Products redesign, stock receipt/correction form, receipt printing, credit,
-Mobile Money, cloud sync, authentication or sale-void UI. Audited voids already
-exist in core but are a separate future screen task. Coordinate missing service support with Patrick while Emmanuel is unavailable; do not patch SQL from desktop code. Pascal coordinates bundles.
+No void button, partial return, refund, receipt printing, tax, discount, credit,
+Mobile Money, authentication or cloud sync in this milestone. Voiding UI is a
+separate later task with explicit review. Do not add SQL to event handlers, change
+core/schema or replace the service. Describe a missing contract to Patrick first.
 
-## Shared implementation rules
-
-Use Java 21, Swing and FlatLaf. Inspect actual main and the service signatures;
-reuse the existing SQLite database and stable shop identity. No SQL in panels,
-no replacement repositories, schema changes, demo seeds or database deletion.
-Run DB work off the EDT with SwingWorker; update controls on the EDT. Preserve
-input on error, distinguish loading/error from zero, disable repeated submissions
-and ignore stale background responses. No authentication is implemented.
-
-Use exact quantities: 1000 internal units = 1 piece/bag/kg/litre; pieces and bags must be whole,
-kg/litre allow at most three decimal places. Parse without floating point, reject
-overflow and invalid values, and format French/English display labels separately
-from canonical unit codes. Prices are whole FCFA; use the service's authoritative
-results. Coordinate translation keys with Pascal; do not overwrite other people's
-bundle edits. Match Patrick's chosen visual tokens without redesigning Products.
+Keep the corrected checkout lease and owner checks from PR #30: another window
+must not overwrite or clear a different pending sale. Inspect the corrected code,
+not your old feature branch. Coordinate receipt-store injection with Willy when
+he touches shared navigation. Pascal can help translation and hands-on Windows QA.
 
 ## Verification and delivery
 
-Run the full wrapper clean verify and packaged headless smoke test from README.md.
-Use temporary SQLite databases in meaningful persistence/integration tests. Keep
-existing startup readiness and recovery checks working. Test the actual Windows
-window for keyboard flow, resize, loading, failure/retry and reopen persistence;
-report untested GUI checks honestly. Never use a live shop database for testing.
+Run the full Java 21 wrapper clean verify and packaged headless startup from
+README.md. Add meaningful temporary-SQLite integration/UI tests for the acceptance
+cases; no live shop data. Test keyboard navigation, resize, labels and save/reopen
+in the actual Windows window, reporting untested GUI checks separately.
 
-Deliver one reviewable PR per milestone with screenshots, branch/commit, tests,
-known limitations and exact manual steps. Never push directly to main, force-push
-or merge your own PR automatically. Push only when your human requests it.
-Explain each step in simple language so the developer can explain the code.
+Deliver a small reviewed PR per milestone with screenshots, branch/commit, exact
+checks and remaining limitations. Preserve other people's commits. Do not push,
+merge, force-push or change settings without your human's request. Explain each
+step simply so Charles can explain the result to the team.
 
 ## Prompt for your AI editor
 
-> Read docs/team/CHARLES.md, docs/team/CONTEXT.md and docs/backend/SALES.md.
-> Shared service/device wiring is already merged in PR #22. My next task is a
-> visible Ventes/checkout screen and its real navigation entry, followed by sales
-> history. Read the current catalog/family guides; support bags and exact variants.
-> Work on a new branch from current main. Explain each step simply. Implement the
-> cash checkout and durable retry safeguards using existing services; preserve
-> Patrick's catalog and all startup safety. Show screenshots, tests and limitations.
-> Do not push or merge without my request.
+> Read docs/team/CHARLES.md, docs/team/CONTEXT.md, docs/desktop/SALES_SCREEN.md and
+> docs/backend/SALES.md. Cash checkout and its ownership fix are merged in PR #30.
+> My next task is read-only sales history and details on desktop/sales-history.
+> Inspect current main; preserve checkout, its pending-file protections and the
+> basket when switching views. Use saved sale snapshots and effective void status.
+> Explain each step simply, add meaningful tests and screenshots, and report
+> limitations. Do not add void actions or push/merge without my request.

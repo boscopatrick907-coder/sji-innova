@@ -1,6 +1,6 @@
 # Willy — next Stock milestones
 
-Updated 5 November 2026. This replaces the old WILLY.md assignment; do not restart
+Updated 6 November 2026. This replaces the old WILLY.md assignment; do not restart
 Products or rebuild the receipt panel. Your original commit `739798f` is preserved
 in PR #27, followed by review corrections and current-main integration.
 
@@ -12,9 +12,9 @@ bags before saving, keep the selected/pending product across refresh, distinguis
 known validation rejections from uncertain saves, and retain signed corrections
 in history. French/English labels and variant references are included.
 
-After PR #27 merges, update main with a clean working tree. Preserve uncommitted
+PR #27 is merged. Update main with a clean working tree. Preserve uncommitted
 work first. Create a NEW branch such as `desktop/stock-recovery`; do not reset or
-force-push the old branch. Read README.md, CONTEXT.md, docs/backend/STOCK.md,
+force-push the old branch. Read README.md, docs/team/CONTEXT.md, docs/backend/STOCK.md,
 docs/backend/PRODUCT_FAMILIES.md and the actual code. Java 21 is required.
 
 ## Next milestone A — receipt recovery across restart
@@ -23,9 +23,13 @@ Current retry IDs/details live in the StockPanel instance only. They survive an
 in-session storage error, but not closing/restarting the app. Complete this before
 using uncertain retries in a real shop.
 
-1. Agree a small pending-operation store under the configured app data directory
-   with Patrick/Charles. Inject it; never create another shop/database or guess a
-   different data folder. Existing panel constructor callers must still compile.
+1. Your proposed design is approved: implement PendingReceiptStore and
+   FilePendingReceiptStore under desktop/stock/. Use pending-stock-receipt.properties
+   inside context.location().directory(). Create/inject the lightweight store in
+   ShellPanel's StockPanel construction path, not AppContextLoader. Preserve the
+   existing public constructor; normal app launch must use the persistent store.
+   Construction on the EDT must perform no I/O: initialize/read/write in workers.
+   Do not create another shop/database or change the configured data folder.
 2. Persist the immutable operation UUID, shop/product/device IDs, canonical unit,
    quantity and normalized reason BEFORE calling StockService.receive. If this
    record cannot be saved, do not submit an untracked receipt.
@@ -35,7 +39,10 @@ using uncertain retries in a real shop.
 4. Keep the durable record until service confirmation. If confirmation succeeded
    but removing pending state failed, retry must reconcile the same ID without
    another stock movement. Make file replacement crash-safe and coordinate access
-   if two windows/processes can open the same shop.
+   across service instances and JVM processes sharing the same local data folder.
+   Use a per-directory JVM lock plus an OS file lease. Never overwrite another
+   pending operation or clear a file without checking its operation UUID. Keep
+   the lock file in place; a competing writer shows a clear blocked state.
 5. Do not allow a user to discard an uncertain request and silently duplicate it.
    Known no-commit validation rejections can return to editable input; storage
    uncertainty must retain the original request until resolved.
@@ -83,7 +90,7 @@ show their unique references so similar rice bags remain distinguishable.
 
 No product form, photos, CSV import, authentication, cloud sync, sales, supplier
 purchasing or core/schema rewrite in these milestones. If a service gap appears,
-describe it to Patrick before changing core. Emmanuel's next assignment is CSV.
+describe it to Patrick before changing core. CSV and photo backends are already delivered.
 
 Run the full wrapper clean verify and packaged headless smoke check from README.
 Add meaningful persistence/recovery tests with disposable data. Verify keyboard,
@@ -93,10 +100,23 @@ and limitations in each small PR. Do not push/merge without your human's request
 
 ## Prompt for your AI editor
 
-> Read docs/team/WILLY_NEXT_STOCK.md, CONTEXT.md and docs/backend/STOCK.md.
+> Read docs/team/WILLY_NEXT_STOCK.md, docs/team/CONTEXT.md and docs/backend/STOCK.md.
 > My receipt screen and its review fixes are delivered in PR #27; do not repeat
-> that work. Start from updated main after it merges. Explain each step simply,
-> propose the durable pending-receipt contract with Patrick/Charles, then implement
-> milestone A with crash/retry tests. Corrections and thresholds follow in separate
+> that work. Start from updated main after this documentation PR merges. Explain
+> each step simply and implement the approved milestone A contract with crash/retry tests. The store is injected
+> in ShellPanel, with all file I/O off the EDT. Corrections and thresholds follow in separate
 > small PRs. Preserve existing catalog/Sales work and never touch live shop data.
 > Show tests and limitations; do not push or merge without my request.
+
+
+## Current examples to inspect, not blindly copy
+
+CSV PendingImportStore shows request/snapshot persistence; Sales
+PendingCheckoutStore/CheckoutFileLease show ownership-aware cleanup and process
+coordination after PR #30. Use the current corrected versions. Preserve the receipt
+operation UUID, shop/product/device IDs, canonical unit, quantity and normalized
+reason exactly. Recovered receipts never submit automatically. Wrong-shop/device
+and damaged files must block submission and remain available for recovery.
+
+Deliver milestone A first; B and C are separate reviewed PRs afterward. Existing
+receipt/history navigation and French/English labels must continue working.
