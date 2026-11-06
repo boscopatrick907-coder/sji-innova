@@ -462,10 +462,14 @@ class SalesPanelTest {
 
     @Test
     void ifTheDetailsCannotBeSavedNothingIsSentAndTheBasketStays() throws Exception {
-        Path notAFolder = Files.writeString(directory.resolve("a-file"), "x");
-        store = new PendingCheckoutStore(notAFolder.resolve("pending-checkout.txt"));
+        Path folder = Files.createDirectory(directory.resolve("checkout-folder"));
+        store = new PendingCheckoutStore(folder.resolve("pending-checkout.txt"));
         SalesPanel panel = open();
         addToBasket(panel, "rice", "2");
+        // Fail storage after normal recovery/opening, as if the target became unavailable.
+        Files.deleteIfExists(folder.resolve("pending-checkout.txt.lock"));
+        Files.delete(folder);
+        Files.writeString(folder,"not a directory anymore");
         confirmCash(panel);
 
         assertEquals(0, saleRepository.calls.get());

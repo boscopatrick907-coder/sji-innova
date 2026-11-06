@@ -255,6 +255,11 @@ public final class SalesPanel extends JPanel {
     private void applyRecovery(Recovery recovery) {
         switch (recovery) {
             case Recovery.Nothing nothing -> state = PageState.EDITING;
+            case Recovery.Busy busy -> {
+                state = PageState.CHECKING;
+                needsRecovery = true;
+                showNotice(t("sales.busy"), true);
+            }
             case Recovery.AlreadySaved saved -> {
                 state = PageState.EDITING;
                 showSale("sales.recovered.saved", saved.sale());
@@ -389,7 +394,11 @@ public final class SalesPanel extends JPanel {
             case Outcome.NotSent notSent -> {
                 LOG.log(Level.WARNING, "Could not save the unfinished sale file", notSent.cause());
                 state = PageState.EDITING;
-                showNotice(t("sales.error.notSent"), true);
+                if (notSent.cause() instanceof PendingCheckoutStore.ConflictException
+                        || notSent.cause() instanceof PendingCheckoutStore.BusyException) needsRecovery = true;
+                showNotice(t(notSent.cause() instanceof PendingCheckoutStore.ConflictException
+                        || notSent.cause() instanceof PendingCheckoutStore.BusyException
+                        ? "sales.busy" : "sales.error.notSent"), true);
             }
             case Outcome.Rejected rejected -> {
                 LOG.log(Level.INFO, rejected.cause(), () -> "Sale refused: " + sent.receiptNumber());

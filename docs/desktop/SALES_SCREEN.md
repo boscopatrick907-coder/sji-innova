@@ -88,8 +88,10 @@ this shop's all count as damage. A future format must use a new `format` number.
 - Sales history and detail are the next delivery; for now, saved sales are checked through tests.
 - A basket keeps the price from when the line was added. Core has no product edit yet, so a price
   cannot change while a basket is open. When an edit screen arrives, this needs another look.
-- Two copies of Cella open on the same data folder would share one pending file. Cella does not prevent
-  this yet. The database still cannot record a sale ID twice.
+- Checkout recovery is coordinated across copies of Cella using the same local data folder:
+  a JVM-local lock plus an OS file lease covers recovery, submission and confirmation.
+  A competing active checkout is blocked; a different pending request cannot be overwritten.
+  This is local-filesystem coordination, not multi-device/cloud synchronization.
 - Stock in the screen is guidance. The database makes the final decision when the sale is saved.
 - No void, receipt printing, Mobile Money, credit, discount, tax, login or sync, by design.
 
@@ -108,3 +110,34 @@ Everything is in `desktop/src/main/java/cm/sji/innova/desktop/sales/`.
 
 `shell/SalesSlot` builds the panel from `AppContext`. The panel reads nothing until it is opened, and it
 reads products and stock again each time it is opened.
+
+
+## Review correction — pending checkout ownership
+
+Charles's original commits (through `a99b36f`) are retained. Follow-up fixes add
+CheckoutFileLease: a per-path JVM lock plus an OS file lock on
+`pending-checkout.txt.lock`. Lease acquisition is nonblocking; another active
+writer shows a translated recovery message rather than freezing Swing. File and
+SQLite calls remain off the EDT. Keep the lock file in place while Cella runs.
+Nested store operations reuse the current thread's lease.
+
+The lease covers the complete Checkout operation, including the database check,
+send and recovery-file cleanup. Saves use uniquely named temporary files and
+refuse to replace an existing different request. Identical pending saves are a
+no-op. Retry/discard verify the original request first; cleanup uses an expected
+sale ID, so a stale window cannot remove a newer pending checkout. Replaying an
+already saved sale without a pending file reads its saved record without sending
+an untracked request. A readable valid request cannot be moved aside by a stale
+“damaged file” action.
+
+A second window may preserve an unsent basket while another sale is unresolved.
+Refresh checks recovery again. Database idempotency and file ownership work
+together: no window is allowed to erase the identity needed for safe restart.
+Corrupt/unavailable storage remains blocked for recovery. A failed recovery-file
+write never submits a new sale.
+
+Regression coverage includes conflicting pending saves, stale clear/discard,
+active submissions across service instances, a separate JVM holding the OS lock,
+restart/response-loss paths and storage becoming unavailable after opening Sales.
+Original single-sale, quantity, rounding, search and GUI integration tests remain.
+Real Windows GUI testing is still separate from these headless checks.

@@ -46,6 +46,8 @@ public final class Checkout {
         record Unfinished(PendingCheckout pending) implements Recovery { }
         /** The file cannot be used. It was left untouched. */
         record Damaged(Path file, Exception cause) implements Recovery { }
+        /** Another process is actively confirming this data folder's checkout. */
+        record Busy() implements Recovery { }
     }
 
     private final SaleService sales;
@@ -60,28 +62,42 @@ public final class Checkout {
 
     /** First attempt: saves the details, then sends. If saving fails, nothing is sent. */
     public Outcome submit(PendingCheckout pending) {
-        try {
+        Outcome answer = null;
+        boolean persisted = false;
+        try(var lease=store.acquire()) {
+            if(!shopId.equals(pending.shopId()))return new Outcome.Rejected(Reason.REFUSED,new IllegalArgumentException("Wrong shop"));
             store.save(pending);
+            persisted = true;
+            answer = send(pending);
+            return answer;
         } catch (IOException failure) {
-            return new Outcome.NotSent(failure);
+            if (answer != null) return answer;
+            return persisted ? new Outcome.Uncertain(failure) : new Outcome.NotSent(failure);
         }
-        return send(pending);
     }
 
     /** Sends the same sale again. SaleService returns the saved sale if the first attempt worked. */
     public Outcome retry(PendingCheckout pending) {
-        return send(pending);
+        try(var lease=store.acquire()) {
+            store.requireOwner(pending);
+            if(store.load().isEmpty()) {
+                var saved=sales.getSale(pending.shopId(),pending.saleId());
+                return saved.<Outcome>map(Outcome.Saved::new).orElseGet(()->new Outcome.Uncertain(new IOException("The pending checkout file is missing")));
+            }
+            return send(pending);
+        }catch(IOException|SQLException failure){return new Outcome.Uncertain(failure);}
     }
 
     /** Cancels only after checking the database: a sale that was really saved is reported as saved. */
     public Outcome discard(PendingCheckout pending) {
-        try {
+        try(var lease=store.acquire()) {
+            store.requireOwner(pending);
             Optional<Sale> saved = sales.getSale(pending.shopId(), pending.saleId());
             if (saved.isPresent()) {
-                forgetPending();
+                forgetPending(pending.saleId());
                 return new Outcome.Saved(saved.get());
             }
-            store.clear();
+            store.clear(pending.saleId());
             return new Outcome.Discarded();
         } catch (SQLException | IOException | RuntimeException failure) {
             return new Outcome.Uncertain(failure);
@@ -90,6 +106,12 @@ public final class Checkout {
 
     /** Looks for a sale left by an earlier run. It reads, and never sends anything. */
     public Recovery recover() {
+        try(var lease=store.acquire()) {
+            return recoverLocked();
+        }catch(PendingCheckoutStore.BusyException busy){return new Recovery.Busy();}
+        catch(IOException failure){return new Recovery.Damaged(store.file(),failure);}
+    }
+    private Recovery recoverLocked() {
         PendingCheckout pending;
         try {
             Optional<PendingCheckout> loaded = store.load();
@@ -104,7 +126,7 @@ public final class Checkout {
         try {
             Optional<Sale> saved = sales.getSale(pending.shopId(), pending.saleId());
             if (saved.isPresent()) {
-                forgetPending();
+                forgetPending(pending.saleId());
                 return new Recovery.AlreadySaved(saved.get());
             }
         } catch (SQLException | RuntimeException lookupFailed) {
@@ -119,7 +141,7 @@ public final class Checkout {
         try {
             SaleResult result = sales.makeCashSale(pending.saleId(), pending.shopId(), pending.deviceId(),
                     pending.receiptNumber(), pending.requests());
-            forgetPending();
+            forgetPending(pending.saleId());
             return new Outcome.Saved(result.sale());
         } catch (IllegalStateException notEnoughStock) {
             return afterRefusal(pending, Reason.NOT_ENOUGH_STOCK, notEnoughStock);
@@ -134,7 +156,7 @@ public final class Checkout {
     private Outcome afterRefusal(PendingCheckout pending, Reason reason, RuntimeException cause) {
         try {
             Optional<Sale> saved = sales.getSale(pending.shopId(), pending.saleId());
-            forgetPending();
+            forgetPending(pending.saleId());
             if (saved.isPresent()) return new Outcome.Saved(saved.get());
             return new Outcome.Rejected(reason, cause);
         } catch (SQLException | RuntimeException lookupFailed) {
@@ -147,9 +169,9 @@ public final class Checkout {
      * The answer is already certain here, so a file that cannot be removed is not an error. If it
      * stays, the next opening finds it, checks the database and cleans up.
      */
-    private void forgetPending() {
+    private void forgetPending(UUID saleId) {
         try {
-            store.clear();
+            store.clear(saleId);
         } catch (IOException failure) {
             LOG.log(Level.WARNING, failure, () -> "Could not remove " + store.file());
         }

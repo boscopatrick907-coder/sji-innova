@@ -37,11 +37,12 @@ class PendingCheckoutStoreTest {
     }
 
     @Test
-    void savingAgainReplacesTheOldFile() throws Exception {
-        store().save(sale());
+    void aDifferentSaleCannotReplaceThePendingFile() throws Exception {
+        PendingCheckout first = sale();
+        store().save(first);
         PendingCheckout second = sale();
-        store().save(second);
-        assertEquals(Optional.of(second), store().load());
+        assertThrows(PendingCheckoutStore.ConflictException.class, () -> store().save(second));
+        assertEquals(Optional.of(first), store().load());
     }
 
     @Test

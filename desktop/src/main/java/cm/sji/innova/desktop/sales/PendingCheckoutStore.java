@@ -22,7 +22,7 @@ import java.util.UUID;
  * The format is described in docs/desktop/SALES_SCREEN.md.
  *
  * <p>Saving writes a temporary file, forces it onto the disk, then moves it over the real file in
- * one step: a power cut leaves either the old file or the new one, never half a file. Call these
+ * one step: an interrupted process leaves either the old file or the new one, never half a file. Call these
  * methods off the Swing event thread.
  */
 public final class PendingCheckoutStore {
@@ -37,9 +37,28 @@ public final class PendingCheckoutStore {
 
     public Path file() { return file; }
 
+    public static final class BusyException extends IOException {
+        public BusyException(){super("Another checkout is using this data folder");}
+        public BusyException(Throwable cause){super("Another checkout is using this data folder",cause);}
+    }
+    public static final class ConflictException extends IOException {
+        public ConflictException(){super("A different checkout is pending; recover it before starting another");}
+    }
+    CheckoutFileLease acquire() throws IOException { return CheckoutFileLease.acquire(file); }
+
     public void save(PendingCheckout pending) throws IOException {
-        Files.createDirectories(file.getParent());
-        Path temporary = file.resolveSibling(file.getFileName() + ".tmp");
+        try(var lease=acquire()) {
+            Optional<PendingCheckout> existing=load();
+            if(existing.isPresent()) {
+                if(!existing.get().equals(pending))throw new ConflictException();
+                return; // Identical retry; never rewrite a good recovery record unnecessarily.
+            }
+            saveNew(pending);
+        }
+    }
+    private void saveNew(PendingCheckout pending)throws IOException {
+        Path temporary = Files.createTempFile(file.getParent(),file.getFileName()+"-", ".tmp");
+        try {
         try (FileChannel channel = FileChannel.open(temporary, StandardOpenOption.CREATE,
                      StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
              Writer writer = Channels.newWriter(channel, StandardCharsets.UTF_8)) {
@@ -48,6 +67,7 @@ public final class PendingCheckoutStore {
             channel.force(true);
         }
         Files.move(temporary, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        } finally { Files.deleteIfExists(temporary); }
     }
 
     /**
@@ -55,7 +75,11 @@ public final class PendingCheckoutStore {
      * @throws IOException if the file cannot be read or is damaged; the file is left untouched
      */
     public Optional<PendingCheckout> load() throws IOException {
+        try(var lease=acquire()) { return loadLocked(); }
+    }
+    private Optional<PendingCheckout> loadLocked() throws IOException {
         if (!Files.exists(file)) return Optional.empty();
+        if (Files.size(file)>4*1024*1024)throw new IOException("The unfinished sale file is too large");
         Properties saved = new Properties();
         try (Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
             saved.load(reader);
@@ -65,12 +89,31 @@ public final class PendingCheckoutStore {
         }
     }
 
-    public void clear() throws IOException { Files.deleteIfExists(file); }
+    /** Compatibility for manual recovery/tests. Checkout always uses the owner-aware overload. */
+    public void clear() throws IOException {
+        try(var lease=acquire()){Files.deleteIfExists(file);}
+    }
+    public void clear(UUID expectedSaleId) throws IOException {
+        try(var lease=acquire()) {
+            var current=load();
+            if(current.isPresent()&&!current.get().saleId().equals(expectedSaleId))throw new ConflictException();
+            Files.deleteIfExists(file);
+        }
+    }
+    void requireOwner(PendingCheckout expected) throws IOException {
+        var current=load();
+        if(current.isPresent()&&!current.get().equals(expected))throw new ConflictException();
+    }
 
     /** Keeps a damaged file under a new name, so nothing is deleted, and returns that name. */
     public Path setAside() throws IOException {
-        String name = "pending-checkout-damaged-" + System.currentTimeMillis() + ".txt";
-        return Files.move(file, file.resolveSibling(name));
+        try(var lease=acquire()) {
+            boolean readable=false;
+            try{readable=load().isPresent();}catch(IOException damaged){/* preserve under a new name below */}
+            if(readable)throw new ConflictException(); // A stale damaged-page action must not move a new valid request.
+            String name = "pending-checkout-damaged-" + UUID.randomUUID() + ".txt";
+            return Files.move(file, file.resolveSibling(name));
+        }
     }
 
     private static Properties toProperties(PendingCheckout pending) {
@@ -97,6 +140,7 @@ public final class PendingCheckoutStore {
     private static PendingCheckout fromProperties(Properties saved) throws IOException {
         if (!FORMAT.equals(saved.getProperty("format"))) throw new IOException("Unknown or missing format");
         int lineCount = Integer.parseInt(required(saved, "lineCount"));
+        if(lineCount<1||lineCount>10000)throw new IOException("Invalid checkout line count");
         List<BasketLine> lines = new ArrayList<>();
         for (int i = 0; i < lineCount; i++) {
             String prefix = "line." + i + ".";
