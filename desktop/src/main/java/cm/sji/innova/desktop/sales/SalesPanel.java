@@ -159,7 +159,7 @@ public final class SalesPanel extends JPanel {
         removeButton = named(CatalogStyle.button(t("sales.removeLine"), false), "salesRemove");
         checkoutButton = named(CatalogStyle.button(t("sales.checkout"), true), "salesCheckout");
         confirmButton = named(CatalogStyle.button(t("sales.confirm.yes"), true), "salesConfirm");
-        backButton = named(CatalogStyle.button(t("sales.confirm.back"), false), "salesBack");
+        backButton = named(CatalogStyle.arrowButton(t("sales.confirm.back"), false, true), "salesBack");
         retryButton = named(CatalogStyle.button(t("sales.retry"), true), "salesRetry");
         discardButton = named(CatalogStyle.button(t("sales.discard"), false), "salesDiscard");
         setAsideButton = named(CatalogStyle.button(t("sales.setAside"), false), "salesSetAside");
@@ -170,15 +170,30 @@ public final class SalesPanel extends JPanel {
 
         setBackground(CatalogStyle.PAPER);
         setBorder(BorderFactory.createEmptyBorder(14, 30, 14, 30));
-        JPanel areas = CatalogStyle.panel(new GridLayout(2, 1, 0, 10));
+        JPanel areas = new SalesAreas();
         areas.add(buildResultsArea());
         areas.add(buildBasketArea());
-        add(areas, BorderLayout.CENTER);
+        JScrollPane pageScroll = new JScrollPane(areas);
+        pageScroll.setBorder(null);pageScroll.getViewport().setBackground(CatalogStyle.PAPER);
+        pageScroll.setHorizontalScrollBarPolicy(javax.swing.ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        pageScroll.getVerticalScrollBar().setUnitIncrement(22);
+        add(pageScroll, BorderLayout.CENTER);
         add(buildFooter(), BorderLayout.SOUTH);
         connectControls();
         refreshBasketView();
         applyState();
         resultsHint.setText(t("catalog.loading"));
+    }
+
+    /** Small windows scroll the two cards instead of squeezing the product table shut. */
+    private static final class SalesAreas extends JPanel implements javax.swing.Scrollable {
+        SalesAreas(){super(new GridLayout(2,1,0,10));setOpaque(false);}
+        @Override public Dimension getPreferredSize(){return new Dimension(700,520);}
+        public Dimension getPreferredScrollableViewportSize(){return getPreferredSize();}
+        public int getScrollableUnitIncrement(java.awt.Rectangle r,int orientation,int direction){return 22;}
+        public int getScrollableBlockIncrement(java.awt.Rectangle r,int orientation,int direction){return Math.max(22,r.height-30);}
+        public boolean getScrollableTracksViewportWidth(){return true;}
+        public boolean getScrollableTracksViewportHeight(){return getParent()!=null&&getParent().getHeight()>=520;}
     }
 
     /** Reads products and stock again, and on first opening looks for an unfinished sale. */
@@ -578,7 +593,7 @@ public final class SalesPanel extends JPanel {
         below.add(resultsHint, BorderLayout.CENTER);
         below.add(addButton, BorderLayout.EAST);
 
-        JPanel area = CatalogStyle.panel(new BorderLayout(0, 6));
+        JPanel area = CatalogStyle.surface(new BorderLayout(0, 10));
         JPanel heading = CatalogStyle.panel(new BorderLayout(0,10));
         heading.add(CatalogStyle.label(t("sales.productsHeading"),20,true),BorderLayout.NORTH);
         heading.add(searchRow,BorderLayout.CENTER);
@@ -603,7 +618,7 @@ public final class SalesPanel extends JPanel {
         below.add(basketHint, BorderLayout.CENTER);
         below.add(totalLabel, BorderLayout.EAST);
 
-        JPanel area = CatalogStyle.panel(new BorderLayout(0, 6));
+        JPanel area = CatalogStyle.surface(new BorderLayout(0, 10));
         area.add(CatalogStyle.label(t("sales.basketHeading"),20,true),BorderLayout.NORTH);
         area.add(new JScrollPane(basketTable), BorderLayout.CENTER);
         area.add(below, BorderLayout.SOUTH);
@@ -689,7 +704,8 @@ public final class SalesPanel extends JPanel {
 
     private static <T extends JTable> T styledTable(T table, String name) {
         table.setName(name);
-        table.setRowHeight(30);
+        table.setRowHeight(34);
+        CatalogStyle.styleTable(table);
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         table.setShowVerticalLines(false);
         table.setGridColor(CatalogStyle.LINE);

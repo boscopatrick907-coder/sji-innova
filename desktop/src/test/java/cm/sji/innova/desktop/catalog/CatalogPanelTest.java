@@ -36,7 +36,8 @@ class CatalogPanelTest {
             assertEquals("T-shirt",panel.variantTable().getValueAt(0,0));
             panel.variantTable().setRowSelectionInterval(0,0);
             panel.variantTable().getActionMap().get("openProduct").actionPerformed(null);
-            panel.showFamilies();assertEquals(shirt.reference(),panel.variantTable().getValueAt(0,1));
+            JButton back=(JButton)named(panel,"catalogBack");assertNotNull(back);back.doClick();
+            assertEquals(shirt.reference(),panel.variantTable().getValueAt(0,1));
             return null;});
     }
     @Test void searchFindsExactVariantByReferenceOrCharacteristicsAndSurvivesBackNavigation()throws Exception{
