@@ -144,7 +144,7 @@ Database files are ignored by Git; never commit a shop's live data.
 Charles, Willy and Pascal: start with [the team guide](docs/team/README.md).
 It contains AI prompts, local setup instructions, shared boundaries and individual
 assignments for Claude Code or Antigravity. The shell and Products screen are
-connected. Patrick owns Products design; [Willy builds Stock](docs/team/WILLY_NEXT_STOCK.md) and
+connected. Patrick owns Products design; [Willy builds Stock](docs/team/WILLY.md) and
 [Charles builds Sales and shared wiring](docs/team/CHARLES.md). Mockup references
 remain in `docs/design/`.
 
@@ -215,7 +215,7 @@ and refreshes the catalog stock when returning to Products. Bags/pieces are whol
 kg/litres may have three decimal places. A failed uncertain receipt retains its
 original details for retry within the same session. Durable restart recovery,
 manual corrections and editable thresholds are Willy's next milestones; do not
-assume those controls are implemented. See docs/team/WILLY_NEXT_STOCK.md.
+assume those controls are implemented. See docs/team/WILLY.md.
 
 
 ## Import products and attach photos

@@ -1,4 +1,45 @@
-# Charles — Sales history and sale details
+# Charles — current assignment
+
+Updated 6 November 2026. This is the only current assignment file named after
+Charles. Follow this file; older role briefs and the combined NEXT_WORK.md have
+been removed. Technical references provide context, not additional assignments.
+
+## First: update your local project copy
+
+Wait until this documentation pull request is merged. Close Cella and open a
+terminal in your existing sji-innova project folder. Run:
+
+```sh
+git status
+```
+
+If there are modified files or unfinished work, ask your AI editor to help commit
+or safely stash that work first. Do not discard changes or use reset --hard.
+With a clean working tree, run these commands one at a time:
+
+```sh
+git switch main
+git pull --ff-only origin main
+git switch -c desktop/sales-history
+```
+
+If any command fails, stop and resolve the message before continuing. If your
+feature branch already exists, inspect it with your AI editor instead of deleting
+or resetting it. Never force-push. The pull command downloads the team's merged
+work; the last command creates your own branch for this assignment.
+
+Both java -version and javac -version must report 21. Use the repository's Maven
+wrapper; SQLite does not need a separate installation. Follow README.md to build
+and launch the app.
+
+## Prompt for your AI editor
+
+> I am Charles. Read docs/team/CHARLES.md and docs/team/CONTEXT.md.
+> Help me preserve unfinished changes, update my local copy and create my branch
+> using this file's instructions. Inspect current code and the technical references
+> below. Explain each step simply. Implement my first milestone, test it and report
+> what works and what remains. Preserve collaborators' commits. Do not push or
+> merge unless I ask you to.
 
 Current assignment: 6 November 2026. Cash checkout is delivered and merged in
 PR #30, including the follow-up pending-file ownership fix. Do not rebuild the
@@ -12,7 +53,7 @@ Restarting Cella must not lose the history. This is a read-only history mileston
 
 ## Start
 
-Preserve unfinished work, update main and create `desktop/sales-history`.
+Follow the update instructions above and use your `desktop/sales-history` branch.
 Read README.md, docs/team/CONTEXT.md, docs/desktop/SALES_SCREEN.md and
 [the backend sales contract](../backend/SALES.md). Inspect SaleService,
 SaleState, SaleItem and the existing SalesPanel/Checkout before editing.
@@ -93,13 +134,3 @@ Deliver a small reviewed PR per milestone with screenshots, branch/commit, exact
 checks and remaining limitations. Preserve other people's commits. Do not push,
 merge, force-push or change settings without your human's request. Explain each
 step simply so Charles can explain the result to the team.
-
-## Prompt for your AI editor
-
-> Read docs/team/CHARLES.md, docs/team/CONTEXT.md, docs/desktop/SALES_SCREEN.md and
-> docs/backend/SALES.md. Cash checkout and its ownership fix are merged in PR #30.
-> My next task is read-only sales history and details on desktop/sales-history.
-> Inspect current main; preserve checkout, its pending-file protections and the
-> basket when switching views. Use saved sale snapshots and effective void status.
-> Explain each step simply, add meaningful tests and screenshots, and report
-> limitations. Do not add void actions or push/merge without my request.

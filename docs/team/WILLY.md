@@ -1,6 +1,47 @@
-# Willy — next Stock milestones
+# Willy — current assignment
 
-Updated 6 November 2026. This replaces the old WILLY.md assignment; do not restart
+Updated 6 November 2026. This is the only current assignment file named after
+Willy. Follow this file; older role briefs and the combined NEXT_WORK.md have
+been removed. Technical references provide context, not additional assignments.
+
+## First: update your local project copy
+
+Wait until this documentation pull request is merged. Close Cella and open a
+terminal in your existing sji-innova project folder. Run:
+
+```sh
+git status
+```
+
+If there are modified files or unfinished work, ask your AI editor to help commit
+or safely stash that work first. Do not discard changes or use reset --hard.
+With a clean working tree, run these commands one at a time:
+
+```sh
+git switch main
+git pull --ff-only origin main
+git switch -c desktop/stock-recovery
+```
+
+If any command fails, stop and resolve the message before continuing. If your
+feature branch already exists, inspect it with your AI editor instead of deleting
+or resetting it. Never force-push. The pull command downloads the team's merged
+work; the last command creates your own branch for this assignment.
+
+Both java -version and javac -version must report 21. Use the repository's Maven
+wrapper; SQLite does not need a separate installation. Follow README.md to build
+and launch the app.
+
+## Prompt for your AI editor
+
+> I am Willy. Read docs/team/WILLY.md and docs/team/CONTEXT.md.
+> Help me preserve unfinished changes, update my local copy and create my branch
+> using this file's instructions. Inspect current code and the technical references
+> below. Explain each step simply. Implement my first milestone, test it and report
+> what works and what remains. Preserve collaborators' commits. Do not push or
+> merge unless I ask you to.
+
+Do not restart
 Products or rebuild the receipt panel. Your original commit `739798f` is preserved
 in PR #27, followed by review corrections and current-main integration.
 
@@ -13,7 +54,7 @@ known validation rejections from uncertain saves, and retain signed corrections
 in history. French/English labels and variant references are included.
 
 PR #27 is merged. Update main with a clean working tree. Preserve uncommitted
-work first. Create a NEW branch such as `desktop/stock-recovery`; do not reset or
+work first. Use the new `desktop/stock-recovery` branch created above; do not reset or
 force-push the old branch. Read README.md, docs/team/CONTEXT.md, docs/backend/STOCK.md,
 docs/backend/PRODUCT_FAMILIES.md and the actual code. Java 21 is required.
 
@@ -97,17 +138,6 @@ Add meaningful persistence/recovery tests with disposable data. Verify keyboard,
 resize, validation and save/reopen in an actual Windows window; separate those
 checks from headless tests. Include screenshots, branch/commit, exact test results
 and limitations in each small PR. Do not push/merge without your human's request.
-
-## Prompt for your AI editor
-
-> Read docs/team/WILLY_NEXT_STOCK.md, docs/team/CONTEXT.md and docs/backend/STOCK.md.
-> My receipt screen and its review fixes are delivered in PR #27; do not repeat
-> that work. Start from updated main after this documentation PR merges. Explain
-> each step simply and implement the approved milestone A contract with crash/retry tests. The store is injected
-> in ShellPanel, with all file I/O off the EDT. Corrections and thresholds follow in separate
-> small PRs. Preserve existing catalog/Sales work and never touch live shop data.
-> Show tests and limitations; do not push or merge without my request.
-
 
 ## Current examples to inspect, not blindly copy
 
