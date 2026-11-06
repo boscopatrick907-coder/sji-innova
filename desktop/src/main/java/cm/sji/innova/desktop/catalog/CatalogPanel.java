@@ -106,13 +106,19 @@ public final class CatalogPanel extends JPanel {
     private String quantityUnit(String code,long milli){String label=unit(code);return !code.equals("kg")&&Math.abs(milli)!=1000?label+"s":label;}
     private String balance(Product p){var l=levels.get(p.id());return stockFailed||l==null?t("catalog.unavailable"):numbers.format(BigDecimal.valueOf(l.quantityMilli(),3))+" "+quantityUnit(p.unit(),l.quantityMilli());}
     private void crumb(String text,Runnable action){
-        if(breadcrumbs.getComponentCount()>0)breadcrumbs.add(new JLabel("/"));
+        if(breadcrumbs.getComponentCount()>0)breadcrumbs.add(CatalogStyle.label("›",16,false));
         JButton b=new JButton(text);b.setBorderPainted(false);b.setContentAreaFilled(false);b.setForeground(CatalogStyle.MUTED);b.addActionListener(e->action.run());breadcrumbs.add(b);
     }
     private void render(){
         ((BorderLayout)getLayout()).getLayoutComponent(BorderLayout.NORTH).setVisible(true);
         error.setVisible(true);
-        body.removeAll();breadcrumbs.removeAll();crumb(t("catalog.products"),this::showFamilies);
+        body.removeAll();breadcrumbs.removeAll();
+        if(selected!=null||variants){
+            JButton back=CatalogStyle.arrowButton(t("catalog.back"),false,true);back.setName("catalogBack");
+            back.addActionListener(e->{if(selected!=null&&family!=null)showFamily(family);else showFamilies();});
+            breadcrumbs.add(back);
+        }
+        crumb(t("catalog.products"),this::showFamilies);
         if(variants||family!=null)crumb(groupName(family),()->showFamily(family));
         Product p=items.stream().filter(i->i.id().equals(selected)).findFirst().orElse(null);
         if(p!=null){crumb(p.name(),()->{});renderDetails(p);}else renderBrowse();
@@ -123,7 +129,7 @@ public final class CatalogPanel extends JPanel {
     public void showProduct(UUID id){if(saving)return;++historySequence;refresh.setEnabled(true);Product p=items.stream().filter(i->i.id().equals(id)).findFirst().orElseThrow();selected=id;family=p.familyId();render();}
     private void renderBrowse(){
         JPanel north=CatalogStyle.panel(new BorderLayout(0,22));JPanel title=CatalogStyle.panel(new BorderLayout());
-        title.add(CatalogStyle.label(variants?groupName(family):t("catalog.products"),28,false),BorderLayout.WEST);
+        title.add(CatalogStyle.label(variants?groupName(family):t("catalog.products"),28,true),BorderLayout.WEST);
         JButton add=CatalogStyle.button(t(variants?"catalog.addVariant":"catalog.addProduct"),true);add.addActionListener(e->showForm(variants?family:null));JPanel actions=CatalogStyle.panel(new FlowLayout(FlowLayout.RIGHT,8,0));
         if(imports!=null&&!variants){JButton csv=CatalogStyle.button(t("csv.title"),false);csv.setName("openCsvImport");csv.addActionListener(e->showImport());actions.add(csv);}
         actions.add(add);title.add(actions,BorderLayout.EAST);north.add(title,BorderLayout.NORTH);
@@ -159,13 +165,13 @@ public final class CatalogPanel extends JPanel {
     private JComponent productList(List<Product> visible){
         DefaultTableModel model=new DefaultTableModel(new String[]{t("catalog.variant"),t("catalog.reference"),t("catalog.available"),t("catalog.price")},0){public boolean isCellEditable(int row,int col){return false;}};
         for(var p:visible)model.addRow(new Object[]{p.name(),p.reference(),balance(p),numbers.format(p.unitPrice())+" FCFA / "+unit(p.unit())});
-        table=new JTable(model);table.setName("catalogVariants");table.setRowHeight(48);table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);table.setShowVerticalLines(false);table.setGridColor(CatalogStyle.LINE);table.setFillsViewportHeight(true);
+        table=new JTable(model);table.setName("catalogVariants");table.setRowHeight(46);CatalogStyle.styleTable(table);table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);table.setShowVerticalLines(false);table.setGridColor(CatalogStyle.LINE);table.setFillsViewportHeight(true);
         table.getAccessibleContext().setAccessibleName(t("catalog.openHint"));
         Runnable open=()->{int row=table.getSelectedRow();if(row>=0){selectedRow=row;showProduct(visible.get(row).id());}};
         table.getInputMap().put(KeyStroke.getKeyStroke("ENTER"),"openProduct");table.getActionMap().put("openProduct",new AbstractAction(){public void actionPerformed(java.awt.event.ActionEvent e){open.run();}});
         table.addMouseListener(new java.awt.event.MouseAdapter(){public void mouseClicked(java.awt.event.MouseEvent e){if(e.getClickCount()==2)open.run();}});
-        JPanel list=CatalogStyle.panel(new BorderLayout(0,10));list.add(new JScrollPane(table),BorderLayout.CENTER);
-        JButton openButton=CatalogStyle.button(t("catalog.open"),false);openButton.addActionListener(e->open.run());
+        JPanel list=CatalogStyle.surface(new BorderLayout(0,12));JScrollPane tableScroll=new JScrollPane(table);tableScroll.setBorder(null);tableScroll.getViewport().setBackground(Color.WHITE);list.add(tableScroll,BorderLayout.CENTER);
+        JButton openButton=CatalogStyle.arrowButton(t("catalog.open"),false,false);openButton.addActionListener(e->open.run());
         JPanel foot=CatalogStyle.panel(new BorderLayout());foot.add(new JLabel(visible.isEmpty()?t("catalog.noMatches"):t("catalog.openHint")),BorderLayout.WEST);foot.add(openButton,BorderLayout.EAST);list.add(foot,BorderLayout.SOUTH);
         if(selectedRow>=0&&selectedRow<visible.size())table.setRowSelectionInterval(selectedRow,selectedRow);
         return list;
@@ -176,12 +182,12 @@ public final class CatalogPanel extends JPanel {
         return Arrays.stream(fold(filter).strip().split("\\s+")).allMatch(text::contains);
     }
     private JComponent familyCard(UUID id,String name,String categoryName){
-        JPanel card=new JPanel(new BorderLayout(14,0));card.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(CatalogStyle.LINE),BorderFactory.createEmptyBorder(12,14,12,14)));card.setBackground(Color.WHITE);
         long count=items.stream().filter(p->Objects.equals(id,p.familyId())).count();
-        JPanel text=CatalogStyle.panel(new GridLayout(0,1,0,6));text.add(CatalogStyle.label(name,19,false));
         String summary=count+" "+t(count==1?"catalog.variantSingular":"catalog.variants");
-        text.add(new JLabel(categoryName==null?summary:categoryName+" · "+summary));card.add(text,BorderLayout.CENTER);
-        JButton open=CatalogStyle.button(t("catalog.open"),false);open.addActionListener(e->showFamily(id));card.add(open,BorderLayout.EAST);return card;
+        JButton open=CatalogStyle.arrowButton(name+"  ·  "+summary,false,false);
+        open.setHorizontalAlignment(SwingConstants.LEFT);open.setFont(new Font(Font.SANS_SERIF,Font.BOLD,14));
+        open.setBackground(Color.WHITE);open.setToolTipText(categoryName);open.setPreferredSize(new Dimension(260,48));
+        open.addActionListener(e->showFamily(id));return open;
     }
     private void renderDetails(Product p){
         JPanel layout=CatalogStyle.panel(new GridLayout(1,2,24,0));
@@ -189,7 +195,7 @@ public final class CatalogPanel extends JPanel {
         if(photos==null)imageColumn.add(new CatalogStyle.PhotoPlaceholder(t("catalog.noPhoto")),BorderLayout.NORTH);
         else imageColumn.add(new ProductPhotoPanel(photos,shop,p.id(),messages,pending->{saving=pending;refresh.setEnabled(!pending);for(Component crumb:breadcrumbs.getComponents())crumb.setEnabled(!pending);}),BorderLayout.NORTH);
         layout.add(imageColumn);
-        JPanel text=CatalogStyle.panel(new GridBagLayout());GridBagConstraints d=new GridBagConstraints();d.gridx=0;d.gridy=0;d.weightx=1;d.fill=GridBagConstraints.HORIZONTAL;d.anchor=GridBagConstraints.NORTHWEST;d.insets=new Insets(0,0,16,0);
+        JPanel text=CatalogStyle.surface(new GridBagLayout());GridBagConstraints d=new GridBagConstraints();d.gridx=0;d.gridy=0;d.weightx=1;d.fill=GridBagConstraints.HORIZONTAL;d.anchor=GridBagConstraints.NORTHWEST;d.insets=new Insets(0,0,16,0);
         text.add(CatalogStyle.label(t("catalog.reference")+" "+p.reference(),11,false),d);d.gridy++;JTextArea name=new JTextArea(p.name());name.setLineWrap(true);name.setWrapStyleWord(true);name.setEditable(false);name.setOpaque(false);name.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,25));name.setForeground(CatalogStyle.INK);text.add(name,d);
         d.gridy++;text.add(new JLabel(Objects.toString(p.category(),"")),d);
         JPanel prices=CatalogStyle.panel(new GridLayout(1,2,20,0));JPanel selling=value(t("catalog.price"),numbers.format(p.unitPrice()));
@@ -198,7 +204,7 @@ public final class CatalogPanel extends JPanel {
         JPanel available=value(t("catalog.available"),balance(p));((JLabel)available.getComponent(1)).setFont(new Font(Font.SANS_SERIF,Font.PLAIN,24));prices.add(available);d.gridy++;text.add(prices,d);
         d.gridy++;text.add(CatalogStyle.label(t("catalog.details"),14,true),d);
         JPanel specs=CatalogStyle.panel(new GridLayout(0,2,18,18));p.specifications().forEach((key,val)->specs.add(value(key,val)));if(p.modelReference()!=null)specs.add(value(t("product.modelReference"),p.modelReference()));d.gridy++;text.add(specs,d);
-        JToggleButton buying=new JToggleButton(t("catalog.buying"));buying.setHorizontalAlignment(SwingConstants.LEFT);buying.putClientProperty("JButton.buttonType","square");
+        JToggleButton buying=new JToggleButton(t("catalog.buying"));buying.setHorizontalAlignment(SwingConstants.LEFT);buying.putClientProperty("FlatLaf.style","arc: 12");
         JLabel buyingValue=new JLabel(p.costPrice()==null?t("catalog.unknown"):numbers.format(p.costPrice())+" FCFA / "+unit(p.unit()));buyingValue.setVisible(false);buying.addActionListener(e->buyingValue.setVisible(buying.isSelected()));d.gridy++;text.add(buying,d);d.gridy++;text.add(buyingValue,d);
         d.gridy++;JButton movements=CatalogStyle.button(t("catalog.movements"),false);movements.addActionListener(e->showHistory(p));text.add(movements,d);
         text.setMinimumSize(new Dimension(0,0));layout.add(text);
@@ -214,7 +220,7 @@ public final class CatalogPanel extends JPanel {
         selected=p.id();long request=++historySequence;refresh.setEnabled(false);body.removeAll();body.add(new JLabel(t("catalog.loading")));body.revalidate();body.repaint();
         new SwingWorker<List<StockMovement>,Void>(){
             protected List<StockMovement> doInBackground() throws Exception{return stock.history(shop,p.id());}
-            protected void done(){try{var rows=get();if(request!=historySequence)return;body.removeAll();JTextArea text=new JTextArea();text.setEditable(false);for(var m:rows)text.append(m.createdAt()+"  "+numbers.format(BigDecimal.valueOf(m.quantityMilli(),3))+" "+unit(p.unit())+"  "+m.reason()+"\n");if(rows.isEmpty())text.setText(t("catalog.noMovements"));body.add(new JScrollPane(text),BorderLayout.CENTER);JButton back=CatalogStyle.button(t("catalog.back"),false);back.addActionListener(e->showProduct(p.id()));body.add(back,BorderLayout.SOUTH);}catch(Exception ex){if(request==historySequence){render();error.setText(t("catalog.stockError"));}}finally{if(request==historySequence){refresh.setEnabled(true);body.revalidate();body.repaint();}}}
+            protected void done(){try{var rows=get();if(request!=historySequence)return;body.removeAll();JTextArea text=new JTextArea();text.setEditable(false);for(var m:rows)text.append(m.createdAt()+"  "+numbers.format(BigDecimal.valueOf(m.quantityMilli(),3))+" "+unit(p.unit())+"  "+m.reason()+"\n");if(rows.isEmpty())text.setText(t("catalog.noMovements"));JPanel history=CatalogStyle.surface(new BorderLayout(0,12));history.add(CatalogStyle.label(t("catalog.movements"),20,true),BorderLayout.NORTH);JScrollPane historyScroll=new JScrollPane(text);historyScroll.setBorder(null);text.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,14));history.add(historyScroll,BorderLayout.CENTER);body.add(history,BorderLayout.CENTER);JButton back=CatalogStyle.arrowButton(t("catalog.back"),false,true);back.addActionListener(e->showProduct(p.id()));body.add(back,BorderLayout.SOUTH);}catch(Exception ex){if(request==historySequence){render();error.setText(t("catalog.stockError"));}}finally{if(request==historySequence){refresh.setEnabled(true);body.revalidate();body.repaint();}}}
         }.execute();
     }
     private void showImport(){

@@ -23,22 +23,22 @@ public final class VariantForm extends JPanel {
                        Runnable onCancel,Consumer<Product> onSaved,Consumer<Boolean> onPending){
         super(new BorderLayout(0,15));setOpaque(false);
         java.util.function.Function<String,String> t=messages::getString;
-        JLabel title=CatalogStyle.label(t.apply(selectedFamily==null?"catalog.addProduct":"catalog.addVariant"),25,false);add(title,BorderLayout.NORTH);
-        family.setEditable(true);family.addItem("");for(var f:groups)family.addItem(f.name());
+        JLabel title=CatalogStyle.label(t.apply(selectedFamily==null?"catalog.addProduct":"catalog.addVariant"),27,true);add(title,BorderLayout.NORTH);
+        family.setEditable(true);((JTextField)family.getEditor().getEditorComponent()).putClientProperty("JTextField.placeholderText",t.apply("catalog.familyExample"));family.addItem("");for(var f:groups)family.addItem(f.name());
         if(selectedFamily!=null)groups.stream().filter(f->f.id().equals(selectedFamily)).findFirst().ifPresent(f->family.setSelectedItem(f.name()));
         category.setEditable(true);category.addItem("");TreeSet<String> categories=new TreeSet<>();for(var p:items)if(p.category()!=null)categories.add(p.category());for(var f:groups)if(f.category()!=null)categories.add(f.category());categories.forEach(category::addItem);
         unit.setRenderer(new DefaultListCellRenderer(){public Component getListCellRendererComponent(JList<?> l,Object value,int i,boolean selected,boolean focus){return super.getListCellRendererComponent(l,t.apply("unit."+value),i,selected,focus);}});
-        JPanel fields=CatalogStyle.panel(new GridBagLayout());GridBagConstraints c=new GridBagConstraints();c.gridx=0;c.gridy=0;c.weightx=1;c.fill=GridBagConstraints.HORIZONTAL;c.insets=new Insets(0,0,16,0);
+        JPanel fields=CatalogStyle.surface(new GridBagLayout());GridBagConstraints c=new GridBagConstraints();c.gridx=0;c.gridy=0;c.weightx=1;c.fill=GridBagConstraints.HORIZONTAL;c.insets=new Insets(0,0,12,0);
         field(fields,c,t.apply("catalog.familyOptional"),family);field(fields,c,t.apply("catalog.variantName"),name);field(fields,c,t.apply("catalog.sellingRequired"),price);field(fields,c,t.apply("product.unit")+" *",unit);
         JPanel optional=CatalogStyle.panel(new GridBagLayout());GridBagConstraints d=(GridBagConstraints)c.clone();d.gridy=0;
         field(optional,d,t.apply("product.category"),category);field(optional,d,t.apply("product.buyingPrice"),buying);field(optional,d,t.apply("product.modelReference"),model);
         add=CatalogStyle.button(t.apply("catalog.addInformation"),false);
         add.addActionListener(e->{JPanel row=CatalogStyle.panel(new BorderLayout(8,0));JPanel pair=CatalogStyle.panel(new GridLayout(1,2,8,0));JTextField key=new JTextField(),value=new JTextField();key.putClientProperty("JTextField.placeholderText",t.apply("catalog.infoName"));value.putClientProperty("JTextField.placeholderText",t.apply("catalog.infoValue"));key.getAccessibleContext().setAccessibleName(t.apply("catalog.infoName"));value.getAccessibleContext().setAccessibleName(t.apply("catalog.infoValue"));pair.add(key);pair.add(value);row.add(pair);JButton remove=CatalogStyle.button(t.apply("catalog.remove"),false);remove.addActionListener(ev->{specs.remove(row);specs.revalidate();specs.repaint();});row.add(remove,BorderLayout.EAST);specs.add(row);specs.revalidate();specs.repaint();});
         optional.add(specs,d);d.gridy++;optional.add(add,d);optional.setVisible(false);
-        JToggleButton more=new JToggleButton(t.apply("catalog.optional"));more.setHorizontalAlignment(SwingConstants.LEFT);more.addActionListener(e->{optional.setVisible(more.isSelected());revalidate();});fields.add(more,c);c.gridy++;fields.add(optional,c);c.gridy++;
+        JToggleButton more=new JToggleButton(t.apply("catalog.optional"));more.setIcon(new CatalogStyle.ArrowIcon(1));more.setIconTextGap(10);more.putClientProperty("FlatLaf.style","arc: 12");more.putClientProperty("JComponent.minimumHeight",40);more.setHorizontalAlignment(SwingConstants.LEFT);more.addActionListener(e->{optional.setVisible(more.isSelected());revalidate();});fields.add(more,c);c.gridy++;fields.add(optional,c);c.gridy++;
         JLabel stockHint=new JLabel(t.apply("catalog.stockHint"));stockHint.setForeground(CatalogStyle.MUTED);fields.add(stockHint,c);
         JPanel wrapper=CatalogStyle.panel(new BorderLayout());wrapper.add(fields,BorderLayout.NORTH);JScrollPane scroll=new JScrollPane(wrapper);scroll.setBorder(null);scroll.getVerticalScrollBar().setUnitIncrement(18);scroll.getViewport().setBackground(CatalogStyle.PAPER);add(scroll,BorderLayout.CENTER);
-        save=CatalogStyle.button(t.apply("action.save"),true);cancel=CatalogStyle.button(t.apply("catalog.cancel"),false);cancel.addActionListener(e->onCancel.run());
+        save=CatalogStyle.button(t.apply("action.save"),true);cancel=CatalogStyle.arrowButton(t.apply("catalog.cancel"),false,true);cancel.addActionListener(e->onCancel.run());
         JPanel footer=CatalogStyle.panel(new BorderLayout());error.setForeground(new Color(0xA43B2D));footer.add(error,BorderLayout.NORTH);JPanel buttons=CatalogStyle.panel(new FlowLayout(FlowLayout.RIGHT));buttons.add(cancel);buttons.add(save);footer.add(buttons,BorderLayout.SOUTH);add(footer,BorderLayout.SOUTH);
         save.addActionListener(e->{
             if(pending)return;

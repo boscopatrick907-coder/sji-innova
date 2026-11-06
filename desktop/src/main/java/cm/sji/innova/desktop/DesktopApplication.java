@@ -103,6 +103,7 @@ public final class DesktopApplication {
         if (!FlatLightLaf.setup()) {
             throw new IllegalStateException("FlatLaf could not initialize");
         }
+        cm.sji.innova.desktop.catalog.CatalogStyle.installDefaults();
     }
 
     private static void deleteQuietly(Path folder) {

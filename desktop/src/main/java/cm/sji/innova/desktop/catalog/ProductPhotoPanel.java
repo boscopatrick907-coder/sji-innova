@@ -23,9 +23,10 @@ public final class ProductPhotoPanel extends JPanel {
     private boolean running;
     public ProductPhotoPanel(ProductPhotoService service,UUID shop,UUID product,ResourceBundle messages,Consumer<Boolean> busy){
         super(new BorderLayout(0,10));this.service=service;this.shop=shop;this.product=product;this.messages=messages;this.busy=busy;setOpaque(false);status.setEditable(false);status.setLineWrap(true);status.setWrapStyleWord(true);status.setOpaque(false);
-        choose=CatalogStyle.button(t("photo.choose"),false);remove=CatalogStyle.button(t("photo.remove"),false);choose.setName("choosePhoto");remove.setName("removePhoto");
+        choose=CatalogStyle.button(t("photo.choose"),true);remove=CatalogStyle.button(t("photo.remove"),false);choose.setName("choosePhoto");remove.setName("removePhoto");
+        JPanel heading=CatalogStyle.panel(new BorderLayout(0,6));heading.add(CatalogStyle.label(t("photo.heading"),18,true),BorderLayout.NORTH);JLabel hint=CatalogStyle.label(t("photo.formats"),12,false);hint.setForeground(CatalogStyle.MUTED);heading.add(hint,BorderLayout.CENTER);add(heading,BorderLayout.NORTH);
         image.add(new CatalogStyle.PhotoPlaceholder(t("catalog.noPhoto")));add(image,BorderLayout.CENTER);
-        JPanel bottom=CatalogStyle.panel(new BorderLayout(0,8));JPanel buttons=CatalogStyle.panel(new FlowLayout(FlowLayout.LEFT,0,0));buttons.add(choose);buttons.add(Box.createHorizontalStrut(8));buttons.add(remove);bottom.add(buttons,BorderLayout.NORTH);bottom.add(status,BorderLayout.SOUTH);add(bottom,BorderLayout.SOUTH);
+        JPanel bottom=CatalogStyle.panel(new BorderLayout(0,8));JPanel buttons=CatalogStyle.panel(new GridLayout(0,1,0,8));buttons.add(choose);buttons.add(remove);bottom.add(buttons,BorderLayout.NORTH);bottom.add(status,BorderLayout.SOUTH);add(bottom,BorderLayout.SOUTH);
         choose.addActionListener(e->{JFileChooser picker=new JFileChooser();picker.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("JPEG / PNG","jpg","jpeg","png"));if(picker.showOpenDialog(this)==JFileChooser.APPROVE_OPTION)setPhoto(picker.getSelectedFile().toPath());});
         remove.addActionListener(e->{if(JOptionPane.showConfirmDialog(this,t("photo.confirmRemove"),t("photo.remove"),JOptionPane.OK_CANCEL_OPTION)==JOptionPane.OK_OPTION)removePhoto();});
         load();
