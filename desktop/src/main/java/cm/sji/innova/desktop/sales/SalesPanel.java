@@ -287,6 +287,7 @@ public final class SalesPanel extends JPanel {
             return;
         }
         Product product = visible.get(row);
+        if (!selectedHasStock()) { showNotice(t("sales.outOfStockHint"), true); return; }
         try {
             basket.add(BasketLine.oneOf(product, familyNames.get(product.familyId())));
             showNotice(" ", false);
@@ -453,7 +454,7 @@ public final class SalesPanel extends JPanel {
         boolean editing = state == PageState.EDITING;
         search.setEnabled(editing);
         results.setEnabled(editing);
-        addButton.setEnabled(editing && !visible.isEmpty());
+        addButton.setEnabled(editing && selectedHasStock());
         basketTable.setEnabled(editing);
         removeButton.setEnabled(editing && !basket.isEmpty());
         checkoutButton.setEnabled(editing && !basket.isEmpty());
@@ -501,12 +502,20 @@ public final class SalesPanel extends JPanel {
         return Normalizer.normalize(text, Normalizer.Form.NFD).replaceAll("\\p{M}+", "").toLowerCase(Locale.ROOT);
     }
 
+    private boolean selectedHasStock() {
+        int row = results.getSelectedRow();
+        if (loading || loadFailed || stockFailed || row < 0 || row >= visible.size()) return false;
+        StockLevel level = levels.get(visible.get(row).id());
+        return level != null && level.quantityMilli() > 0;
+    }
+
     private void updateResultsHint() {
         if (loading) resultsHint.setText(t("catalog.loading"));
         else if (loadFailed) resultsHint.setText(t("catalog.loadError") + " " + t("catalog.retryHint"));
         else if (stockFailed) resultsHint.setText(t("catalog.stockError"));
         else if (catalog.isEmpty()) resultsHint.setText(t("catalog.empty"));
         else if (visible.isEmpty()) resultsHint.setText(t("catalog.noMatches"));
+        else if (!selectedHasStock()) resultsHint.setText(t("sales.outOfStockHint"));
         else resultsHint.setText(t("sales.addHint"));
     }
 
@@ -570,7 +579,10 @@ public final class SalesPanel extends JPanel {
         below.add(addButton, BorderLayout.EAST);
 
         JPanel area = CatalogStyle.panel(new BorderLayout(0, 6));
-        area.add(searchRow, BorderLayout.NORTH);
+        JPanel heading = CatalogStyle.panel(new BorderLayout(0,10));
+        heading.add(CatalogStyle.label(t("sales.productsHeading"),20,true),BorderLayout.NORTH);
+        heading.add(searchRow,BorderLayout.CENTER);
+        area.add(heading, BorderLayout.NORTH);
         area.add(new JScrollPane(results), BorderLayout.CENTER);
         area.add(below, BorderLayout.SOUTH);
         return area;
@@ -592,6 +604,7 @@ public final class SalesPanel extends JPanel {
         below.add(totalLabel, BorderLayout.EAST);
 
         JPanel area = CatalogStyle.panel(new BorderLayout(0, 6));
+        area.add(CatalogStyle.label(t("sales.basketHeading"),20,true),BorderLayout.NORTH);
         area.add(new JScrollPane(basketTable), BorderLayout.CENTER);
         area.add(below, BorderLayout.SOUTH);
         return area;
@@ -623,6 +636,9 @@ public final class SalesPanel extends JPanel {
     }
 
     private void connectControls() {
+        results.getSelectionModel().addListSelectionListener(event -> {
+            if (!event.getValueIsAdjusting()) { updateResultsHint(); applyState(); }
+        });
         refresh.addActionListener(event -> reload());
         addButton.addActionListener(event -> addSelectedProduct());
         removeButton.addActionListener(event -> removeSelectedLine());
@@ -722,7 +738,8 @@ public final class SalesPanel extends JPanel {
             return switch (column) {
                 case 0 -> BasketLine.oneOf(product, familyNames.get(product.familyId())).label();
                 case 1 -> Objects.toString(product.reference(), "");
-                case 2 -> String.join(", ", product.specifications().values());
+                case 2 -> product.specifications().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey())
+                        .map(e -> e.getKey() + " : " + e.getValue()).collect(java.util.stream.Collectors.joining(", "));
                 case 3 -> stockText(product.id(), product.unit());
                 default -> money.format(product.unitPrice()) + " FCFA / " + unitName(product.unit());
             };

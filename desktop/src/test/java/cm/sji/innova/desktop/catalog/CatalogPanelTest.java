@@ -25,6 +25,20 @@ class CatalogPanelTest {
         CatalogPanel panel=edt(()->new CatalogPanel(products,families,stock,shop,Messages.load(Locale.FRENCH).bundle()));
         panel.initialLoadCompletion().toCompletableFuture().get(5,TimeUnit.SECONDS);return panel;
     }
+    @Test void standaloneProductIsVisibleImmediatelyAndCategoryFilterDoesNotHideItInAFamily()throws Exception{
+        var db=new SqliteDatabase(directory.resolve("catalog.db"));db.initialize();
+        var products=new ProductService(new SqliteProductRepository(db));
+        var families=new ProductFamilyService(new SqliteProductFamilyRepository(db),products);
+        families.create(shop,"Riz","Alimentation");
+        var shirt=products.create(shop,"T-shirt",5000,null,null,"Vêtements","piece",Map.of());
+        var panel=open(products,families,new StockService(new SqliteStockRepository(db)));
+        edt(()->{assertEquals(1,panel.variantTable().getRowCount());
+            assertEquals("T-shirt",panel.variantTable().getValueAt(0,0));
+            panel.variantTable().setRowSelectionInterval(0,0);
+            panel.variantTable().getActionMap().get("openProduct").actionPerformed(null);
+            panel.showFamilies();assertEquals(shirt.reference(),panel.variantTable().getValueAt(0,1));
+            return null;});
+    }
     @Test void searchFindsExactVariantByReferenceOrCharacteristicsAndSurvivesBackNavigation()throws Exception{
         var db=new SqliteDatabase(directory.resolve("catalog.db"));db.initialize();var products=new ProductService(new SqliteProductRepository(db));var families=new ProductFamilyService(new SqliteProductFamilyRepository(db),products);
         var rice=families.create(shop,"Riz","Épicerie");var p=families.createVariant(shop,rice.id(),"Basmati 25 kg",28000,null,null,null,"bag",Map.of("Couleur","Blanc"));
