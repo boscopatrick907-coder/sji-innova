@@ -663,7 +663,7 @@ class SalesPanelTest {
         addToBasket(panel, "sucre", "1,5");
         assertEquals("1,5", edt(() -> basket(panel).getValueAt(0, SalesPanel.COLUMN_QUANTITY)));
         assertTrue(edt(() -> total(panel)).startsWith("Total : 1"));
-        assertEquals("Encaisser en espèces", edt(() -> button(panel, "salesCheckout").getText()));
+        assertEquals("Encaisser", edt(() -> button(panel, "salesCheckout").getText()));
     }
 
     @Test

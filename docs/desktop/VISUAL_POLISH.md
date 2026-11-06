@@ -57,3 +57,30 @@ startup passed. The existing standalone-product navigation test now clicks the
 actual back button and checks the returned product list. UI layout was inspected
 in renders at 1100 × 720 and 960 × 600. Actual Windows GUI interaction, OS file
 choosers and accessibility still need hands-on checking.
+
+## Friendlier layout and wording
+
+Products now reads as a product list, with names, saved photos, price and stock
+rather than spreadsheet headers. References/categories remain beneath the name;
+missing or unreadable photos use a neutral initial. Families, filters, references,
+keyboard selection, Enter/double-click and the explicit View product action remain.
+The main list avoids the repeated breadcrumb row to leave more room on small screens.
+French/English labels across product forms, photos, deliveries, CSV review and cash
+payment now use simpler shop language. Errors and cash confirmation stay explicit.
+
+Thumbnails are read from the managed photo metadata in background workers: at most
+four concurrent requests, a 128-entry cache, bounded encoded size and dimensions.
+Large original images are not decoded just to paint a list row. Repaints do no disk
+or SQL work. Refresh and photo changes invalidate the cache. A missing thumbnail
+never removes the product or changes its stock/price. No schema or service writes
+were added to browsing.
+
+[Products preview](images/products-friendly.png) ·
+[Small window preview](images/products-friendly-960.png)
+
+Verification: 249 tests passed, zero failures/errors/skips, plus packaged headless
+startup. A real temporary-SQLite photo test checks asynchronous loading, replacement
+and cache invalidation, missing thumbnail fallback and removal. Existing catalog,
+stock, CSV and checkout tests pass; translation assertions reflect the new labels.
+Previews use actual Java components with disposable data and show initials where
+sample products have no photos. Interactive desktop and Windows checks remain manual.
