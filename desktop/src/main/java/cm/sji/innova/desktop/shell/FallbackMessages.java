@@ -13,6 +13,7 @@ public final class FallbackMessages extends ListResourceBundle {
             {"app.title", "Cella"},
             {"shell.nav.accessibleName", "Main navigation"},
             {"shell.nav.products", "Products"},
+            {"shell.nav.sales", "Sales"},
             {"shell.loading", "Opening your shop data..."},
             {"shell.error.title", "Cella could not start"},
             {"shell.error.dataFolder", "Data folder: {0}"},

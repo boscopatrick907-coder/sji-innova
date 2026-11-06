@@ -22,6 +22,9 @@ public record LocalAppData(Path directory) {
 
     public Path shopIdFile() { return directory.resolve("shop-id.txt"); }
 
+    /** A cash sale waiting for confirmation, so it survives a restart. Usually absent. */
+    public Path pendingCheckoutFile() { return directory.resolve("pending-checkout.txt"); }
+
     public Path logDirectory() { return directory.resolve("logs"); }
 
     /** The folder used when the user did not choose one. */
