@@ -411,7 +411,7 @@ class StockPanelTest {
         AtomicReference<StockPanel> opened=new AtomicReference<>();CountDownLatch history=new CountDownLatch(1);
         onEdt(() -> {shell.get().selectScreen("stock");StockPanel panel=findStock(shell.get());assertNotNull(panel);panel.setErrorHandler(text->{});panel.setOnHistoryWorkerDone(history::countDown);opened.set(panel);assertEquals("stock",shell.get().selectedScreenId());});
         opened.get().initialLoadCompletion().toCompletableFuture().get(5,TimeUnit.SECONDS);waitFor(history,"Visible stock history");
-        onEdt(() -> {assertEquals(1,opened.get().stockTable().getRowCount());assertEquals("Enregistrer la réception",opened.get().receiveButton().getText());});
+        onEdt(() -> {assertEquals(1,opened.get().stockTable().getRowCount());assertEquals("Ajouter au stock",opened.get().receiveButton().getText());});
     }
 
 }
