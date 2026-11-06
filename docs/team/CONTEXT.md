@@ -59,7 +59,7 @@ React, JavaFX, Electron, a new database, or extra frameworks for this pilot.
 
 ## Current desktop integration contract
 
-Current assignments are in docs/team/NEXT_WORK.md.
+Current assignments are in docs/team/WILLY.md and docs/team/CHARLES.md.
 Patrick owns existing products/ProductPanel; Willy owns new stock/ panels;
 Charles owns new sales/ panels and shared shell/context/startup files.
 The completed Products shell integration must be preserved, not recreated.
