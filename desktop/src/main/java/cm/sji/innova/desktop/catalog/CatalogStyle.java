@@ -36,6 +36,28 @@ public final class CatalogStyle {
             g.drawLine(10,10,10,19);g.dispose();
         }
     }
+    /** Distinct stock shelves and sales receipt; Products retains its box. */
+    public static final class NavigationIcon implements Icon {
+        private final int section;
+        public NavigationIcon(int section) { this.section=section; }
+        public int getIconWidth() { return 20; }
+        public int getIconHeight() { return 20; }
+        public void paintIcon(Component c, Graphics graphics, int x, int y) {
+            if(section==0){new BoxIcon().paintIcon(c,graphics,x,y);return;}
+            Graphics2D g=(Graphics2D)graphics.create();g.translate(x,y);
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setColor(c.getForeground());g.setStroke(new BasicStroke(1.3f));
+            if(section==1){
+                g.drawLine(2,2,2,18);g.drawLine(18,2,18,18);
+                g.drawLine(2,10,18,10);g.drawLine(2,18,18,18);
+                g.drawRect(5,3,9,7);g.drawRect(5,12,5,6);g.drawRect(12,13,4,5);
+            }else{
+                g.drawRect(4,2,12,16);g.drawLine(7,6,13,6);
+                g.drawLine(7,10,13,10);g.drawLine(7,14,11,14);
+            }
+            g.dispose();
+        }
+    }
     public static final class PhotoPlaceholder extends JPanel {
         private final String caption;
         public PhotoPlaceholder(String caption) { this.caption=caption; setPreferredSize(new Dimension(270,230)); }

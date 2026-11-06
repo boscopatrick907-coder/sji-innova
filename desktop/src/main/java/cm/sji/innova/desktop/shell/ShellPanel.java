@@ -236,7 +236,7 @@ public final class ShellPanel extends JPanel {
             @Override public java.awt.Component getListCellRendererComponent(JList<?> list,Object value,int index,boolean selected,boolean focus){
                 JLabel label=(JLabel)super.getListCellRendererComponent(list,value,index,selected,focus);
                 label.setOpaque(selected);label.setBackground(new java.awt.Color(0x3B8067));label.setForeground(java.awt.Color.WHITE);
-                label.setBorder(BorderFactory.createEmptyBorder(10,12,10,8));label.setIcon(new cm.sji.innova.desktop.catalog.CatalogStyle.BoxIcon());label.setIconTextGap(12);
+                label.setBorder(BorderFactory.createEmptyBorder(10,12,10,8));label.setIcon(new cm.sji.innova.desktop.catalog.CatalogStyle.NavigationIcon(index));label.setIconTextGap(12);
                 return label;
             }
         });

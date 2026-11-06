@@ -113,7 +113,7 @@ public final class CatalogPanel extends JPanel {
         ((BorderLayout)getLayout()).getLayoutComponent(BorderLayout.NORTH).setVisible(true);
         error.setVisible(true);
         body.removeAll();breadcrumbs.removeAll();crumb(t("catalog.products"),this::showFamilies);
-        if(variants||selected!=null)crumb(groupName(family),()->showFamily(family));
+        if(variants||family!=null)crumb(groupName(family),()->showFamily(family));
         Product p=items.stream().filter(i->i.id().equals(selected)).findFirst().orElse(null);
         if(p!=null){crumb(p.name(),()->{});renderDetails(p);}else renderBrowse();
         revalidate();repaint();
@@ -133,32 +133,42 @@ public final class CatalogPanel extends JPanel {
     private void renderResults(){
         if(!SwingUtilities.isEventDispatchThread()||selected!=null||saving)return;
         Component old=((BorderLayout)body.getLayout()).getLayoutComponent(BorderLayout.CENTER);if(old!=null)body.remove(old);
-        if(!variants&&filter.isBlank()){
-            JPanel cards=CatalogStyle.panel(new GridBagLayout());GridBagConstraints c=new GridBagConstraints();c.insets=new Insets(0,0,14,14);c.fill=GridBagConstraints.HORIZONTAL;c.weightx=1;
-            int n=0;
-            for(var f:groups){
-                if(category.getSelectedIndex()>0&&!Objects.equals(category.getSelectedItem(),f.category()))continue;
-                c.gridx=n%3;c.gridy=n/3;cards.add(familyCard(f.id(),f.name(),f.category()),c);n++;
+        if(!variants&&filter.isBlank()&&category.getSelectedIndex()==0){
+            JPanel overview=CatalogStyle.panel(new BorderLayout(0,18));
+            if(!groups.isEmpty()){
+                JPanel cards=CatalogStyle.panel(new GridLayout(0,2,12,12));
+                for(var f:groups)cards.add(familyCard(f.id(),f.name(),f.category()));
+                JPanel familiesSection=CatalogStyle.panel(new BorderLayout(0,10));
+                familiesSection.add(CatalogStyle.label(t("catalog.familiesHeading"),18,true),BorderLayout.NORTH);
+                familiesSection.add(cards,BorderLayout.CENTER);
+                JScrollPane familyScroll=new JScrollPane(familiesSection);familyScroll.setBorder(null);familyScroll.getViewport().setBackground(CatalogStyle.PAPER);
+                familyScroll.setPreferredSize(new Dimension(200,Math.min(170,familiesSection.getPreferredSize().height+6)));
+                overview.add(familyScroll,BorderLayout.NORTH);
             }
-            if(items.stream().anyMatch(p->p.familyId()==null)){c.gridx=n%3;c.gridy=n/3;cards.add(familyCard(null,t("catalog.ungrouped"),null),c);n++;}
-            if(n==0)cards.add(new JLabel(t("catalog.empty")));
-            c.gridx=0;c.gridy=n/3+1;c.weighty=1;cards.add(Box.createVerticalGlue(),c);
-            JScrollPane scroll=new JScrollPane(cards);scroll.setBorder(null);scroll.getViewport().setBackground(CatalogStyle.PAPER);body.add(scroll,BorderLayout.CENTER);
+            List<Product> standalone=items.stream().filter(p->p.familyId()==null).toList();
+            JPanel direct=CatalogStyle.panel(new BorderLayout(0,10));
+            if(!groups.isEmpty())direct.add(CatalogStyle.label(t("catalog.standaloneHeading"),18,true),BorderLayout.NORTH);
+            direct.add(productList(standalone),BorderLayout.CENTER);
+            overview.add(direct,BorderLayout.CENTER);body.add(overview,BorderLayout.CENTER);
         }else{
             List<Product> visible=items.stream().filter(p->variants?Objects.equals(p.familyId(),family):matches(p)).toList();
-            DefaultTableModel model=new DefaultTableModel(new String[]{t("catalog.variant"),t("catalog.reference"),t("catalog.available"),t("catalog.price")},0){public boolean isCellEditable(int row,int col){return false;}};
-            for(var p:visible)model.addRow(new Object[]{p.name(),p.reference(),balance(p),numbers.format(p.unitPrice())+" FCFA / "+unit(p.unit())});
-            table=new JTable(model);table.setName("catalogVariants");table.setRowHeight(48);table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);table.setShowVerticalLines(false);table.setGridColor(CatalogStyle.LINE);table.setFillsViewportHeight(true);
-            table.getAccessibleContext().setAccessibleName(t("catalog.openHint"));
-            Runnable open=()->{int row=table.getSelectedRow();if(row>=0){selectedRow=row;showProduct(visible.get(row).id());}};
-            table.getInputMap().put(KeyStroke.getKeyStroke("ENTER"),"openProduct");table.getActionMap().put("openProduct",new AbstractAction(){public void actionPerformed(java.awt.event.ActionEvent e){open.run();}});
-            table.addMouseListener(new java.awt.event.MouseAdapter(){public void mouseClicked(java.awt.event.MouseEvent e){if(e.getClickCount()==2)open.run();}});
-            JPanel list=CatalogStyle.panel(new BorderLayout(0,10));list.add(new JScrollPane(table),BorderLayout.CENTER);
-            JButton openButton=CatalogStyle.button(t("catalog.open"),false);openButton.addActionListener(e->open.run());
-            JPanel foot=CatalogStyle.panel(new BorderLayout());foot.add(new JLabel(visible.isEmpty()?t("catalog.noMatches"):t("catalog.openHint")),BorderLayout.WEST);foot.add(openButton,BorderLayout.EAST);list.add(foot,BorderLayout.SOUTH);body.add(list,BorderLayout.CENTER);
-            if(selectedRow>=0&&selectedRow<visible.size())table.setRowSelectionInterval(selectedRow,selectedRow);
+            body.add(productList(visible),BorderLayout.CENTER);
         }
         body.revalidate();body.repaint();
+    }
+    private JComponent productList(List<Product> visible){
+        DefaultTableModel model=new DefaultTableModel(new String[]{t("catalog.variant"),t("catalog.reference"),t("catalog.available"),t("catalog.price")},0){public boolean isCellEditable(int row,int col){return false;}};
+        for(var p:visible)model.addRow(new Object[]{p.name(),p.reference(),balance(p),numbers.format(p.unitPrice())+" FCFA / "+unit(p.unit())});
+        table=new JTable(model);table.setName("catalogVariants");table.setRowHeight(48);table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);table.setShowVerticalLines(false);table.setGridColor(CatalogStyle.LINE);table.setFillsViewportHeight(true);
+        table.getAccessibleContext().setAccessibleName(t("catalog.openHint"));
+        Runnable open=()->{int row=table.getSelectedRow();if(row>=0){selectedRow=row;showProduct(visible.get(row).id());}};
+        table.getInputMap().put(KeyStroke.getKeyStroke("ENTER"),"openProduct");table.getActionMap().put("openProduct",new AbstractAction(){public void actionPerformed(java.awt.event.ActionEvent e){open.run();}});
+        table.addMouseListener(new java.awt.event.MouseAdapter(){public void mouseClicked(java.awt.event.MouseEvent e){if(e.getClickCount()==2)open.run();}});
+        JPanel list=CatalogStyle.panel(new BorderLayout(0,10));list.add(new JScrollPane(table),BorderLayout.CENTER);
+        JButton openButton=CatalogStyle.button(t("catalog.open"),false);openButton.addActionListener(e->open.run());
+        JPanel foot=CatalogStyle.panel(new BorderLayout());foot.add(new JLabel(visible.isEmpty()?t("catalog.noMatches"):t("catalog.openHint")),BorderLayout.WEST);foot.add(openButton,BorderLayout.EAST);list.add(foot,BorderLayout.SOUTH);
+        if(selectedRow>=0&&selectedRow<visible.size())table.setRowSelectionInterval(selectedRow,selectedRow);
+        return list;
     }
     private boolean matches(Product p){
         if(category.getSelectedIndex()>0&&!Objects.equals(category.getSelectedItem(),p.category()))return false;
@@ -166,11 +176,12 @@ public final class CatalogPanel extends JPanel {
         return Arrays.stream(fold(filter).strip().split("\\s+")).allMatch(text::contains);
     }
     private JComponent familyCard(UUID id,String name,String categoryName){
-        JPanel card=new JPanel(new BorderLayout(0,12));card.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(CatalogStyle.LINE),BorderFactory.createEmptyBorder(17,17,17,17)));card.setBackground(Color.WHITE);
-        JLabel nameLabel=CatalogStyle.label(name,19,false);card.add(nameLabel,BorderLayout.NORTH);
+        JPanel card=new JPanel(new BorderLayout(14,0));card.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(CatalogStyle.LINE),BorderFactory.createEmptyBorder(12,14,12,14)));card.setBackground(Color.WHITE);
         long count=items.stream().filter(p->Objects.equals(id,p.familyId())).count();
-        JPanel text=CatalogStyle.panel(new GridLayout(0,1,0,6));text.add(new JLabel(categoryName==null?" ":categoryName));text.add(new JLabel(count+" "+t("catalog.variants")));card.add(text,BorderLayout.CENTER);
-        JButton open=CatalogStyle.button(t("catalog.open"),false);open.addActionListener(e->showFamily(id));card.add(open,BorderLayout.SOUTH);return card;
+        JPanel text=CatalogStyle.panel(new GridLayout(0,1,0,6));text.add(CatalogStyle.label(name,19,false));
+        String summary=count+" "+t(count==1?"catalog.variantSingular":"catalog.variants");
+        text.add(new JLabel(categoryName==null?summary:categoryName+" · "+summary));card.add(text,BorderLayout.CENTER);
+        JButton open=CatalogStyle.button(t("catalog.open"),false);open.addActionListener(e->showFamily(id));card.add(open,BorderLayout.EAST);return card;
     }
     private void renderDetails(Product p){
         JPanel layout=CatalogStyle.panel(new GridLayout(1,2,24,0));

@@ -155,6 +155,25 @@ class SalesPanelTest {
     private List<Sale> savedSales() throws Exception { return sales.listSales(shop); }
 
     @Test
+    void zeroStockCannotBeAddedByButtonOrKeyboardAndCharacteristicsKeepTheirNames() throws Exception {
+        Product shirt=products.create(shop,"T-shirt",5000,null,null,"Vêtements","piece",Map.of("Matière","Coton"));
+        SalesPanel panel=open(Locale.FRENCH,stock,products);
+        edt(()->{
+            find(panel,JTextField.class,"salesSearch").setText("t-shirt");
+            assertEquals("Matière : Coton",find(panel,JTable.class,"salesResults").getValueAt(0,2));
+            assertFalse(find(panel,JButton.class,"salesAdd").isEnabled());
+            assertTrue(find(panel,JLabel.class,"salesResultsHint").getText().contains("Stock"));
+            JTable results=find(panel,JTable.class,"salesResults");
+            results.getActionMap().get("addToBasket").actionPerformed(null);
+            assertEquals(0,find(panel,JTable.class,"salesBasket").getRowCount());
+        });
+        receive(shirt,3000);edt(panel::reload);waitUntilIdle(panel);
+        edt(()->{assertTrue(find(panel,JButton.class,"salesAdd").isEnabled());
+            find(panel,JButton.class,"salesAdd").doClick();
+            assertEquals(1,find(panel,JTable.class,"salesBasket").getRowCount());});
+    }
+
+    @Test
     void sellingTwoOfTenLeavesEightAndOneSaleEvenAfterARestart() throws Exception {
         SalesPanel panel = open();
         assertEquals("10 pieces", edt(() -> results(panel).getValueAt(0, 3)));
@@ -274,7 +293,8 @@ class SalesPanelTest {
 
     @Test
     void enterInAnEmptySearchBoxAddsNothing() throws Exception {
-        products.create(shop, "Beans", 500);
+        Product beans = products.create(shop, "Beans", 500);
+        receive(beans, 10000);
         SalesPanel panel = open();
         edt(() -> search(panel).postActionEvent());
         assertEquals(0, (int) edt(() -> basket(panel).getRowCount()));
@@ -292,7 +312,8 @@ class SalesPanelTest {
 
     @Test
     void theArrowKeysChooseAResultEvenWithAnEmptySearchBox() throws Exception {
-        products.create(shop, "Beans", 500);
+        Product beans = products.create(shop, "Beans", 500);
+        receive(beans, 10000);
         SalesPanel panel = open();
         edt(() -> {
             search(panel).getActionMap().get("nextResult").actionPerformed(null);
@@ -330,7 +351,8 @@ class SalesPanelTest {
 
     @Test
     void theBuyingPriceNeverAppears() throws Exception {
-        products.create(shop, "Oil", 1_500, null, 987_654L, null, "litre", Map.of());
+        Product oil = products.create(shop, "Oil", 1_500, null, 987_654L, null, "litre", Map.of());
+        receive(oil, 5000);
         SalesPanel panel = open();
         addToBasket(panel, "oil", "1");
         edt(() -> {
