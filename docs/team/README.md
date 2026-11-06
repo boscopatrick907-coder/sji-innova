@@ -10,14 +10,14 @@ Open the repository root in your tool, then paste the matching prompt.
 
 **Charles**
 
-> Read docs/team/CONTEXT.md and docs/team/CHARLES.md, then follow my current assignment.
+> Read docs/team/CONTEXT.md and docs/team/NEXT_WORK.md, then follow my current assignment.
 > Inspect the actual repository before editing. Explain the steps
 > in simple language and implement only my assigned milestone. Show what you
 > tested and the remaining limitations. Do not push or merge without my request.
 
 **Willy**
 
-> Read docs/team/CONTEXT.md and docs/team/WILLY_NEXT_STOCK.md, then follow my current assignment.
+> Read docs/team/CONTEXT.md and docs/team/NEXT_WORK.md, then follow my current assignment.
 > Inspect the actual repository before editing. Explain the steps
 > in simple language and implement only my assigned milestone. Show what you
 > tested and the remaining limitations. Do not push or merge without my request.
@@ -75,8 +75,8 @@ normal GitHub sign-in when needed; do not put credentials in code or chat.
 | Person | Owns | Current brief |
 | --- | --- | --- |
 | Patrick | Products design and implementation | Chosen family catalog is merged in PR #24 |
-| Willy | Receipt restart recovery, then corrections and thresholds | [WILLY_NEXT_STOCK.md](WILLY_NEXT_STOCK.md) |
-| Charles | Read-only sales history and sale details | [CHARLES.md](CHARLES.md) |
+| Willy | Receipt restart recovery, then corrections and thresholds | [NEXT_WORK.md](NEXT_WORK.md) |
+| Charles | Read-only sales history and sale details | [NEXT_WORK.md](NEXT_WORK.md) |
 | Pascal | French/English resources and cross-screen QA | [PASCAL.md](PASCAL.md) |
 | Emmanuel | CSV and photo backends delivered; coordinate new work with Patrick | [Ordered backend briefs](EMMANUEL.md) |
 
