@@ -18,6 +18,11 @@ public final class CatalogStyle {
         UIManager.put("Table.selectionForeground",INK);
         UIManager.put("TableHeader.background",new Color(0xF0F4EE));
         UIManager.put("TableHeader.foreground",MUTED);
+        UIManager.put("ProgressBar.foreground",GREEN);
+        UIManager.put("Button.default.background",GREEN);
+        UIManager.put("Button.default.foreground",Color.WHITE);
+        UIManager.put("Component.linkColor",GREEN);
+        UIManager.put("CheckBox.icon.selectedBackground",GREEN);
     }
     /** Soft white surface for content; the existing page and sidebar colors stay intact. */
     public static JPanel surface(LayoutManager layout) {
@@ -31,6 +36,30 @@ public final class CatalogStyle {
         };
         panel.setOpaque(false);panel.setBorder(BorderFactory.createEmptyBorder(14,16,14,16));
         return panel;
+    }
+    public static JScrollPane tableScroll(JTable table) {
+        styleTable(table);JScrollPane scroll=new JScrollPane(table);
+        scroll.setBorder(null);scroll.getViewport().setBackground(Color.WHITE);return scroll;
+    }
+    public static JPanel tableCard(String title,JTable table) {
+        JPanel card=surface(new BorderLayout(0,12));
+        card.add(label(title,18,true),BorderLayout.NORTH);card.add(tableScroll(table),BorderLayout.CENTER);
+        return card;
+    }
+    /** Keep content readable at small window heights; tables retain their own row scrolling. */
+    public static JScrollPane scrollContent(JComponent content,int minimumHeight) {
+        class View extends JPanel implements Scrollable {
+            View(){super(new BorderLayout());setOpaque(false);add(content);}
+            @Override public Dimension getPreferredSize(){return new Dimension(700,minimumHeight);}
+            public Dimension getPreferredScrollableViewportSize(){return getPreferredSize();}
+            public int getScrollableUnitIncrement(Rectangle r,int orientation,int direction){return 22;}
+            public int getScrollableBlockIncrement(Rectangle r,int orientation,int direction){return Math.max(22,r.height-30);}
+            public boolean getScrollableTracksViewportWidth(){return true;}
+            public boolean getScrollableTracksViewportHeight(){return getParent()!=null&&getParent().getHeight()>=minimumHeight;}
+        }
+        JScrollPane scroll=new JScrollPane(new View());scroll.setBorder(null);
+        scroll.getViewport().setBackground(PAPER);scroll.getVerticalScrollBar().setUnitIncrement(22);
+        scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);return scroll;
     }
     public static JButton arrowButton(String text,boolean primary,boolean back){
         JButton button=button(text,primary);button.setIcon(new ArrowIcon(back? -1:1));

@@ -1,5 +1,6 @@
 package cm.sji.innova.desktop.stock;
 
+import cm.sji.innova.desktop.catalog.CatalogStyle;
 import cm.sji.innova.core.product.Product;
 import cm.sji.innova.core.product.ProductService;
 import cm.sji.innova.core.stock.StockLevel;
@@ -36,8 +37,8 @@ public final class StockPanel extends JPanel {
     private final JTextField quantityField = new JTextField(12);
     private final JTextField reasonField = new JTextField(20);
 
-    private final JButton receiveButton = new JButton();
-    private final JButton refreshButton = new JButton();
+    private final JButton receiveButton = CatalogStyle.button("",true);
+    private final JButton refreshButton = CatalogStyle.button("",false);
 
     private final DefaultTableModel stockModel;
     private final DefaultTableModel historyModel;
@@ -131,47 +132,28 @@ public final class StockPanel extends JPanel {
     }
 
     private void createInterface() {
-        setLayout(new BorderLayout(15, 15));
-        setBorder(new EmptyBorder(20, 20, 20, 20));
-
-        JLabel title = new JLabel(
-                message("stock.title", "Stock Management"));
-        title.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 25));
-        setBackground(cm.sji.innova.desktop.catalog.CatalogStyle.PAPER);
-
-        JLabel subtitle = new JLabel(message(
-                "stock.subtitle",
-                "Monitor quantities, receive deliveries and view movements."));
-
-        JPanel header = new JPanel();
-        header.setLayout(new BoxLayout(header, BoxLayout.Y_AXIS));
-        header.setOpaque(false);
-        header.add(title);
-        header.add(Box.createVerticalStrut(5));
-        header.add(subtitle);
-
-        add(header, BorderLayout.NORTH);
-
-        JPanel main = new JPanel(new BorderLayout(10, 10));
-
-        main.add(createReceiptForm(), BorderLayout.NORTH);
-        main.add(createTables(), BorderLayout.CENTER);
-        main.add(createRefreshPanel(), BorderLayout.SOUTH);
-
-        add(main, BorderLayout.CENTER);
-
-        statusLabel.setForeground(Color.DARK_GRAY);
-        add(statusLabel, BorderLayout.SOUTH);
+        setLayout(new BorderLayout(0,18));setBorder(new EmptyBorder(22,30,18,30));setBackground(CatalogStyle.PAPER);
+        JPanel titles=CatalogStyle.panel(new BorderLayout(0,7));
+        titles.add(CatalogStyle.label(message("stock.title","Stock Management"),28,true),BorderLayout.NORTH);
+        JLabel subtitle=CatalogStyle.label(message("stock.subtitle","Monitor quantities, receive deliveries and view movements."),13,false);
+        subtitle.setForeground(CatalogStyle.MUTED);titles.add(subtitle,BorderLayout.CENTER);
+        JPanel header=CatalogStyle.panel(new BorderLayout(12,0));header.add(titles,BorderLayout.CENTER);
+        header.add(createRefreshPanel(),BorderLayout.EAST);add(header,BorderLayout.NORTH);
+        JPanel main=CatalogStyle.panel(new BorderLayout(0,16));
+        main.add(createReceiptForm(),BorderLayout.NORTH);main.add(createTables(),BorderLayout.CENTER);
+        add(CatalogStyle.scrollContent(main,690),BorderLayout.CENTER);
+        statusLabel.setForeground(CatalogStyle.MUTED);add(statusLabel,BorderLayout.SOUTH);
     }
 
     private JPanel createReceiptForm() {
-        JPanel panel = new JPanel(new GridBagLayout());
-        panel.setBorder(BorderFactory.createTitledBorder(
-                message("stock.receive.title", "Receive Stock")));
+        JPanel panel = CatalogStyle.surface(new GridBagLayout());
 
         GridBagConstraints c = new GridBagConstraints();
         c.insets = new Insets(5, 5, 5, 5);
         c.fill = GridBagConstraints.HORIZONTAL;
+        c.gridx=0;c.gridy=0;c.gridwidth=3;c.weightx=1;
+        panel.add(CatalogStyle.label(message("stock.receive.title","Receive Stock"),18,true),c);
+        c.gridwidth=1;
 
         productSelector.setRenderer(new DefaultListCellRenderer() {
             @Override
@@ -194,15 +176,15 @@ public final class StockPanel extends JPanel {
             }
         });
 
-        addFormRow(panel, c, 0,
+        addFormRow(panel, c, 1,
                 message("stock.product", "Product"),
                 productSelector);
 
-        addFormRow(panel, c, 1,
+        addFormRow(panel, c, 2,
                 message("stock.quantity", "Quantity"),
                 quantityField);
 
-        addFormRow(panel, c, 2,
+        addFormRow(panel, c, 3,
                 message("stock.reason", "Reason / delivery reference"),
                 reasonField);
 
@@ -211,7 +193,7 @@ public final class StockPanel extends JPanel {
         receiveButton.addActionListener(e -> submitReceipt());
 
         c.gridx = 1;
-        c.gridy = 3;
+        c.gridy = 4;
         c.gridwidth = 2;
         panel.add(receiveButton, c);
 
@@ -239,6 +221,7 @@ public final class StockPanel extends JPanel {
         JLabel fieldLabel = new JLabel(label + ":");
         fieldLabel.setLabelFor(component);
         component.getAccessibleContext().setAccessibleName(label);
+        component.putClientProperty("JComponent.minimumHeight",36);
         panel.add(fieldLabel, c);
 
         c.gridx = 1;
@@ -251,27 +234,17 @@ public final class StockPanel extends JPanel {
     }
 
     private JPanel createTables() {
-        stockTable.setRowHeight(28);
-        historyTable.setRowHeight(26);
-
-        JScrollPane stockScroll = new JScrollPane(stockTable);
-        stockScroll.setBorder(BorderFactory.createTitledBorder(
-                message("stock.overview.title", "Stock Overview")));
-
-        JScrollPane historyScroll = new JScrollPane(historyTable);
-        historyScroll.setBorder(BorderFactory.createTitledBorder(
-                message("stock.history.title", "Movement History")));
-
-        JPanel panel = new JPanel(new GridLayout(2, 1, 0, 10));
-        panel.add(stockScroll);
-        panel.add(historyScroll);
-
+        stockTable.setRowHeight(34);historyTable.setRowHeight(34);
+        stockTable.setName("stockLevels");historyTable.setName("stockMovements");
+        JPanel panel=CatalogStyle.panel(new GridLayout(2,1,0,16));
+        panel.add(CatalogStyle.tableCard(message("stock.overview.title","Stock Overview"),stockTable));
+        panel.add(CatalogStyle.tableCard(message("stock.history.title","Movement History"),historyTable));
         return panel;
     }
 
     private JPanel createRefreshPanel() {
-        JPanel panel = new JPanel(
-                new FlowLayout(FlowLayout.RIGHT));
+        JPanel panel = CatalogStyle.panel(
+                new FlowLayout(FlowLayout.RIGHT,0,0));
 
         refreshButton.setText(
                 message("action.refresh", "Refresh"));

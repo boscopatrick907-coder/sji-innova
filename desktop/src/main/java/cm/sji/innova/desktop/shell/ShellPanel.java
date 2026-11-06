@@ -1,5 +1,7 @@
 package cm.sji.innova.desktop.shell;
 
+import cm.sji.innova.desktop.catalog.CatalogStyle;
+
 import cm.sji.innova.desktop.sales.SalesPanel;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
@@ -73,7 +75,7 @@ public final class ShellPanel extends JPanel {
 
         JPanel cards = new JPanel(pages);
         cards.add(buildLoadingPage(), Page.LOADING.name());
-        retryButton = new JButton(messages.get("shell.error.retry"));
+        retryButton = CatalogStyle.button(messages.get("shell.error.retry"),true);
         cards.add(buildErrorPage(), Page.ERROR.name());
         cards.add(buildMainPage(), Page.MAIN.name());
         add(cards, BorderLayout.CENTER);
@@ -162,9 +164,9 @@ public final class ShellPanel extends JPanel {
     }
 
     private JComponent buildLoadingPage() {
-        JPanel page = new JPanel(new GridBagLayout());
-        JPanel box = new JPanel(new BorderLayout(0, 12));
-        box.add(new JLabel(messages.get("shell.loading")), BorderLayout.NORTH);
+        JPanel page = new JPanel(new GridBagLayout());page.setBackground(CatalogStyle.PAPER);
+        JPanel box = CatalogStyle.surface(new BorderLayout(0,18));box.setPreferredSize(new java.awt.Dimension(440,150));
+        box.add(CatalogStyle.label(messages.get("shell.loading"),22,true),BorderLayout.NORTH);
         JProgressBar bar = new JProgressBar();
         bar.setIndeterminate(true);
         box.add(bar, BorderLayout.CENTER);
@@ -173,21 +175,23 @@ public final class ShellPanel extends JPanel {
     }
 
     private JComponent buildErrorPage() {
-        JPanel page = new JPanel(new BorderLayout(0, 12));
+        JPanel page = CatalogStyle.surface(new BorderLayout(0,18));
+        page.setBackground(CatalogStyle.PAPER);page.setOpaque(true);
         page.setBorder(BorderFactory.createEmptyBorder(24, 24, 24, 24));
-        JLabel title = new JLabel(messages.get("shell.error.title"));
-        title.setFont(title.getFont().deriveFont(java.awt.Font.BOLD, 18f));
+        JLabel title = CatalogStyle.label(messages.get("shell.error.title"),28,true);
         errorDetail.setEditable(false);
         errorDetail.setLineWrap(true);
         errorDetail.setWrapStyleWord(true);
-        JButton exit = new JButton(messages.get("shell.error.exit"));
+        JButton exit = CatalogStyle.button(messages.get("shell.error.exit"),false);
         retryButton.addActionListener(event -> start());
         exit.addActionListener(event -> onExit.run());
-        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        JPanel buttons = CatalogStyle.panel(new FlowLayout(FlowLayout.RIGHT));
         buttons.add(retryButton);
         buttons.add(exit);
         page.add(title, BorderLayout.NORTH);
-        page.add(new JScrollPane(errorDetail), BorderLayout.CENTER);
+        JScrollPane detailScroll=new JScrollPane(errorDetail);detailScroll.setBorder(null);
+        errorDetail.setBackground(java.awt.Color.WHITE);errorDetail.setForeground(CatalogStyle.INK);
+        page.add(detailScroll, BorderLayout.CENTER);
         page.add(buttons, BorderLayout.SOUTH);
         SwingUtilities.invokeLater(() -> {
             if (page.getRootPane() != null) page.getRootPane().setDefaultButton(retryButton);
@@ -245,6 +249,7 @@ public final class ShellPanel extends JPanel {
         JPanel page = new JPanel(new BorderLayout());
         page.add(sidebar, BorderLayout.WEST);
         JPanel content=new JPanel(new BorderLayout());
+        screenHeading.setFont(screenHeading.getFont().deriveFont(java.awt.Font.BOLD,13f));screenHeading.setForeground(CatalogStyle.MUTED);
         screenHeading.setText(messages.get("shell.catalog"));screenHeading.setBorder(BorderFactory.createEmptyBorder(18,30,18,20));screenHeading.setOpaque(true);screenHeading.setBackground(java.awt.Color.WHITE);
         content.add(screenHeading,BorderLayout.NORTH);content.add(screenArea,BorderLayout.CENTER);
         page.add(content,BorderLayout.CENTER);

@@ -26,6 +26,7 @@ public final class CsvImportPanel extends JPanel {
     private final JTextArea status=new JTextArea(2,20);
     private final DefaultTableModel model;
     private final JTable table;
+    private final JScrollPane reviewScroll;
     private final JLabel filename=new JLabel(" ");
     private final JTextArea diagnostics=new JTextArea(2,20);
     private final CompletableFuture<Void> ready=new CompletableFuture<>();
@@ -36,19 +37,29 @@ public final class CsvImportPanel extends JPanel {
     public CsvImportPanel(ProductImportService service,UUID shop,Path directory,ResourceBundle messages,
                           Runnable back,Runnable finished,Consumer<Boolean> busy){
         super(new BorderLayout(0,18));this.service=service;this.shop=shop;this.directory=directory;this.messages=messages;this.back=back;this.finished=finished;this.busy=busy;setOpaque(false);status.setEditable(false);status.setLineWrap(true);status.setWrapStyleWord(true);status.setOpaque(false);
-        JPanel top=CatalogStyle.panel(new BorderLayout(0,15));top.add(CatalogStyle.label(t("csv.title"),25,false),BorderLayout.NORTH);
-        choose=CatalogStyle.button(t("csv.choose"),false);template=CatalogStyle.button(t("csv.template"),false);delimiter=new JComboBox<>(new String[]{t("csv.auto"),t("csv.comma"),t("csv.semicolon")});
-        JPanel file=CatalogStyle.panel(new FlowLayout(FlowLayout.LEFT,8,0));file.add(choose);file.add(template);file.add(delimiter);file.add(new JLabel(t("csv.format")));JPanel source=CatalogStyle.panel(new BorderLayout(0,7));source.add(file,BorderLayout.NORTH);source.add(filename,BorderLayout.SOUTH);top.add(source,BorderLayout.SOUTH);add(top,BorderLayout.NORTH);
+        JPanel top=CatalogStyle.panel(new BorderLayout(0,15));top.add(CatalogStyle.label(t("csv.title"),28,true),BorderLayout.NORTH);
+        choose=CatalogStyle.button(t("csv.choose"),true);template=CatalogStyle.button(t("csv.template"),false);delimiter=new JComboBox<>(new String[]{t("csv.auto"),t("csv.comma"),t("csv.semicolon")});
+        JPanel file=CatalogStyle.panel(new GridLayout(1,3,10,0));file.add(choose);file.add(template);file.add(delimiter);
+        JPanel source=CatalogStyle.surface(new BorderLayout(0,10));source.add(file,BorderLayout.NORTH);
+        JPanel fileInfo=CatalogStyle.panel(new BorderLayout(10,0));fileInfo.add(filename,BorderLayout.CENTER);
+        JLabel format=CatalogStyle.label(t("csv.format"),12,false);format.setForeground(CatalogStyle.MUTED);fileInfo.add(format,BorderLayout.EAST);
+        source.add(fileInfo,BorderLayout.CENTER);top.add(source,BorderLayout.SOUTH);
         model=new DefaultTableModel(new String[]{t("csv.select"),t("csv.row"),t("product.name"),t("product.unit"),t("catalog.price"),t("csv.state")},0){
             public Class<?> getColumnClass(int col){return col==0?Boolean.class:Object.class;}
             public boolean isCellEditable(int row,int col){return col==0&&!running&&!completed&&store!=null&&pending==null&&preview!=null&&preview.rows().get(row).isValid();}
         };
-        table=new JTable(model);table.setRowHeight(32);table.getColumnModel().getColumn(0).setMaxWidth(70);table.getColumnModel().getColumn(1).setMaxWidth(60);table.setName("csvPreview");
-        diagnostics.setEditable(false);diagnostics.setLineWrap(true);diagnostics.setWrapStyleWord(true);diagnostics.setBackground(CatalogStyle.PAPER);
-        JPanel center=CatalogStyle.panel(new BorderLayout(0,10));JScrollPane tableScroll=new JScrollPane(table);tableScroll.setColumnHeaderView(table.getTableHeader());center.add(tableScroll);center.add(new JScrollPane(diagnostics),BorderLayout.SOUTH);add(center);
+        table=new JTable(model);table.setRowHeight(36);CatalogStyle.styleTable(table);table.getColumnModel().getColumn(0).setMaxWidth(70);table.getColumnModel().getColumn(1).setMaxWidth(60);table.setName("csvPreview");
+        diagnostics.setEditable(false);diagnostics.setLineWrap(true);diagnostics.setWrapStyleWord(true);diagnostics.setBackground(Color.WHITE);diagnostics.setForeground(CatalogStyle.MUTED);
+        JPanel center=CatalogStyle.surface(new BorderLayout(0,10));
+        center.add(CatalogStyle.label(t("csv.previewHeading"),18,true),BorderLayout.NORTH);
+        center.add(CatalogStyle.tableScroll(table),BorderLayout.CENTER);
+        JScrollPane notes=new JScrollPane(diagnostics);notes.setBorder(null);center.add(notes,BorderLayout.SOUTH);
+        JPanel review=CatalogStyle.panel(new BorderLayout(0,16));review.add(top,BorderLayout.NORTH);review.add(center,BorderLayout.CENTER);
+        reviewScroll=CatalogStyle.scrollContent(review,460);
+        add(reviewScroll,BorderLayout.CENTER);
         duplicates=new JCheckBox(t("csv.duplicates"));duplicates.setOpaque(false);
-        confirm=CatalogStyle.button(t("csv.confirm"),true);confirm.setName("confirmCsv");returnButton=CatalogStyle.button(t("catalog.back"),false);
-        JPanel bottom=CatalogStyle.panel(new BorderLayout(0,10));JPanel actions=CatalogStyle.panel(new FlowLayout(FlowLayout.RIGHT));actions.add(returnButton);actions.add(confirm);bottom.add(duplicates,BorderLayout.NORTH);bottom.add(status,BorderLayout.CENTER);bottom.add(actions,BorderLayout.SOUTH);add(bottom,BorderLayout.SOUTH);
+        confirm=CatalogStyle.button(t("csv.confirm"),true);confirm.setName("confirmCsv");returnButton=CatalogStyle.arrowButton(t("catalog.back"),false,true);
+        JPanel bottom=CatalogStyle.surface(new BorderLayout(0,10));JPanel actions=CatalogStyle.panel(new FlowLayout(FlowLayout.RIGHT));actions.add(returnButton);actions.add(confirm);bottom.add(duplicates,BorderLayout.NORTH);bottom.add(status,BorderLayout.CENTER);bottom.add(actions,BorderLayout.SOUTH);add(bottom,BorderLayout.SOUTH);
         template.addActionListener(e->{
             JFileChooser picker=new JFileChooser();picker.setSelectedFile(new java.io.File("products_template.csv"));
             if(picker.showSaveDialog(this)!=JFileChooser.APPROVE_OPTION)return;
@@ -89,6 +100,7 @@ public final class CsvImportPanel extends JPanel {
             boolean selected=pending==null?row.isValid()&&!row.hasWarnings():pending.request().selectedRowNumbers().contains(row.rowNumber());
             model.addRow(new Object[]{selected,row.rowNumber(),row.name(),row.unit()!=null&&messages.containsKey("unit."+row.unit())?t("unit."+row.unit()):row.unit(),row.sellingPrice()==null?"—":java.text.NumberFormat.getIntegerInstance(messages.getLocale()).format(row.sellingPrice())+" FCFA",t(!row.isValid()?"csv.invalid":row.hasWarnings()?"csv.warning":"csv.valid")});
         }
+        SwingUtilities.invokeLater(()->{if(reviewScroll.getViewport().getExtentSize().height<460)reviewScroll.getVerticalScrollBar().setValue(reviewScroll.getVerticalScrollBar().getMaximum());});
         duplicates.setSelected(pending!=null&&pending.request().allowDuplicates());diagnostics.setText(String.join("\n",preview.fileErrors()));confirm.setText(t(pending==null?"csv.confirm":"csv.retry"));
     }
     public CompletionStage<ImportResult> submit(){
