@@ -211,8 +211,17 @@ public final class ShellPanel extends JPanel {
             if (!event.getValueIsAdjusting() && item != null) {
                 if ("stock".equals(item.id())) {
                     if (stockPanel == null) {
+                        java.nio.file.Path pendingFile = activeContext.location().directory()
+                                .resolve("pending-stock-receipt.properties");
+                        cm.sji.innova.desktop.stock.PendingReceiptStore receiptStore =
+                                new cm.sji.innova.desktop.stock.FilePendingReceiptStore(pendingFile);
+                        java.nio.file.Path adjustmentFile = activeContext.location().directory()
+                                .resolve("pending-stock-adjustment.properties");
+                        cm.sji.innova.desktop.stock.PendingStockAdjustmentStore adjustmentStore =
+                                new cm.sji.innova.desktop.stock.FilePendingStockAdjustmentStore(adjustmentFile);
                         stockPanel = new cm.sji.innova.desktop.stock.StockPanel(activeContext.stock(),
-                                activeContext.products(), activeContext.shopId(), activeContext.deviceId(), messages.bundle());
+                                activeContext.products(), activeContext.shopId(), activeContext.deviceId(),
+                                messages.bundle(), receiptStore, adjustmentStore);
                         screenArea.add(stockPanel, "stock");
                     } else stockPanel.loadProductsAndStock();
                 } else if ("products".equals(item.id()) && catalog != null && productsReady.toCompletableFuture().isDone()) {

@@ -313,6 +313,55 @@ class StockPanelTest {
     }
 
     @Test
+    void restoresSavedReceiptAndRetriesTheSameOperationAfterPanelRecreation() throws Exception {
+        Path pendingFile = tempDir.resolve("pending-stock-receipt.properties");
+        FilePendingReceiptStore store = new FilePendingReceiptStore(pendingFile);
+        PendingReceipt saved = new PendingReceipt(
+                UUID.randomUUID(), shopId, product.id(), deviceId,
+                product.unit(), 7_000, "Saved delivery");
+        store.save(saved);
+
+        AtomicReference<StockPanel> reference = new AtomicReference<>();
+        CountDownLatch historyDone = new CountDownLatch(1);
+        SwingUtilities.invokeAndWait(() -> {
+            StockPanel panel = new StockPanel(stock, products, shopId, deviceId,
+                    emptyMessages(), store);
+            panel.setErrorHandler(message -> {});
+            panel.setOnHistoryWorkerDone(historyDone::countDown);
+            reference.set(panel);
+        });
+        StockPanel panel = reference.get();
+        panel.initialLoadCompletion().toCompletableFuture().get(5, TimeUnit.SECONDS);
+        assertTrue(historyDone.await(5, TimeUnit.SECONDS));
+
+        onEdt(() -> {
+            assertTrue(panel.hasPendingReceipt());
+            assertFalse(panel.quantityField().isEnabled());
+            assertFalse(panel.reasonField().isEnabled());
+            assertEquals("7", panel.quantityField().getText());
+            assertEquals("Saved delivery", panel.reasonField().getText());
+        });
+
+        CountDownLatch receiptDone = new CountDownLatch(1);
+        CountDownLatch reloadDone = new CountDownLatch(1);
+        CountDownLatch historyReloadDone = new CountDownLatch(1);
+        onEdt(() -> {
+            panel.setOnReceiptWorkerDone(receiptDone::countDown);
+            panel.setOnLoadWorkerDone(reloadDone::countDown);
+            panel.setOnHistoryWorkerDone(historyReloadDone::countDown);
+        });
+        clickReceive(panel);
+        waitFor(receiptDone, "Recovered receipt retry timed out");
+        waitFor(reloadDone, "Stock reload after recovered receipt timed out");
+        waitFor(historyReloadDone, "History reload after recovered receipt timed out");
+
+        assertEquals(7_000, stock.current(shopId, product.id()).quantityMilli());
+        assertEquals(1, stock.history(shopId, product.id()).size());
+        assertTrue(store.load().isEmpty());
+        onEdt(() -> assertFalse(panel.hasPendingReceipt()));
+    }
+
+    @Test
     void filtersStockToTheSelectedShop() throws Exception {
         UUID anotherShop = UUID.randomUUID();
 
