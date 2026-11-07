@@ -70,18 +70,18 @@ On Linux/macOS use `./mvnw` instead. The README's `/workspace/.setup` paths belo
 only to the prepared cloud machine; do not copy them onto a friend's PC. Use
 normal GitHub sign-in when needed; do not put credentials in code or chat.
 
-## Current assignments — 6 November 2026
+## Current assignments — 7 November 2026
 
 | Person | Owns | Current brief |
 | --- | --- | --- |
-| Patrick | Products design and implementation | Chosen family catalog is merged in PR #24 |
+| Patrick | Products and shared desktop style | [Current style guide](../desktop/STYLE_GUIDE.md) |
 | Willy | Receipt restart recovery, then corrections and thresholds | [WILLY.md](WILLY.md) |
 | Charles | Read-only sales history and sale details | [CHARLES.md](CHARLES.md) |
 | Pascal | French/English resources and cross-screen QA | [PASCAL.md](PASCAL.md) |
 | Emmanuel | CSV and photo backends delivered; coordinate new work with Patrick | [Ordered backend briefs](EMMANUEL.md) |
 
 The current briefs above replace earlier assignments. Products, CSV/photo controls,
-Stock receipt/history and cash checkout are merged (through PR #30). Do not repeat
+Stock receipt/history and cash checkout are merged (shared UI updated through PR #36). Do not repeat
 those implementations. docs/design/ contains visual references; current Java code
 is the actual implementation.
 
@@ -102,3 +102,6 @@ without reproducing the issue on current main.
 Report branch/commit, working behavior, tests, screenshots, blockers and next step.
 Separate automated/headless checks from actual Windows GUI tests. Follow README.md
 for Java 21 build/run commands and preserve user work before switching branches.
+
+Current UI work must follow [the shared desktop style guide](../desktop/STYLE_GUIDE.md).
+Willy and Charles each have one current named brief above; their functional milestones remain unchanged.

@@ -14,6 +14,7 @@ public final class VariantForm extends JPanel {
     private final JComboBox<String> unit=new JComboBox<>(new String[]{"piece","bag","kg","litre"});
     private final JPanel specs=CatalogStyle.panel(new GridLayout(0,1,0,8));
     private final JLabel error=new JLabel(" ");
+    private FeedbackStrip feedback;
     private final JButton save,cancel,add;
     private boolean pending;
     private UUID retainedFamily;
@@ -35,13 +36,14 @@ public final class VariantForm extends JPanel {
         add=CatalogStyle.button(t.apply("catalog.addInformation"),false);
         add.addActionListener(e->{JPanel row=CatalogStyle.panel(new BorderLayout(8,0));JPanel pair=CatalogStyle.panel(new GridLayout(1,2,8,0));JTextField key=new JTextField(),value=new JTextField();key.putClientProperty("JTextField.placeholderText",t.apply("catalog.infoName"));value.putClientProperty("JTextField.placeholderText",t.apply("catalog.infoValue"));key.getAccessibleContext().setAccessibleName(t.apply("catalog.infoName"));value.getAccessibleContext().setAccessibleName(t.apply("catalog.infoValue"));pair.add(key);pair.add(value);row.add(pair);JButton remove=CatalogStyle.button(t.apply("catalog.remove"),false);remove.addActionListener(ev->{specs.remove(row);specs.revalidate();specs.repaint();});row.add(remove,BorderLayout.EAST);specs.add(row);specs.revalidate();specs.repaint();});
         optional.add(specs,d);d.gridy++;optional.add(add,d);optional.setVisible(false);
-        JToggleButton more=new JToggleButton(t.apply("catalog.optional"));more.setIcon(new CatalogStyle.ArrowIcon(1));more.setIconTextGap(10);more.putClientProperty("FlatLaf.style","arc: 12");more.putClientProperty("JComponent.minimumHeight",40);more.setHorizontalAlignment(SwingConstants.LEFT);more.addActionListener(e->{optional.setVisible(more.isSelected());revalidate();});fields.add(more,c);c.gridy++;fields.add(optional,c);c.gridy++;
+        JToggleButton more=new JToggleButton(t.apply("catalog.optional"));more.setIcon(new CatalogStyle.ArrowIcon(1));more.setSelectedIcon(new CatalogStyle.ArrowIcon(2));more.setName("variantOptionalDetails");more.setIconTextGap(10);more.putClientProperty("FlatLaf.style","arc: 12");more.putClientProperty("JComponent.minimumHeight",40);more.setHorizontalAlignment(SwingConstants.LEFT);more.addActionListener(e->{optional.setVisible(more.isSelected());revalidate();});fields.add(more,c);c.gridy++;fields.add(optional,c);c.gridy++;
         JLabel stockHint=new JLabel(t.apply("catalog.stockHint"));stockHint.setForeground(CatalogStyle.MUTED);fields.add(stockHint,c);
         JPanel wrapper=CatalogStyle.panel(new BorderLayout());wrapper.add(CatalogStyle.widthLimited(fields,720),BorderLayout.NORTH);JScrollPane scroll=new JScrollPane(wrapper);scroll.setBorder(null);scroll.getVerticalScrollBar().setUnitIncrement(18);scroll.getViewport().setBackground(CatalogStyle.PAPER);add(scroll,BorderLayout.CENTER);
         save=CatalogStyle.button(t.apply("action.save"),true);cancel=CatalogStyle.arrowButton(t.apply("catalog.cancel"),false,true);cancel.addActionListener(e->onCancel.run());
-        JPanel footer=CatalogStyle.panel(new BorderLayout());error.setForeground(new Color(0xA43B2D));footer.add(error,BorderLayout.NORTH);JPanel buttons=CatalogStyle.panel(new FlowLayout(FlowLayout.RIGHT));buttons.add(cancel);buttons.add(save);footer.add(buttons,BorderLayout.SOUTH);JPanel formGroup=CatalogStyle.panel(new BorderLayout(0,16));formGroup.add(fields,BorderLayout.NORTH);formGroup.add(footer,BorderLayout.SOUTH);wrapper.removeAll();wrapper.add(CatalogStyle.widthLimited(formGroup,720),BorderLayout.NORTH);
+        JPanel footer=CatalogStyle.panel(new BorderLayout());feedback=CatalogStyle.feedback(error,FeedbackStrip.Tone.ERROR);footer.add(feedback,BorderLayout.NORTH);JPanel buttons=CatalogStyle.panel(new FlowLayout(FlowLayout.RIGHT));buttons.add(cancel);buttons.add(save);footer.add(buttons,BorderLayout.SOUTH);JPanel formGroup=CatalogStyle.panel(new BorderLayout(0,16));formGroup.add(fields,BorderLayout.NORTH);formGroup.add(footer,BorderLayout.SOUTH);wrapper.removeAll();wrapper.add(CatalogStyle.widthLimited(formGroup,720),BorderLayout.NORTH);
         save.addActionListener(e->{
             if(pending)return;
+            feedback.setTone(FeedbackStrip.Tone.ERROR);
             final String productName=name.getText().strip(),familyName=String.valueOf(family.getEditor().getItem()).strip(),cat=String.valueOf(category.getEditor().getItem()).strip(),ref=model.getText().strip(),unitCode=(String)unit.getSelectedItem();
             final long selling;final Long cost;Map<String,String> values=new LinkedHashMap<>();
             try{
@@ -54,7 +56,7 @@ public final class VariantForm extends JPanel {
                     if(k.isEmpty()||v.isEmpty()||values.putIfAbsent(k,v)!=null)throw new IllegalArgumentException(t.apply("error.invalidSpecifications"));
                 }
             }catch(NumberFormatException ex){error.setText(t.apply("error.invalidPrice"));return;}catch(IllegalArgumentException ex){error.setText(ex.getMessage());return;}
-            pending=true;setEnabledTree(fields,false);save.setEnabled(false);cancel.setEnabled(false);error.setText(t.apply("state.saving"));onPending.accept(true);
+            pending=true;setEnabledTree(fields,false);save.setEnabled(false);cancel.setEnabled(false);feedback.setTone(FeedbackStrip.Tone.INFO);error.setText(t.apply("state.saving"));onPending.accept(true);
             new SwingWorker<Product,Void>(){
                 protected Product doInBackground() throws Exception{
                     if(familyName.isEmpty())return products.create(shop,productName,selling,ref,cost,cat,unitCode,values);
@@ -65,7 +67,7 @@ public final class VariantForm extends JPanel {
                 }
                 protected void done(){
                     Product saved=null;
-                    try{saved=get();}catch(Exception ex){error.setText(t.apply("error.saveProduct"));}
+                    try{saved=get();}catch(Exception ex){feedback.setTone(FeedbackStrip.Tone.ERROR);error.setText(t.apply("error.saveProduct"));}
                     finally{pending=false;setEnabledTree(fields,true);save.setEnabled(true);cancel.setEnabled(true);onPending.accept(false);}
                     if(saved!=null)onSaved.accept(saved);
                 }

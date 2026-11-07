@@ -69,10 +69,12 @@ class ImportAndPhotoControlsTest {
         var panel=edt(()->new ProductPhotoPanel(service,shop,p.id(),messages,busy->{}));panel.initialLoadCompletion().toCompletableFuture().get(5,TimeUnit.SECONDS);
         Path source=directory.resolve("image.png");ImageIO.write(new BufferedImage(20,20,BufferedImage.TYPE_INT_RGB),"png",source.toFile());
         edt(()->panel.setPhoto(source)).toCompletableFuture().get(5,TimeUnit.SECONDS);Files.delete(source);
+        edt(()->{assertEquals(messages.getString("photo.saved"),((javax.swing.JTextArea)CatalogPanelTest.named(panel,"photoFeedback")).getText());return null;});
         var saved=service.getPhotoMetadata(shop,p.id()).orElseThrow();assertInstanceOf(PhotoLoadResult.Loaded.class,service.loadPhoto(shop,p.id()));
         Path bad=directory.resolve("bad.png");Files.writeString(bad,"not an image");
         var attempt=edt(()->panel.setPhoto(bad));assertThrows(ExecutionException.class,()->attempt.toCompletableFuture().get(5,TimeUnit.SECONDS));
         assertEquals(saved,service.getPhotoMetadata(shop,p.id()).orElseThrow());
+        edt(()->{assertEquals(messages.getString("photo.saveError"),((javax.swing.JTextArea)CatalogPanelTest.named(panel,"photoFeedback")).getText());return null;});
         edt(panel::removePhoto).toCompletableFuture().get(5,TimeUnit.SECONDS);assertInstanceOf(PhotoLoadResult.NotAttached.class,service.loadPhoto(shop,p.id()));
     }
 }

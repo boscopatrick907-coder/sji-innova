@@ -65,7 +65,7 @@ public final class CatalogStyle {
     }
     public enum BadgeTone { NORMAL, LOW, EMPTY, UNKNOWN }
     public static Component badgeCell(JTable table,String text,BadgeTone tone,boolean selected,int row,int column){return badgeCell(table,text,tone,selected,row,column,true);}
-    private static Component badgeCell(JTable table,String text,BadgeTone tone,boolean selected,int row,int column,boolean right){
+    public static Component badgeCell(JTable table,String text,BadgeTone tone,boolean selected,int row,int column,boolean right){
         Color background=switch(tone){case EMPTY->new Color(0xFDECEA);case LOW->new Color(0xFFF0D1);case NORMAL->new Color(0xE4F0E8);case UNKNOWN->new Color(0xEBEEE9);};
         Color foreground=switch(tone){case EMPTY->new Color(0xA52D26);case LOW->new Color(0x8A571E);case NORMAL->GREEN;case UNKNOWN->MUTED;};
         JPanel cell=new JPanel(new GridBagLayout());cell.setBackground(selected?table.getSelectionBackground():table.getBackground());
@@ -139,12 +139,8 @@ public final class CatalogStyle {
             @Override public void doLayout(){child.setBounds(0,0,Math.min(maximum,getWidth()),getHeight());}
         };panel.setOpaque(false);panel.add(child);return panel;
     }
-    public static JPanel alertStrip(JComponent message){
-        JPanel strip=new JPanel(new BorderLayout(9,0));strip.setBackground(new Color(0xFFF2DD));
-        strip.setBorder(BorderFactory.createEmptyBorder(10,12,10,12));
-        JLabel icon=label("!",17,true);icon.setForeground(new Color(0x8A571E));strip.add(icon,BorderLayout.WEST);strip.add(message,BorderLayout.CENTER);
-        return strip;
-    }
+    public static JPanel alertStrip(JComponent message){return new FeedbackStrip(message,FeedbackStrip.Tone.WARNING,false);}
+    public static FeedbackStrip feedback(JComponent message,FeedbackStrip.Tone tone){return new FeedbackStrip(message,tone,true);}
     public static javax.swing.table.TableCellRenderer statusBadge(String lowText){
         return (table,value,selected,focus,row,column)->{
             boolean low=lowText.equals(String.valueOf(value));
@@ -184,6 +180,7 @@ public final class CatalogStyle {
         public int getIconWidth(){return 16;}public int getIconHeight(){return 16;}
         public void paintIcon(Component c,Graphics graphics,int x,int y){
             Graphics2D g=(Graphics2D)graphics.create();g.translate(x,y);
+            if(direction==2)g.rotate(Math.PI/2,8,8);
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
             g.setColor(c.isEnabled()?c.getForeground():MUTED);g.setStroke(new BasicStroke(1.5f,BasicStroke.CAP_ROUND,BasicStroke.JOIN_ROUND));
             g.drawLine(3,8,13,8);int tip=direction<0?3:13,tail=direction<0?7:9;
@@ -205,6 +202,10 @@ public final class CatalogStyle {
         table.getTableHeader().setFont(new Font(Font.SANS_SERIF,Font.BOLD,12));
         table.getTableHeader().setBackground(new Color(0xF0F4EE));table.getTableHeader().setForeground(MUTED);
         table.getTableHeader().setPreferredSize(new Dimension(10,36));
+    }
+    public static String localDateTime(java.time.Instant instant,java.util.Locale locale){
+        return java.time.format.DateTimeFormatter.ofLocalizedDateTime(java.time.format.FormatStyle.SHORT)
+                .withLocale(locale==null?java.util.Locale.ENGLISH:locale).withZone(java.time.ZoneId.of("Africa/Douala")).format(instant);
     }
     public static JLabel label(String text, int size, boolean bold) {
         JLabel label = new JLabel(text);
