@@ -9,6 +9,7 @@ import cm.sji.innova.core.sale.SaleService;
 import cm.sji.innova.core.stock.StockLevel;
 import cm.sji.innova.core.stock.StockService;
 import cm.sji.innova.desktop.catalog.CatalogStyle;
+import cm.sji.innova.desktop.catalog.FeedbackStrip;
 import cm.sji.innova.desktop.sales.Checkout.Outcome;
 import cm.sji.innova.desktop.sales.Checkout.Recovery;
 import cm.sji.innova.desktop.sales.Quantities.InvalidQuantityException;
@@ -564,7 +565,7 @@ public final class SalesPanel extends JPanel {
     private void showNotice(String text, boolean problem) {
         notice.setForeground(problem ? PROBLEM : CatalogStyle.GREEN);
         notice.setText(text);
-        if(noticeStrip!=null){noticeStrip.setBackground(problem?new Color(0xFFF2DD):new Color(0xE4F0E8));noticeStrip.setVisible(!text.isBlank());((JLabel)noticeStrip.getComponent(0)).setText(problem?"!":"i");}
+        if(noticeStrip instanceof FeedbackStrip strip){strip.setTone(problem?(state==PageState.UNCERTAIN||state==PageState.CHECKING?FeedbackStrip.Tone.WARNING:FeedbackStrip.Tone.ERROR):FeedbackStrip.Tone.SUCCESS);strip.setVisible(!text.isBlank());}
     }
 
     private String t(String key, Object... arguments) {

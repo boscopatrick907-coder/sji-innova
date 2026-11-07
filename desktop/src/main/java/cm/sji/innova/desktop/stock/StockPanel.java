@@ -1,6 +1,7 @@
 package cm.sji.innova.desktop.stock;
 
 import cm.sji.innova.desktop.catalog.CatalogStyle;
+import cm.sji.innova.desktop.catalog.FeedbackStrip;
 import cm.sji.innova.core.product.Product;
 import cm.sji.innova.core.product.ProductService;
 import cm.sji.innova.core.stock.StockLevel;
@@ -33,6 +34,7 @@ public final class StockPanel extends JPanel {
     private final ResourceBundle messages;
 
     private final JLabel statusLabel = new JLabel(" ");
+    private FeedbackStrip statusFeedback;
     private final JComboBox<Product> productSelector = new JComboBox<>();
     private final JTextField quantityField = new JTextField(12);
     private final JTextField reasonField = new JTextField(20);
@@ -142,7 +144,7 @@ public final class StockPanel extends JPanel {
         JPanel main=CatalogStyle.panel(new BorderLayout(0,16));
         main.add(CatalogStyle.widthLimited(createReceiptForm(),720),BorderLayout.NORTH);main.add(createTables(),BorderLayout.CENTER);
         add(CatalogStyle.scrollContent(main,690),BorderLayout.CENTER);
-        statusLabel.setForeground(CatalogStyle.MUTED);add(statusLabel,BorderLayout.SOUTH);
+        statusFeedback=CatalogStyle.feedback(statusLabel,FeedbackStrip.Tone.INFO);statusLabel.setName("stockFeedback");add(statusFeedback,BorderLayout.SOUTH);
     }
 
     private JPanel createReceiptForm() {
@@ -258,8 +260,12 @@ public final class StockPanel extends JPanel {
         return panel;
     }
 
-    public void loadProductsAndStock() {
+    public void loadProductsAndStock() {loadProductsAndStock(false);}
+
+    private void loadProductsAndStock(boolean preserveFeedback) {
         if (receiptPending) return;
+        final boolean keepFeedback=preserveFeedback||pendingReceipt!=null;
+        if(!keepFeedback)statusFeedback.setTone(FeedbackStrip.Tone.INFO);
         Product previous = (Product) productSelector.getSelectedItem();
         UUID selectedId = pendingReceipt != null ? pendingReceipt.productId()
                 : previous == null ? null : previous.id();
@@ -268,7 +274,7 @@ public final class StockPanel extends JPanel {
         refreshButton.setEnabled(false);
         receiveButton.setEnabled(false);
 
-        statusLabel.setText(
+        if(!keepFeedback)statusLabel.setText(
                 message("state.loading", "Loading products and stock..."));
 
         new SwingWorker<InitialData, Void>() {
@@ -316,11 +322,11 @@ public final class StockPanel extends JPanel {
 
                     displayStock(data.levels());
 
-                    if (data.products().isEmpty()) {
+                    if (!keepFeedback&&data.products().isEmpty()) {
                         statusLabel.setText(message(
                                 "stock.empty",
                                 "No products found for this shop."));
-                    } else {
+                    } else if(!keepFeedback) {
                         statusLabel.setText(
                                 data.products().size()
                                         + " "
@@ -427,7 +433,7 @@ public final class StockPanel extends JPanel {
                     // Keep the order returned by StockService.
                     for (StockMovement movement : movements) {
                         historyModel.addRow(new Object[]{
-                                movement.createdAt(),
+                                CatalogStyle.localDateTime(movement.createdAt(),messages.getLocale()),
                                 message("stock.type." + movement.type().name().toLowerCase(java.util.Locale.ROOT), movement.type().name()),
                                 formatQuantity(movement.quantityMilli()),
                                 movement.reason()
@@ -521,6 +527,7 @@ public final class StockPanel extends JPanel {
         receiveButton.setEnabled(false);
         refreshButton.setEnabled(false);
 
+        statusFeedback.setTone(FeedbackStrip.Tone.INFO);
         statusLabel.setText(message(
                 "state.saving",
                 "Saving receipt..."));
@@ -557,13 +564,14 @@ public final class StockPanel extends JPanel {
                             "stock.action.receive",
                             "Receive Stock"));
 
+                    statusFeedback.setTone(FeedbackStrip.Tone.SUCCESS);
                     statusLabel.setText(result.replayed()
                             ? message("stock.receipt.replayed",
                             "Receipt confirmed (retried operation).")
                             : message("stock.receipt.success",
                             "Stock received successfully."));
 
-                    loadProductsAndStock();
+                    loadProductsAndStock(true);
 
                 } catch (InterruptedException exception) {
                     Thread.currentThread().interrupt();
@@ -600,6 +608,7 @@ public final class StockPanel extends JPanel {
     }
 
     private void preservePendingReceipt() {
+        statusFeedback.setTone(FeedbackStrip.Tone.WARNING);
         receiptPending = false;
 
         // Do not change the pending request or its operation UUID.
@@ -668,6 +677,7 @@ public final class StockPanel extends JPanel {
     }
 
     private void showError(String text) {
+        statusFeedback.setTone(FeedbackStrip.Tone.ERROR);
         statusLabel.setText(text);
 
         if (errorHandler != null) {

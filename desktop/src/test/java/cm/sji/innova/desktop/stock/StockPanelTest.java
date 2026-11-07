@@ -189,6 +189,7 @@ class StockPanelTest {
             );
 
             assertFalse(panel.hasPendingReceipt());
+            assertTrue(panel.statusLabel().getText().contains("received"),"Reload must not erase the confirmed receipt message");
             assertEquals("", panel.quantityField().getText());
             assertEquals("", panel.reasonField().getText());
         });
@@ -364,10 +365,11 @@ class StockPanelTest {
         CountDownLatch failed=new CountDownLatch(1);
         onEdt(() -> {panel.setOnReceiptWorkerDone(failed::countDown);panel.quantityField().setText("10");panel.reasonField().setText("T-shirt delivery");panel.receiveButton().doClick();});
         waitFor(failed,"Failed receipt");
+        AtomicReference<String> pendingMessage=new AtomicReference<>();onEdt(()->pendingMessage.set(panel.statusLabel().getText()));
         CountDownLatch loaded=new CountDownLatch(1),history=new CountDownLatch(1);
         onEdt(() -> {panel.setOnLoadWorkerDone(loaded::countDown);panel.setOnHistoryWorkerDone(history::countDown);panel.refreshButton().doClick();});
         waitFor(loaded,"Pending refresh");waitFor(history,"Pending history");
-        onEdt(() -> {assertEquals(product.id(),((Product)panel.productSelector().getSelectedItem()).id());assertFalse(panel.quantityField().isEnabled());assertEquals("10",panel.quantityField().getText());});
+        onEdt(() -> {assertEquals(product.id(),((Product)panel.productSelector().getSelectedItem()).id());assertFalse(panel.quantityField().isEnabled());assertEquals("10",panel.quantityField().getText());assertEquals(pendingMessage.get(),panel.statusLabel().getText());});
         try(var c=database.open();var statement=c.createStatement()){statement.execute("DROP TRIGGER fail_receipt");}
         CountDownLatch saved=new CountDownLatch(1),reloaded=new CountDownLatch(1),shown=new CountDownLatch(1);
         onEdt(() -> {panel.setOnReceiptWorkerDone(saved::countDown);panel.setOnLoadWorkerDone(reloaded::countDown);panel.setOnHistoryWorkerDone(shown::countDown);panel.receiveButton().doClick();});

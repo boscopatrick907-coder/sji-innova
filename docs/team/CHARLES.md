@@ -1,12 +1,12 @@
 # Charles — current assignment
 
-Updated 6 November 2026. This is the only current assignment file named after
+Updated 7 November 2026. This is the only current assignment file named after
 Charles. Follow this file; older role briefs and the combined NEXT_WORK.md have
 been removed. Technical references provide context, not additional assignments.
 
 ## First: update your local project copy
 
-Wait until this documentation pull request is merged. Close Cella and open a
+Wait until the pull request containing this brief and the shared style is merged. Close Cella and open a
 terminal in your existing sji-innova project folder. Run:
 
 ```sh
@@ -32,9 +32,61 @@ Both java -version and javac -version must report 21. Use the repository's Maven
 wrapper; SQLite does not need a separate installation. Follow README.md to build
 and launch the app.
 
+## Required UI style for this assignment
+
+Patrick approved the shared app style on 7 November 2026. Read and follow
+[the implementation style guide](../desktop/STYLE_GUIDE.md) and
+[the current Java previews](../desktop/VISUAL_POLISH.md). This changes presentation
+requirements, not your functional milestone. Inspect current main rather than
+copying an older screen or the standalone VentesPanel demo.
+
+Reuse CatalogStyle and FeedbackStrip for cards, headings, buttons, arrows, search,
+720px forms, aligned tables, rounded badges and typed messages. Do not create your
+own palette or per-screen UIManager overrides. Keep the green sidebar/gradient.
+Use French/English bundles, readable disabled controls and explicit keyboard actions.
+Treat unavailable data as unavailable, never as zero or a successful empty result.
+
+If you already started on your feature branch, preserve/commit or safely stash
+unfinished work, skip the new-branch creation above, and merge the latest main:
+
+```sh
+git fetch origin
+git switch desktop/sales-history
+git merge origin/main
+```
+
+Resolve conflicts with your AI editor while preserving both your functional work
+and the shared UI changes. Do not reset, force-push or recreate another person's
+commits. This is important because Patrick changed Stock/Sales layout and shared
+components while your task was in progress.
+
+For Charles specifically:
+
+- Preserve the approved two-column checkout, larger total, stock badges, search
+  controls and payment/recovery actions inside the basket. Do not rebuild SalesPanel,
+  Checkout or pending stores to add history; retain the existing instances/state.
+- History can use the wider page area with “Historique des ventes”, receipt/date/
+  status filters and an obvious back arrow. Details return to the same filtered
+  list, then to the unchanged basket or pending checkout.
+- Reuse shared search, left text/right amounts, 40px list rows, empty-state messages
+  and labelled status badges. PAID/VOIDED must have understandable translated text;
+  opening a receipt must not edit stock or reinterpret a voided sale as paid.
+- Details display saved names, quantities, charged prices and totals. Use exact
+  long/decimal formatting and the shared amount label; no int/double conversion,
+  current-catalog price substitution, buying-price display or recalculated totals.
+- Display timestamps in Africa/Douala with the shared helper and apply day filters
+  in that same zone. Stored UTC instants and read-only service contracts remain unchanged.
+
+Include real Java previews at 960×600, 1100×720 and 1600×1000. Cover the empty,
+loaded, failed and pending states relevant to your milestone. Run the Java 21
+checks below. State which Windows/native-dialog/keyboard checks were not performed;
+headless tests and component renders do not prove actual desktop interaction.
+Coordinate shared helpers or ShellPanel changes with Patrick and the other developer.
+
 ## Prompt for your AI editor
 
-> I am Charles. Read docs/team/CHARLES.md and docs/team/CONTEXT.md.
+> I am Charles. Read docs/team/CHARLES.md, docs/team/CONTEXT.md
+> and docs/desktop/STYLE_GUIDE.md. Preserve the approved app-wide style.
 > Help me preserve unfinished changes, update my local copy and create my branch
 > using this file's instructions. Inspect current code and the technical references
 > below. Explain each step simply. Implement my first milestone, test it and report

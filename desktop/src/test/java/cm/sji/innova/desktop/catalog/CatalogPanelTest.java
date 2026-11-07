@@ -40,6 +40,28 @@ class CatalogPanelTest {
             assertEquals(shirt.reference(),panel.variantTable().getValueAt(0,1));
             return null;});
     }
+    @Test void productMovementHistoryShowsLocalDatesAndSignedQuantitiesWithoutChangingStock()throws Exception{
+        var db=new SqliteDatabase(directory.resolve("catalog.db"));db.initialize();
+        var products=new ProductService(new SqliteProductRepository(db));var families=new ProductFamilyService(new SqliteProductFamilyRepository(db),products);
+        var p=products.create(shop,"Riz 25 kg",28000,null,null,null,"bag",Map.of());var device=UUID.randomUUID();
+        var repository=new SqliteStockRepository(db);var stock=new StockService(repository);
+        repository.record(new StockMovement(UUID.randomUUID(),shop,p.id(),device,StockMovement.Type.DELIVERY,3000,"Livraison",java.time.Instant.parse("2026-11-06T23:30:00Z")));
+        stock.adjust(UUID.randomUUID(),shop,p.id(),device,-1000,"Comptage");
+        var panel=open(products,families,stock);
+        edt(()->{panel.showProduct(p.id());((JButton)named(panel,"openProductMovements")).doClick();return null;});
+        long deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(10);
+        while(edt(()->named(panel,"productMovementHistory"))==null){assertTrue(System.nanoTime()<deadline);Thread.sleep(10);}
+        edt(()->{
+            JTable history=(JTable)named(panel,"productMovementHistory");assertEquals(2,history.getRowCount());
+            boolean delivery=false,correction=false;
+            for(int row=0;row<history.getRowCount();row++){
+                if("Livraison".equals(history.getValueAt(row,3))){delivery=true;assertTrue(history.getValueAt(row,0).toString().contains("07/11/2026"));assertTrue(history.getValueAt(row,0).toString().contains("00:30"));assertEquals("+3 sacs",history.getValueAt(row,2));}
+                if("Comptage".equals(history.getValueAt(row,3))){correction=true;assertEquals("-1 sac",history.getValueAt(row,2));}
+            }
+            assertTrue(delivery&&correction);((JButton)named(panel,"backFromProductMovements")).doClick();return null;
+        });
+        assertEquals(2000,stock.current(shop,p.id()).quantityMilli());assertEquals(2,stock.history(shop,p.id()).size());
+    }
     @Test void searchFindsExactVariantByReferenceOrCharacteristicsAndSurvivesBackNavigation()throws Exception{
         var db=new SqliteDatabase(directory.resolve("catalog.db"));db.initialize();var products=new ProductService(new SqliteProductRepository(db));var families=new ProductFamilyService(new SqliteProductFamilyRepository(db),products);
         var rice=families.create(shop,"Riz","Épicerie");var p=families.createVariant(shop,rice.id(),"Basmati 25 kg",28000,null,null,null,"bag",Map.of("Couleur","Blanc"));

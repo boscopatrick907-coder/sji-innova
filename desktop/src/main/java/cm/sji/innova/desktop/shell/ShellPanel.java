@@ -1,6 +1,7 @@
 package cm.sji.innova.desktop.shell;
 
 import cm.sji.innova.desktop.catalog.CatalogStyle;
+import cm.sji.innova.desktop.catalog.FeedbackStrip;
 
 import cm.sji.innova.desktop.sales.SalesPanel;
 import java.awt.BorderLayout;
@@ -165,18 +166,19 @@ public final class ShellPanel extends JPanel {
 
     private JComponent buildLoadingPage() {
         JPanel page = new JPanel(new GridBagLayout());page.setBackground(CatalogStyle.PAPER);
-        JPanel box = CatalogStyle.surface(new BorderLayout(0,18));box.setPreferredSize(new java.awt.Dimension(440,150));
-        box.add(CatalogStyle.label(messages.get("shell.loading"),22,true),BorderLayout.NORTH);
+        JPanel box = CatalogStyle.surface(new BorderLayout(0,18));box.setPreferredSize(new java.awt.Dimension(440,190));
+        JPanel introduction=CatalogStyle.panel(new BorderLayout(0,12));
+        JLabel brand=CatalogStyle.label("cella.",37,false);brand.setFont(new java.awt.Font(java.awt.Font.SERIF,java.awt.Font.PLAIN,37));brand.setForeground(CatalogStyle.GREEN);
+        introduction.add(brand,BorderLayout.NORTH);introduction.add(CatalogStyle.label(messages.get("shell.loading"),18,true),BorderLayout.CENTER);box.add(introduction,BorderLayout.NORTH);
         JProgressBar bar = new JProgressBar();
         bar.setIndeterminate(true);
-        box.add(bar, BorderLayout.CENTER);
+        bar.setPreferredSize(new java.awt.Dimension(240,6));box.add(bar,BorderLayout.SOUTH);
         page.add(box, new GridBagConstraints());
         return page;
     }
 
     private JComponent buildErrorPage() {
         JPanel page = CatalogStyle.surface(new BorderLayout(0,18));
-        page.setBackground(CatalogStyle.PAPER);page.setOpaque(true);
         page.setBorder(BorderFactory.createEmptyBorder(24, 24, 24, 24));
         JLabel title = CatalogStyle.label(messages.get("shell.error.title"),28,true);
         errorDetail.setEditable(false);
@@ -189,14 +191,15 @@ public final class ShellPanel extends JPanel {
         buttons.add(retryButton);
         buttons.add(exit);
         page.add(title, BorderLayout.NORTH);
-        JScrollPane detailScroll=new JScrollPane(errorDetail);detailScroll.setBorder(null);
-        errorDetail.setBackground(java.awt.Color.WHITE);errorDetail.setForeground(CatalogStyle.INK);
-        page.add(detailScroll, BorderLayout.CENTER);
+        errorDetail.setRows(5);errorDetail.setOpaque(false);
+        JScrollPane detailScroll=new JScrollPane(errorDetail);detailScroll.setBorder(null);detailScroll.setOpaque(false);detailScroll.getViewport().setOpaque(false);
+        page.add(CatalogStyle.feedback(detailScroll,FeedbackStrip.Tone.ERROR), BorderLayout.CENTER);
         page.add(buttons, BorderLayout.SOUTH);
         SwingUtilities.invokeLater(() -> {
             if (page.getRootPane() != null) page.getRootPane().setDefaultButton(retryButton);
         });
-        return page;
+        JPanel outer=new JPanel(new BorderLayout());outer.setBackground(CatalogStyle.PAPER);
+        outer.setBorder(BorderFactory.createEmptyBorder(28,30,28,30));outer.add(CatalogStyle.widthLimited(page,720),BorderLayout.NORTH);return outer;
     }
 
     private JComponent buildMainPage() {

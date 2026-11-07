@@ -1,12 +1,12 @@
 # Willy — current assignment
 
-Updated 6 November 2026. This is the only current assignment file named after
+Updated 7 November 2026. This is the only current assignment file named after
 Willy. Follow this file; older role briefs and the combined NEXT_WORK.md have
 been removed. Technical references provide context, not additional assignments.
 
 ## First: update your local project copy
 
-Wait until this documentation pull request is merged. Close Cella and open a
+Wait until the pull request containing this brief and the shared style is merged. Close Cella and open a
 terminal in your existing sji-innova project folder. Run:
 
 ```sh
@@ -32,9 +32,60 @@ Both java -version and javac -version must report 21. Use the repository's Maven
 wrapper; SQLite does not need a separate installation. Follow README.md to build
 and launch the app.
 
+## Required UI style for this assignment
+
+Patrick approved the shared app style on 7 November 2026. Read and follow
+[the implementation style guide](../desktop/STYLE_GUIDE.md) and
+[the current Java previews](../desktop/VISUAL_POLISH.md). This changes presentation
+requirements, not your functional milestone. Inspect current main rather than
+copying an older screen or the standalone VentesPanel demo.
+
+Reuse CatalogStyle and FeedbackStrip for cards, headings, buttons, arrows, search,
+720px forms, aligned tables, rounded badges and typed messages. Do not create your
+own palette or per-screen UIManager overrides. Keep the green sidebar/gradient.
+Use French/English bundles, readable disabled controls and explicit keyboard actions.
+Treat unavailable data as unavailable, never as zero or a successful empty result.
+
+If you already started on your feature branch, preserve/commit or safely stash
+unfinished work, skip the new-branch creation above, and merge the latest main:
+
+```sh
+git fetch origin
+git switch desktop/stock-recovery
+git merge origin/main
+```
+
+Resolve conflicts with your AI editor while preserving both your functional work
+and the shared UI changes. Do not reset, force-push or recreate another person's
+commits. This is important because Patrick changed Stock/Sales layout and shared
+components while your task was in progress.
+
+For Willy specifically:
+
+- Preserve the current Stock title, capped receipt form, quantities/history cards,
+  aligned columns and stock badges. Use stored minimum thresholds, including zero;
+  do not copy a fixed five-item threshold or aggregate differently measured variants.
+- Milestone A recovery gets a clear warning strip, the saved original details and
+  a primary “Réessayer cette réception” action. The saved UUID/details remain locked
+  until confirmation. Never retry automatically on startup or make uncertain
+  state disappear when navigating. Wrong-shop/device or damaged requests stay
+  blocked with an error explanation.
+- Later corrections show current quantity, signed change, result and required
+  reason before the existing service call. Confirm negative changes. Threshold
+  editing uses the same 720px form/feedback rules and preserves the selected UUID.
+- Use shared local date/time display and keep movement history append-only. Styling
+  must not move file/SQLite work onto the EDT or change ownership/lease safeguards.
+
+Include real Java previews at 960×600, 1100×720 and 1600×1000. Cover the empty,
+loaded, failed and pending states relevant to your milestone. Run the Java 21
+checks below. State which Windows/native-dialog/keyboard checks were not performed;
+headless tests and component renders do not prove actual desktop interaction.
+Coordinate shared helpers or ShellPanel changes with Patrick and the other developer.
+
 ## Prompt for your AI editor
 
-> I am Willy. Read docs/team/WILLY.md and docs/team/CONTEXT.md.
+> I am Willy. Read docs/team/WILLY.md, docs/team/CONTEXT.md
+> and docs/desktop/STYLE_GUIDE.md. Preserve the approved app-wide style.
 > Help me preserve unfinished changes, update my local copy and create my branch
 > using this file's instructions. Inspect current code and the technical references
 > below. Explain each step simply. Implement my first milestone, test it and report

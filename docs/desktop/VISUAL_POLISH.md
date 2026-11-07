@@ -173,3 +173,43 @@ amounts with the new separate caption. Layout tests retain the 960px/1600px guar
 and check badge/header alignment and full-row selection. Previews use actual Java
 components with temporary data; the amber rice badge uses a saved minimum of four
 bags in that fixture only. The interactive desktop limitation recorded above remains.
+
+## App-wide finishing pass and team handoff — 7 November 2026
+
+The remaining live screens now follow [the implementation guide](STYLE_GUIDE.md):
+
+- Shared FeedbackStrip provides INFO/SUCCESS/WARNING/ERROR messages, matching
+  icons, rounded tints and automatic collapse when bound text is blank. Sales
+  continues to preserve pending checkout state and explicit cash confirmation.
+- Product-form validation and saving use the shared feedback; optional details
+  have distinct collapsed/expanded arrows. Fields/actions remain capped at 720px.
+- Photo details have a matching card and clipped, aspect-preserving image view.
+  Loading, saved, removed, damaged and failed states use shared feedback. A failed
+  photo attempt restores the previous removal-button availability and keeps the
+  existing photo/metadata. File operations and image reads remain off the EDT.
+- CSV progress, import outcomes and errors use typed feedback. Valid/warning/error
+  rows have labelled rounded badges. Blank diagnostics/status consume no space.
+  Duplicate consent and durable import/retry requests are unchanged.
+- Stock feedback uses the shared component. Refresh does not erase confirmed receipt
+  messages or unresolved-receipt warnings. Quantities, history and retry IDs remain
+  unchanged. Stock and product history display local Africa/Douala times without
+  modifying stored instants or movement ordering.
+- Product movement history is a read-only aligned table with signed quantities,
+  translated types and a compact empty state. Its back arrow returns to the product.
+- Startup has a branded loading card and thin progress indicator. Failed startup
+  uses a compact 720px retry card with a clear error area and the existing retry/
+  quit behavior.
+
+WILLY.md and CHARLES.md are still the only current Markdown briefs named for those
+developers. Their functional milestones remain intact; both now require the shared
+style and explain how to merge current main into existing work without rewriting
+commits. The team index links the single shared style guide.
+
+Verification: **252 tests passed, zero failures/errors/skips**, plus packaged
+headless startup. Added a real temporary-SQLite product-history navigation check
+covering signed movements, a UTC-to-Douala date boundary, return navigation and
+unchanged stock/history. Existing photo tests now verify visible success/error
+feedback while preserving the saved photo. Stock tests verify that refresh retains
+confirmed and pending receipt messages. Desktop layout and cash-recovery checks
+remain passing. Native desktop control is still unavailable in the managed
+environment described above; renders do not certify interactive Windows dialogs.

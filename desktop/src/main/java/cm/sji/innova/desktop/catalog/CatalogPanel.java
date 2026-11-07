@@ -29,6 +29,7 @@ public final class CatalogPanel extends JPanel {
     private final JTextField search = new JTextField();
     private final JComboBox<String> category = new JComboBox<>();
     private final JLabel error = new JLabel(" ");
+    private final FeedbackStrip errorFeedback;
     private final JButton refresh;
     private List<Product> items = List.of();
     private List<ProductFamily> groups = List.of();
@@ -59,7 +60,7 @@ public final class CatalogPanel extends JPanel {
         JPanel top=CatalogStyle.panel(new BorderLayout());top.add(breadcrumbs,BorderLayout.CENTER);
         refresh=CatalogStyle.button(t("catalog.refresh"),false);refresh.addActionListener(e->reload());top.add(refresh,BorderLayout.EAST);
         add(top,BorderLayout.NORTH);add(body,BorderLayout.CENTER);error.setForeground(new Color(0xA43B2D));
-        add(error,BorderLayout.SOUTH);
+        errorFeedback=CatalogStyle.feedback(error,FeedbackStrip.Tone.ERROR);add(errorFeedback,BorderLayout.SOUTH);
         search.getAccessibleContext().setAccessibleName(t("catalog.search"));
         CatalogStyle.searchField(search,t("catalog.search"));
         search.getDocument().addDocumentListener(new DocumentListener(){
@@ -115,7 +116,7 @@ public final class CatalogPanel extends JPanel {
     private void render(){
         JPanel navigationTop=(JPanel)((BorderLayout)getLayout()).getLayoutComponent(BorderLayout.NORTH);
         navigationTop.setVisible(true);navigationTop.add(refresh,BorderLayout.EAST);
-        error.setVisible(true);
+        error.setVisible(true);errorFeedback.setVisible(!error.getText().isBlank());
         body.removeAll();breadcrumbs.removeAll();
         if(selected!=null||variants){
             JButton back=CatalogStyle.arrowButton(t("catalog.back"),false,true);back.setName("catalogBack");
@@ -203,7 +204,7 @@ public final class CatalogPanel extends JPanel {
     }
     private void renderDetails(Product p){
         JPanel layout=CatalogStyle.panel(new GridLayout(1,2,24,0));
-        JPanel imageColumn=CatalogStyle.panel(new BorderLayout());
+        JPanel imageColumn=CatalogStyle.surface(new BorderLayout());
         if(photos==null)imageColumn.add(new CatalogStyle.PhotoPlaceholder(t("catalog.noPhoto")),BorderLayout.NORTH);
         else imageColumn.add(new ProductPhotoPanel(photos,shop,p.id(),messages,pending->{saving=pending;if(!pending)thumbnails.clear();refresh.setEnabled(!pending);for(Component crumb:breadcrumbs.getComponents())crumb.setEnabled(!pending);}),BorderLayout.NORTH);
         layout.add(imageColumn);
@@ -218,7 +219,7 @@ public final class CatalogPanel extends JPanel {
         JPanel specs=CatalogStyle.panel(new GridLayout(0,2,18,18));p.specifications().forEach((key,val)->specs.add(value(key,val)));if(p.modelReference()!=null)specs.add(value(t("product.modelReference"),p.modelReference()));d.gridy++;text.add(specs,d);
         JToggleButton buying=new JToggleButton(t("catalog.buying"));buying.setHorizontalAlignment(SwingConstants.LEFT);buying.putClientProperty("FlatLaf.style","arc: 12");
         JLabel buyingValue=new JLabel(p.costPrice()==null?t("catalog.unknown"):numbers.format(p.costPrice())+" FCFA / "+unit(p.unit()));buyingValue.setVisible(false);buying.addActionListener(e->buyingValue.setVisible(buying.isSelected()));d.gridy++;text.add(buying,d);d.gridy++;text.add(buyingValue,d);
-        d.gridy++;JButton movements=CatalogStyle.button(t("catalog.movements"),false);movements.addActionListener(e->showHistory(p));text.add(movements,d);
+        d.gridy++;JButton movements=CatalogStyle.button(t("catalog.movements"),false);movements.setName("openProductMovements");movements.addActionListener(e->showHistory(p));text.add(movements,d);
         text.setMinimumSize(new Dimension(0,0));layout.add(text);
         JPanel wrapper=new WidthPanel();wrapper.add(layout,BorderLayout.NORTH);JScrollPane scroll=new JScrollPane(wrapper);scroll.setBorder(null);scroll.getViewport().setBackground(CatalogStyle.PAPER);scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);body.add(scroll,BorderLayout.CENTER);
     }
@@ -228,16 +229,38 @@ public final class CatalogPanel extends JPanel {
         label.setBorder(BorderFactory.createEmptyBorder(0,0,6,0));label.setAlignmentX(Component.LEFT_ALIGNMENT);p.add(label);
         JLabel value=CatalogStyle.label(val,16,false);value.setAlignmentX(Component.LEFT_ALIGNMENT);p.add(value);return p;
     }
+    private boolean historyBackInHeader(Product product){
+        for(Component component:breadcrumbs.getComponents())if(component instanceof JButton back&&"catalogBack".equals(back.getName())){
+            back.setName("backFromProductMovements");for(var listener:back.getActionListeners())back.removeActionListener(listener);
+            back.addActionListener(e->showProduct(product.id()));return true;
+        }
+        return false;
+    }
     private void showHistory(Product p){
+        boolean headerBack=historyBackInHeader(p);
         selected=p.id();long request=++historySequence;refresh.setEnabled(false);body.removeAll();body.add(new JLabel(t("catalog.loading")));body.revalidate();body.repaint();
         new SwingWorker<List<StockMovement>,Void>(){
             protected List<StockMovement> doInBackground() throws Exception{return stock.history(shop,p.id());}
-            protected void done(){try{var rows=get();if(request!=historySequence)return;body.removeAll();JTextArea text=new JTextArea();text.setEditable(false);for(var m:rows)text.append(m.createdAt()+"  "+numbers.format(BigDecimal.valueOf(m.quantityMilli(),3))+" "+unit(p.unit())+"  "+m.reason()+"\n");if(rows.isEmpty())text.setText(t("catalog.noMovements"));JPanel history=CatalogStyle.surface(new BorderLayout(0,12));history.add(CatalogStyle.label(t("catalog.movements"),20,true),BorderLayout.NORTH);JScrollPane historyScroll=new JScrollPane(text);historyScroll.setBorder(null);text.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,14));history.add(historyScroll,BorderLayout.CENTER);body.add(history,BorderLayout.CENTER);JButton back=CatalogStyle.arrowButton(t("catalog.back"),false,true);back.addActionListener(e->showProduct(p.id()));body.add(back,BorderLayout.SOUTH);}catch(Exception ex){if(request==historySequence){render();error.setText(t("catalog.stockError"));}}finally{if(request==historySequence){refresh.setEnabled(true);body.revalidate();body.repaint();}}}
+            protected void done(){
+                try{
+                    var rows=get();if(request!=historySequence)return;body.removeAll();
+                    var model=new DefaultTableModel(new String[]{t("stock.history.date"),t("stock.history.type"),t("stock.history.quantity"),t("stock.history.reason")},0){public boolean isCellEditable(int r,int c){return false;}};
+                    for(var movement:rows){
+                        String kind=switch(movement.type()){case DELIVERY->t("stock.type.delivery");case ADJUSTMENT->t("stock.type.adjustment");case SALE->t("stock.type.sale");case VOID->t("stock.type.void");};
+                        model.addRow(new Object[]{CatalogStyle.localDateTime(movement.createdAt(),messages.getLocale()),kind,(movement.quantityMilli()>0?"+":"")+numbers.format(BigDecimal.valueOf(movement.quantityMilli(),3))+" "+quantityUnit(p.unit(),movement.quantityMilli()),movement.reason()});
+                    }
+                    JTable historyTable=new JTable(model);historyTable.setName("productMovementHistory");historyTable.setRowHeight(40);
+                    JPanel history=CatalogStyle.tableCard(t("catalog.movements"),historyTable,t("empty.movements"));CatalogStyle.alignColumns(historyTable,2);
+                    JPanel historyHost=CatalogStyle.panel(new BorderLayout());historyHost.add(history,rows.isEmpty()?BorderLayout.NORTH:BorderLayout.CENTER);body.add(historyHost,BorderLayout.CENTER);
+                    if(!headerBack){JButton back=CatalogStyle.arrowButton(t("catalog.back"),false,true);back.setName("backFromProductMovements");back.addActionListener(e->showProduct(p.id()));JPanel actions=CatalogStyle.panel(new FlowLayout(FlowLayout.LEFT,0,0));actions.add(back);body.add(actions,BorderLayout.SOUTH);}
+                }catch(Exception ex){if(request==historySequence){render();error.setText(t("catalog.stockError"));}}
+                finally{if(request==historySequence){refresh.setEnabled(true);body.revalidate();body.repaint();}}
+            }
         }.execute();
     }
     private void showImport(){
         ((BorderLayout)getLayout()).getLayoutComponent(BorderLayout.NORTH).setVisible(false);
-        error.setVisible(false);
+        error.setVisible(false);errorFeedback.setVisible(false);
         body.removeAll();selected=null;refresh.setEnabled(false);
         for(Component crumb:breadcrumbs.getComponents())crumb.setEnabled(false);
         var flow=new cm.sji.innova.desktop.catalog.importing.CsvImportPanel(imports,shop,dataDirectory,messages,
