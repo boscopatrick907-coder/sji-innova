@@ -14,6 +14,7 @@ import cm.sji.innova.desktop.sales.Checkout.Outcome;
 import cm.sji.innova.desktop.sales.Checkout.Recovery;
 import cm.sji.innova.desktop.sales.Quantities.InvalidQuantityException;
 import java.awt.BorderLayout;
+import java.awt.CardLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
@@ -76,6 +77,9 @@ import javax.swing.text.JTextComponent;
  *   <li>UNCERTAIN: no certain answer; the basket is locked until the sale is retried or cancelled,</li>
  *   <li>DAMAGED: the saved file cannot be read; no new sale until it is set aside.</li>
  * </ul>
+ *
+ * <p>The saved sales are a second page of this same panel, {@link SalesHistoryPanel}. Going there only
+ * swaps what is shown, so the basket, the state and any unfinished sale stay exactly as they were.
  */
 public final class SalesPanel extends JPanel {
     private enum PageState { CHECKING, EDITING, CONFIRMING, SENDING, UNCERTAIN, DAMAGED }
@@ -83,6 +87,8 @@ public final class SalesPanel extends JPanel {
     private static final Logger LOG = Logger.getLogger(SalesPanel.class.getName());
     private static final Color PROBLEM = new Color(0xA43B2D);
     static final int COLUMN_QUANTITY = 3;
+    private static final String CHECKOUT_PAGE = "checkout";
+    private static final String HISTORY_PAGE = "history";
 
     /** One consistent picture of the shop, read in the background. */
     private record Snapshot(List<Product> products, Map<UUID, String> familyNames,
@@ -124,6 +130,9 @@ public final class SalesPanel extends JPanel {
     private final JButton retryButton;
     private final JButton discardButton;
     private final JButton setAsideButton;
+    private final JButton historyButton;
+    private final SalesHistoryPanel history;
+    private final CardLayout pages = new CardLayout();
 
     private PageState state = PageState.CHECKING;
     private PendingCheckout draft;              // the sale being sent; kept until the answer is certain
@@ -139,11 +148,12 @@ public final class SalesPanel extends JPanel {
     private boolean resultChosenWithArrows;
     private long generation;                    // only the newest load may update the page
     private int activeWorkers;
+    private boolean showingHistory;
 
     public SalesPanel(SaleService sales, ProductService products, ProductFamilyService families,
                       StockService stock, UUID shopId, UUID deviceId,
                       PendingCheckoutStore pendingStore, ResourceBundle messages) {
-        super(new BorderLayout(0, 10));
+        setLayout(pages);
         this.products = Objects.requireNonNull(products, "products");
         this.families = Objects.requireNonNull(families, "families");
         this.stock = Objects.requireNonNull(stock, "stock");
@@ -168,6 +178,8 @@ public final class SalesPanel extends JPanel {
         retryButton = named(CatalogStyle.button(t("sales.retry"), true), "salesRetry");
         discardButton = named(CatalogStyle.button(t("sales.discard"), false), "salesDiscard");
         setAsideButton = named(CatalogStyle.button(t("sales.setAside"), false), "salesSetAside");
+        historyButton = named(CatalogStyle.arrowButton(t("sales.history.open"), false, false), "salesHistory");
+        history = new SalesHistoryPanel(sales, shopId, messages, this::closeHistory);
         search.setName("salesSearch");
         totalLabel.setName("salesTotal");
         notice.setName("salesNotice");
@@ -179,15 +191,17 @@ public final class SalesPanel extends JPanel {
         JPanel titles=CatalogStyle.panel(new BorderLayout(0,6));
         titles.add(CatalogStyle.label(t("sales.pageTitle"),28,true),BorderLayout.NORTH);
         JLabel subtitle=CatalogStyle.label(t("sales.pageSubtitle"),14,false);subtitle.setForeground(CatalogStyle.MUTED);
-        titles.add(subtitle,BorderLayout.CENTER);header.add(titles,BorderLayout.CENTER);JPanel headerActions=CatalogStyle.panel(new java.awt.GridBagLayout());headerActions.add(refresh);header.add(headerActions,BorderLayout.EAST);
-        add(header,BorderLayout.NORTH);
+        titles.add(subtitle,BorderLayout.CENTER);header.add(titles,BorderLayout.CENTER);JPanel headerActions=CatalogStyle.panel(new java.awt.GridBagLayout());
+        java.awt.GridBagConstraints gap=new java.awt.GridBagConstraints();gap.insets=new java.awt.Insets(0,0,0,8);headerActions.add(historyButton,gap);headerActions.add(refresh);header.add(headerActions,BorderLayout.EAST);
         JPanel areas=CatalogStyle.panel(new java.awt.GridBagLayout());
         java.awt.GridBagConstraints c=new java.awt.GridBagConstraints();c.gridy=0;c.fill=java.awt.GridBagConstraints.BOTH;c.weighty=1;
         JComponent picker=buildResultsArea(),cart=buildBasketArea();picker.setMinimumSize(new Dimension(0,0));cart.setMinimumSize(new Dimension(0,0));
         c.gridx=0;c.weightx=.6;c.insets=new java.awt.Insets(0,0,0,14);areas.add(picker,c);
         cartCard=cart;cartHost=CatalogStyle.panel(new BorderLayout());cartHost.add(cart,BorderLayout.NORTH);
         c.gridx=1;c.weightx=.4;c.insets=new java.awt.Insets(0,0,0,0);areas.add(cartHost,c);
-        add(areas,BorderLayout.CENTER);
+        JPanel checkoutPage=CatalogStyle.panel(new BorderLayout(0,10));checkoutPage.add(header,BorderLayout.NORTH);checkoutPage.add(areas,BorderLayout.CENTER);
+        add(checkoutPage,CHECKOUT_PAGE);
+        add(history,HISTORY_PAGE);
         connectControls();
         refreshBasketView();
         applyState();
@@ -196,6 +210,7 @@ public final class SalesPanel extends JPanel {
 
     /** Reads products and stock again, and on first opening looks for an unfinished sale. */
     public void reload() {
+        if (showingHistory) history.reload();
         long request = ++generation;
         // A damaged file is looked at again each time, in case someone has fixed or moved it.
         boolean recover = needsRecovery || state == PageState.DAMAGED;
@@ -231,7 +246,7 @@ public final class SalesPanel extends JPanel {
     }
 
     /** For tests: true while a background step is still running. */
-    boolean isBusy() { return activeWorkers > 0; }
+    boolean isBusy() { return activeWorkers > 0 || history.isBusy(); }
 
     private Snapshot loadSnapshot() throws SQLException {
         List<Product> allProducts = products.list(shopId);
@@ -462,6 +477,21 @@ public final class SalesPanel extends JPanel {
         }.execute();
     }
 
+    /** Shows the saved sales. Not while a sale is being saved, or while a typed quantity is refused. */
+    private void openHistory() {
+        if (state == PageState.SENDING || !stopQuantityEdit()) return;
+        showingHistory = true;
+        pages.show(this, HISTORY_PAGE);
+        history.reload();
+        history.focusSearch();
+    }
+
+    private void closeHistory() {
+        showingHistory = false;
+        pages.show(this, CHECKOUT_PAGE);
+        historyButton.requestFocusInWindow();
+    }
+
     /** The one place that decides what can be clicked. */
     private void applyState() {
         boolean editing = state == PageState.EDITING;
@@ -478,6 +508,8 @@ public final class SalesPanel extends JPanel {
         discardButton.setVisible(state == PageState.UNCERTAIN);
         setAsideButton.setVisible(state == PageState.DAMAGED);
         refresh.setEnabled(!loading && state != PageState.SENDING);
+        historyButton.setEnabled(state != PageState.SENDING);
+        history.setPendingNotice(state == PageState.UNCERTAIN || state == PageState.DAMAGED);
         if(noticeStrip!=null)noticeStrip.setVisible(!notice.getText().isBlank());
         notice.setRows(state == PageState.DAMAGED ? 3 : 2);     // the damaged message shows a long path
         revalidate();
@@ -657,6 +689,7 @@ public final class SalesPanel extends JPanel {
             if (!event.getValueIsAdjusting()) { updateResultsHint(); applyState(); }
         });
         refresh.addActionListener(event -> reload());
+        historyButton.addActionListener(event -> openHistory());
         addButton.addActionListener(event -> addSelectedProduct());
         removeButton.addActionListener(event -> removeSelectedLine());
         checkoutButton.addActionListener(event -> beginCheckout());
