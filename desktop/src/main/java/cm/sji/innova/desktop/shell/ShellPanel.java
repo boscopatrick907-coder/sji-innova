@@ -251,7 +251,7 @@ public final class ShellPanel extends JPanel {
         JPanel content=new JPanel(new BorderLayout());
         screenHeading.setFont(screenHeading.getFont().deriveFont(java.awt.Font.BOLD,13f));screenHeading.setForeground(CatalogStyle.MUTED);
         screenHeading.setText(messages.get("shell.catalog"));screenHeading.setBorder(BorderFactory.createEmptyBorder(18,30,18,20));screenHeading.setOpaque(true);screenHeading.setBackground(java.awt.Color.WHITE);
-        content.add(screenHeading,BorderLayout.NORTH);content.add(screenArea,BorderLayout.CENTER);
+        content.add(screenArea,BorderLayout.CENTER);
         page.add(content,BorderLayout.CENTER);
         return page;
     }

@@ -61,7 +61,7 @@ public final class CatalogPanel extends JPanel {
         add(top,BorderLayout.NORTH);add(body,BorderLayout.CENTER);error.setForeground(new Color(0xA43B2D));
         add(error,BorderLayout.SOUTH);
         search.getAccessibleContext().setAccessibleName(t("catalog.search"));
-        search.putClientProperty("JTextField.placeholderText",t("catalog.search"));
+        CatalogStyle.searchField(search,t("catalog.search"));
         search.getDocument().addDocumentListener(new DocumentListener(){
             public void insertUpdate(DocumentEvent e){filter=search.getText();renderResults();}
             public void removeUpdate(DocumentEvent e){filter=search.getText();renderResults();}
@@ -134,7 +134,7 @@ public final class CatalogPanel extends JPanel {
     private void renderBrowse(){
         JPanel north=CatalogStyle.panel(new BorderLayout(0,14));JPanel title=CatalogStyle.panel(new BorderLayout());
         title.add(CatalogStyle.label(variants?groupName(family):t("catalog.products"),28,true),BorderLayout.WEST);
-        JButton add=CatalogStyle.button(t(variants?"catalog.addVariant":"catalog.addProduct"),true);add.addActionListener(e->showForm(variants?family:null));JPanel actions=CatalogStyle.panel(new FlowLayout(FlowLayout.RIGHT,8,0));
+        JButton add=CatalogStyle.button(t(variants?"catalog.addVariant":"catalog.addProduct"),true);add.setName("addCatalogProduct");add.addActionListener(e->showForm(variants?family:null));JPanel actions=CatalogStyle.panel(new FlowLayout(FlowLayout.RIGHT,8,0));
         if(!variants){((BorderLayout)getLayout()).getLayoutComponent(BorderLayout.NORTH).setVisible(false);actions.add(refresh);}
         if(imports!=null&&!variants){JButton csv=CatalogStyle.button(t("csv.title"),false);csv.setName("openCsvImport");csv.addActionListener(e->showImport());actions.add(csv);}
         actions.add(add);title.add(actions,BorderLayout.EAST);north.add(title,BorderLayout.NORTH);

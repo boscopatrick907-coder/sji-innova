@@ -162,7 +162,7 @@ class SalesPanelTest {
             find(panel,JTextField.class,"salesSearch").setText("t-shirt");
             assertEquals("Matière : Coton",find(panel,JTable.class,"salesResults").getValueAt(0,2));
             assertFalse(find(panel,JButton.class,"salesAdd").isEnabled());
-            assertTrue(find(panel,JLabel.class,"salesResultsHint").getText().contains("Stock"));
+            assertTrue(find(panel,JTextArea.class,"salesResultsHint").getText().contains("Stock"));
             JTable results=find(panel,JTable.class,"salesResults");
             results.getActionMap().get("addToBasket").actionPerformed(null);
             assertEquals(0,find(panel,JTable.class,"salesBasket").getRowCount());
@@ -178,7 +178,7 @@ class SalesPanelTest {
         SalesPanel panel = open();
         assertEquals("10 pieces", edt(() -> results(panel).getValueAt(0, 3)));
         addToBasket(panel, "rice", "2");
-        assertEquals("Total: 2,000 FCFA", edt(() -> total(panel)));
+        assertEquals("2,000 FCFA", edt(() -> total(panel)));
 
         confirmCash(panel);
 
@@ -261,17 +261,17 @@ class SalesPanelTest {
         assertEquals("333", edt(() -> basket(panel).getValueAt(0, 4)));
         assertEquals("500", edt(() -> basket(panel).getValueAt(0, 5)));     // 499.5 rounds up
         assertEquals("5 kg", edt(() -> basket(panel).getValueAt(0, 6)));
-        assertEquals("Total: 500 FCFA", edt(() -> total(panel)));
+        assertEquals("500 FCFA", edt(() -> total(panel)));
 
         addToBasket(panel, "rice", "3");
-        assertEquals("Total: 3,500 FCFA", edt(() -> total(panel)));
+        assertEquals("3,500 FCFA", edt(() -> total(panel)));
 
         edt(() -> {
             basket(panel).setRowSelectionInterval(1, 1);
             button(panel, "salesRemove").doClick();
         });
         assertEquals(1, (int) edt(() -> basket(panel).getRowCount()));
-        assertEquals("Total: 500 FCFA", edt(() -> total(panel)));
+        assertEquals("500 FCFA", edt(() -> total(panel)));
 
         confirmCash(panel);
         assertEquals(500, savedSales().getFirst().totalAmount());
@@ -636,7 +636,7 @@ class SalesPanelTest {
         };
         SalesPanel panel = open(Locale.ENGLISH, stock, new ProductService(flaky));
         assertEquals(0, (int) edt(() -> results(panel).getRowCount()));
-        assertTrue(edt(() -> find(panel, JLabel.class, "salesResultsHint").getText()).contains("could not be loaded"));
+        assertTrue(edt(() -> find(panel, JTextArea.class, "salesResultsHint").getText()).contains("could not be loaded"));
 
         failing.set(false);
         click(panel, "salesRefresh");
@@ -651,7 +651,7 @@ class SalesPanelTest {
         SalesPanel panel = edt(() -> new SalesPanel(sales, products, families, stock, otherShop, device, store, bundle));
         edt(panel::reload);
         waitUntilIdle(panel);
-        assertTrue(edt(() -> find(panel, JLabel.class, "salesResultsHint").getText()).contains("No products yet"));
+        assertTrue(edt(() -> find(panel, JTextArea.class, "salesResultsHint").getText()).contains("No products yet"));
         assertFalse(edt(() -> button(panel, "salesCheckout").isEnabled()));
     }
 
@@ -662,7 +662,7 @@ class SalesPanelTest {
         SalesPanel panel = open(Locale.FRENCH, stock, products);
         addToBasket(panel, "sucre", "1,5");
         assertEquals("1,5", edt(() -> basket(panel).getValueAt(0, SalesPanel.COLUMN_QUANTITY)));
-        assertTrue(edt(() -> total(panel)).startsWith("Total : 1"));
+        assertTrue(edt(() -> total(panel)).startsWith("1"));
         assertEquals("Encaisser", edt(() -> button(panel, "salesCheckout").getText()));
     }
 

@@ -48,13 +48,21 @@ public final class CsvImportPanel extends JPanel {
             public Class<?> getColumnClass(int col){return col==0?Boolean.class:Object.class;}
             public boolean isCellEditable(int row,int col){return col==0&&!running&&!completed&&store!=null&&pending==null&&preview!=null&&preview.rows().get(row).isValid();}
         };
-        table=new JTable(model);table.setRowHeight(36);CatalogStyle.styleTable(table);table.getColumnModel().getColumn(0).setMaxWidth(70);table.getColumnModel().getColumn(1).setMaxWidth(60);table.setName("csvPreview");
+        table=new JTable(model);table.setRowHeight(40);CatalogStyle.styleTable(table);table.getColumnModel().getColumn(0).setMaxWidth(70);table.getColumnModel().getColumn(1).setMaxWidth(60);table.setName("csvPreview");
         diagnostics.setEditable(false);diagnostics.setLineWrap(true);diagnostics.setWrapStyleWord(true);diagnostics.setBackground(Color.WHITE);diagnostics.setForeground(CatalogStyle.MUTED);
         JPanel center=CatalogStyle.surface(new BorderLayout(0,10));
         center.add(CatalogStyle.label(t("csv.previewHeading"),18,true),BorderLayout.NORTH);
-        center.add(CatalogStyle.tableScroll(table),BorderLayout.CENTER);
-        JScrollPane notes=new JScrollPane(diagnostics);notes.setBorder(null);center.add(notes,BorderLayout.SOUTH);
-        JPanel review=CatalogStyle.panel(new BorderLayout(0,16));review.add(top,BorderLayout.NORTH);review.add(center,BorderLayout.CENTER);
+        center.add(CatalogStyle.tableScroll(table,t("empty.import")),BorderLayout.CENTER);
+        CatalogStyle.alignColumns(table,1,4);
+        table.getColumnModel().getColumn(0).setCellRenderer(table.getDefaultRenderer(Boolean.class));
+        JScrollPane notes=new JScrollPane(diagnostics);notes.setBorder(null);notes.setVisible(false);center.add(notes,BorderLayout.SOUTH);
+        diagnostics.getDocument().addDocumentListener(new javax.swing.event.DocumentListener(){
+            private void update(){notes.setVisible(!diagnostics.getText().isBlank());center.revalidate();}
+            public void insertUpdate(javax.swing.event.DocumentEvent e){update();}public void removeUpdate(javax.swing.event.DocumentEvent e){update();}public void changedUpdate(javax.swing.event.DocumentEvent e){update();}
+        });
+        JPanel previewHost=CatalogStyle.panel(new BorderLayout());previewHost.add(center,BorderLayout.NORTH);
+        boolean[] compact={true};model.addTableModelListener(e->{boolean empty=model.getRowCount()==0;if(empty!=compact[0]){compact[0]=empty;previewHost.remove(center);previewHost.add(center,empty?BorderLayout.NORTH:BorderLayout.CENTER);previewHost.revalidate();}});
+        JPanel review=CatalogStyle.panel(new BorderLayout(0,16));review.add(top,BorderLayout.NORTH);review.add(previewHost,BorderLayout.CENTER);
         reviewScroll=CatalogStyle.scrollContent(review,460);
         add(reviewScroll,BorderLayout.CENTER);
         duplicates=new JCheckBox(t("csv.duplicates"));duplicates.setOpaque(false);
