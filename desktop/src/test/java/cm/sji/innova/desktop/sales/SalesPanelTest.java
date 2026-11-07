@@ -162,7 +162,7 @@ class SalesPanelTest {
             find(panel,JTextField.class,"salesSearch").setText("t-shirt");
             assertEquals("Matière : Coton",find(panel,JTable.class,"salesResults").getValueAt(0,2));
             assertFalse(find(panel,JButton.class,"salesAdd").isEnabled());
-            assertTrue(find(panel,JLabel.class,"salesResultsHint").getText().contains("Stock"));
+            assertTrue(find(panel,JTextArea.class,"salesResultsHint").getText().contains("Stock"));
             JTable results=find(panel,JTable.class,"salesResults");
             results.getActionMap().get("addToBasket").actionPerformed(null);
             assertEquals(0,find(panel,JTable.class,"salesBasket").getRowCount());
@@ -636,7 +636,7 @@ class SalesPanelTest {
         };
         SalesPanel panel = open(Locale.ENGLISH, stock, new ProductService(flaky));
         assertEquals(0, (int) edt(() -> results(panel).getRowCount()));
-        assertTrue(edt(() -> find(panel, JLabel.class, "salesResultsHint").getText()).contains("could not be loaded"));
+        assertTrue(edt(() -> find(panel, JTextArea.class, "salesResultsHint").getText()).contains("could not be loaded"));
 
         failing.set(false);
         click(panel, "salesRefresh");
@@ -651,7 +651,7 @@ class SalesPanelTest {
         SalesPanel panel = edt(() -> new SalesPanel(sales, products, families, stock, otherShop, device, store, bundle));
         edt(panel::reload);
         waitUntilIdle(panel);
-        assertTrue(edt(() -> find(panel, JLabel.class, "salesResultsHint").getText()).contains("No products yet"));
+        assertTrue(edt(() -> find(panel, JTextArea.class, "salesResultsHint").getText()).contains("No products yet"));
         assertFalse(edt(() -> button(panel, "salesCheckout").isEnabled()));
     }
 

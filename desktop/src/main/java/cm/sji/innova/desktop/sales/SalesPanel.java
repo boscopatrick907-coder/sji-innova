@@ -16,8 +16,6 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
-import java.awt.FlowLayout;
-import java.awt.GridLayout;
 import java.awt.KeyboardFocusManager;
 import java.awt.event.ActionEvent;
 import java.awt.event.MouseAdapter;
@@ -55,6 +53,7 @@ import javax.swing.JTextField;
 import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingWorker;
+import javax.swing.SwingConstants;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.table.AbstractTableModel;
@@ -97,6 +96,11 @@ public final class SalesPanel extends JPanel {
     private final UUID deviceId;
     private final ResourceBundle messages;
     private final Checkout checkout;
+    private JPanel noticeStrip;
+    private JPanel resultsStrip;
+    private JPanel cartHost;
+    private JComponent cartCard;
+    private boolean compactCart=true;
     private final Locale locale;
     private final NumberFormat money;
 
@@ -106,7 +110,7 @@ public final class SalesPanel extends JPanel {
     private final JTextField search = new JTextField();
     private final JButton refresh;
     private final JTable results;
-    private final JLabel resultsHint = new JLabel(" ");
+    private final JTextArea resultsHint = new JTextArea(1,16);
     private final JButton addButton;
     private final JTable basketTable;
     private final JButton removeButton;
@@ -166,15 +170,23 @@ public final class SalesPanel extends JPanel {
         search.setName("salesSearch");
         totalLabel.setName("salesTotal");
         notice.setName("salesNotice");
-        resultsHint.setName("salesResultsHint");
+        resultsHint.setName("salesResultsHint");resultsHint.setEditable(false);resultsHint.setFocusable(false);resultsHint.setOpaque(false);resultsHint.setLineWrap(true);resultsHint.setWrapStyleWord(true);
 
         setBackground(CatalogStyle.PAPER);
         setBorder(BorderFactory.createEmptyBorder(14, 30, 14, 30));
-        JPanel areas = CatalogStyle.panel(new GridLayout(2,1,0,10));
-        areas.add(buildResultsArea());
-        areas.add(buildBasketArea());
-        add(CatalogStyle.scrollContent(areas,520),BorderLayout.CENTER);
-        add(buildFooter(), BorderLayout.SOUTH);
+        JPanel header=CatalogStyle.panel(new BorderLayout(12,0));
+        JPanel titles=CatalogStyle.panel(new BorderLayout(0,6));
+        titles.add(CatalogStyle.label(t("sales.pageTitle"),28,true),BorderLayout.NORTH);
+        JLabel subtitle=CatalogStyle.label(t("sales.pageSubtitle"),14,false);subtitle.setForeground(CatalogStyle.MUTED);
+        titles.add(subtitle,BorderLayout.CENTER);header.add(titles,BorderLayout.CENTER);JPanel headerActions=CatalogStyle.panel(new java.awt.GridBagLayout());headerActions.add(refresh);header.add(headerActions,BorderLayout.EAST);
+        add(header,BorderLayout.NORTH);
+        JPanel areas=CatalogStyle.panel(new java.awt.GridBagLayout());
+        java.awt.GridBagConstraints c=new java.awt.GridBagConstraints();c.gridy=0;c.fill=java.awt.GridBagConstraints.BOTH;c.weighty=1;
+        JComponent picker=buildResultsArea(),cart=buildBasketArea();picker.setMinimumSize(new Dimension(0,0));cart.setMinimumSize(new Dimension(0,0));
+        c.gridx=0;c.weightx=.6;c.insets=new java.awt.Insets(0,0,0,14);areas.add(picker,c);
+        cartCard=cart;cartHost=CatalogStyle.panel(new BorderLayout());cartHost.add(cart,BorderLayout.NORTH);
+        c.gridx=1;c.weightx=.4;c.insets=new java.awt.Insets(0,0,0,0);areas.add(cartHost,c);
+        add(areas,BorderLayout.CENTER);
         connectControls();
         refreshBasketView();
         applyState();
@@ -456,7 +468,7 @@ public final class SalesPanel extends JPanel {
         results.setEnabled(editing);
         addButton.setEnabled(editing && selectedHasStock());
         basketTable.setEnabled(editing);
-        removeButton.setEnabled(editing && !basket.isEmpty());
+        removeButton.setEnabled(editing && !basket.isEmpty());removeButton.setVisible(!basket.isEmpty());
         checkoutButton.setEnabled(editing && !basket.isEmpty());
         checkoutButton.setVisible(state != PageState.CONFIRMING && state != PageState.UNCERTAIN && state != PageState.DAMAGED);
         confirmButton.setVisible(state == PageState.CONFIRMING);
@@ -465,6 +477,7 @@ public final class SalesPanel extends JPanel {
         discardButton.setVisible(state == PageState.UNCERTAIN);
         setAsideButton.setVisible(state == PageState.DAMAGED);
         refresh.setEnabled(!loading && state != PageState.SENDING);
+        if(noticeStrip!=null)noticeStrip.setVisible(!notice.getText().isBlank());
         notice.setRows(state == PageState.DAMAGED ? 3 : 2);     // the damaged message shows a long path
         revalidate();
         repaint();
@@ -517,6 +530,11 @@ public final class SalesPanel extends JPanel {
         else if (visible.isEmpty()) resultsHint.setText(t("catalog.noMatches"));
         else if (!selectedHasStock()) resultsHint.setText(t("sales.outOfStockHint"));
         else resultsHint.setText(t("sales.addHint"));
+        if(resultsStrip!=null){
+            boolean warning=stockFailed||loadFailed||(!visible.isEmpty()&&!selectedHasStock());
+            resultsStrip.setOpaque(warning);resultsStrip.getComponent(0).setVisible(warning);
+            resultsHint.setRows(warning?3:1);resultsHint.setForeground(warning?new Color(0x8A571E):CatalogStyle.MUTED);
+        }
     }
 
     private void refreshBasketView() {
@@ -526,7 +544,8 @@ public final class SalesPanel extends JPanel {
             basketTable.changeSelection(selected, COLUMN_QUANTITY, false, false);
         }
         totalLabel.setText(t("sales.total", money.format(basket.total())));
-        basketHint.setText(t(basket.isEmpty() ? "sales.basket.empty" : "sales.quantityHint"));
+        if(cartHost!=null&&compactCart!=basket.isEmpty()){compactCart=basket.isEmpty();cartHost.remove(cartCard);cartHost.add(cartCard,compactCart?BorderLayout.NORTH:BorderLayout.CENTER);cartHost.revalidate();}
+        basketHint.setText(basket.isEmpty()?"":t("sales.quantityHint"));
     }
 
     /** Finishes a quantity being typed. Returns false if what was typed was refused. */
@@ -543,6 +562,7 @@ public final class SalesPanel extends JPanel {
     private void showNotice(String text, boolean problem) {
         notice.setForeground(problem ? PROBLEM : CatalogStyle.GREEN);
         notice.setText(text);
+        if(noticeStrip!=null){noticeStrip.setBackground(problem?new Color(0xFFF2DD):new Color(0xE4F0E8));noticeStrip.setVisible(!text.isBlank());((JLabel)noticeStrip.getComponent(0)).setText(problem?"!":"i");}
     }
 
     private String t(String key, Object... arguments) {
@@ -564,75 +584,61 @@ public final class SalesPanel extends JPanel {
     }
 
     private JComponent buildResultsArea() {
-        search.putClientProperty("JTextField.placeholderText", t("catalog.search"));
-        search.getAccessibleContext().setAccessibleName(t("catalog.search"));
-        results.getAccessibleContext().setAccessibleName(t("sales.results"));
-        results.getColumnModel().getColumn(0).setPreferredWidth(260);
-
-        JPanel searchRow = CatalogStyle.panel(new BorderLayout(12, 0));
-        search.setPreferredSize(new Dimension(200, 34));
-        searchRow.add(search, BorderLayout.CENTER);
-        searchRow.add(refresh, BorderLayout.EAST);
-
-        JPanel below = CatalogStyle.panel(new BorderLayout(12, 0));
-        below.add(resultsHint, BorderLayout.CENTER);
-        below.add(addButton, BorderLayout.EAST);
-
-        JPanel area = CatalogStyle.surface(new BorderLayout(0, 10));
-        JPanel heading = CatalogStyle.panel(new BorderLayout(0,10));
-        heading.add(CatalogStyle.label(t("sales.productsHeading"),20,true),BorderLayout.NORTH);
-        heading.add(searchRow,BorderLayout.CENTER);
-        area.add(heading, BorderLayout.NORTH);
-        area.add(CatalogStyle.tableScroll(results), BorderLayout.CENTER);
-        area.add(below, BorderLayout.SOUTH);
-        return area;
+        search.putClientProperty("JTextField.placeholderText",t("catalog.search"));
+        search.getAccessibleContext().setAccessibleName(t("catalog.search"));results.getAccessibleContext().setAccessibleName(t("sales.results"));
+        results.getColumnModel().getColumn(0).setPreferredWidth(200);
+        results.getColumnModel().getColumn(3).setPreferredWidth(95);results.getColumnModel().getColumn(4).setPreferredWidth(135);
+        for(int hidden:new int[]{1,2}){var column=results.getColumnModel().getColumn(hidden);column.setMinWidth(0);column.setMaxWidth(0);column.setPreferredWidth(0);}
+        JPanel heading=CatalogStyle.panel(new BorderLayout(0,12));heading.add(CatalogStyle.label(t("sales.productsHeading"),20,true),BorderLayout.NORTH);
+        search.setPreferredSize(new Dimension(200,40));heading.add(search,BorderLayout.CENTER);
+        JPanel below=CatalogStyle.panel(new BorderLayout(0,10));resultsStrip=CatalogStyle.alertStrip(resultsHint);below.add(resultsStrip,BorderLayout.CENTER);below.add(addButton,BorderLayout.SOUTH);
+        JPanel area=CatalogStyle.surface(new BorderLayout(0,12));area.add(heading,BorderLayout.NORTH);
+        area.add(CatalogStyle.tableScroll(results,t("empty.picker")),BorderLayout.CENTER);
+        CatalogStyle.alignColumns(results,3,4);results.setRowHeight(56);
+        results.getColumnModel().getColumn(0).setCellRenderer(CatalogStyle.twoLineRenderer(row->Objects.toString(visible.get(row).reference(),"")+" · "+resultsModel.getValueAt(row,2)));
+        results.getColumnModel().getColumn(4).setCellRenderer(new DefaultTableCellRenderer(){
+            @Override public Component getTableCellRendererComponent(JTable table,Object value,boolean selected,boolean focus,int row,int col){
+                super.getTableCellRendererComponent(table,value,selected,focus,row,col);Product p=visible.get(row);
+                setHorizontalAlignment(SwingConstants.RIGHT);setText("<html><div style='text-align:right'>"+money.format(p.unitPrice())+" FCFA<br>/ "+unitName(p.unit())+"</div></html>");
+                setBorder(BorderFactory.createEmptyBorder(3,8,3,8));setToolTipText(String.valueOf(value));return this;
+            }
+        });
+        area.add(below,BorderLayout.SOUTH);return area;
     }
 
     private JComponent buildBasketArea() {
-        basketTable.getAccessibleContext().setAccessibleName(t("sales.basket"));
-        basketTable.getColumnModel().getColumn(0).setPreferredWidth(240);
-        DefaultCellEditor quantityEditor = new DefaultCellEditor(new JTextField());
-        quantityEditor.setClickCountToStart(1);
+        basketTable.getAccessibleContext().setAccessibleName(t("sales.basket"));basketTable.setRowHeight(56);
+        basketTable.getColumnModel().getColumn(0).setPreferredWidth(150);
+        basketTable.getColumnModel().getColumn(COLUMN_QUANTITY).setPreferredWidth(48);
+        basketTable.getColumnModel().getColumn(5).setPreferredWidth(80);
+        basketTable.getColumnModel().getColumn(COLUMN_QUANTITY).setMinWidth(48);basketTable.getColumnModel().getColumn(5).setMinWidth(70);
+        for(int hidden:new int[]{1,2,4,6}){var column=basketTable.getColumnModel().getColumn(hidden);column.setMinWidth(0);column.setMaxWidth(0);column.setPreferredWidth(0);}
+        basketTable.getColumnModel().getColumn(COLUMN_QUANTITY).setHeaderValue(t("sales.shortQuantity"));
+        basketTable.getColumnModel().getColumn(5).setHeaderValue(t("sales.shortTotal"));
+        DefaultCellEditor quantityEditor=new DefaultCellEditor(new JTextField());quantityEditor.setClickCountToStart(1);
         basketTable.getColumnModel().getColumn(COLUMN_QUANTITY).setCellEditor(quantityEditor);
+        basketTable.putClientProperty("terminateEditOnFocusLost",Boolean.TRUE);basketTable.setSurrendersFocusOnKeystroke(true);
+        JPanel area=CatalogStyle.surface(new BorderLayout(0,12));area.add(CatalogStyle.label(t("sales.basketHeading"),20,true),BorderLayout.NORTH);
+        area.add(CatalogStyle.tableScroll(basketTable,t("empty.cart")),BorderLayout.CENTER);
+        CatalogStyle.alignColumns(basketTable,3,4,5,6);
+        basketTable.getColumnModel().getColumn(0).setCellRenderer(CatalogStyle.twoLineRenderer(row->{BasketLine line=basket.lines().get(row);return money.format(line.unitPrice())+" / "+unitName(line.unit());}));
         basketTable.getColumnModel().getColumn(COLUMN_QUANTITY).setCellRenderer(new QuantityRenderer());
-        basketTable.putClientProperty("terminateEditOnFocusLost", Boolean.TRUE);
-        basketTable.setSurrendersFocusOnKeystroke(true);
-
-        JPanel below = CatalogStyle.panel(new BorderLayout(12, 0));
-        below.add(removeButton, BorderLayout.WEST);
-        below.add(basketHint, BorderLayout.CENTER);
-        below.add(totalLabel, BorderLayout.EAST);
-
-        JPanel area = CatalogStyle.surface(new BorderLayout(0, 10));
-        area.add(CatalogStyle.label(t("sales.basketHeading"),20,true),BorderLayout.NORTH);
-        area.add(CatalogStyle.tableScroll(basketTable), BorderLayout.CENTER);
-        area.add(below, BorderLayout.SOUTH);
-        return area;
+        JPanel footer=CatalogStyle.panel(new BorderLayout(0,12));
+        JPanel tools=CatalogStyle.panel(new BorderLayout(0,8));tools.add(removeButton,BorderLayout.NORTH);
+        basketHint.setFont(basketHint.getFont().deriveFont(12f));tools.add(basketHint,BorderLayout.SOUTH);footer.add(tools,BorderLayout.NORTH);
+        footer.add(buildFooter(),BorderLayout.CENTER);area.add(footer,BorderLayout.SOUTH);return area;
     }
 
     private JComponent buildFooter() {
-        notice.setEditable(false);
-        notice.setLineWrap(true);
-        notice.setWrapStyleWord(true);
-        notice.setOpaque(false);
-        notice.setFocusable(false);
-        notice.setBorder(BorderFactory.createEmptyBorder());
-        notice.setFont(notice.getFont().deriveFont(13f));
-
-        JPanel actions = CatalogStyle.panel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
-        // FlowLayout also adds its gap after the last button; this keeps the right edge in line.
-        actions.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, -8));
-        actions.add(setAsideButton);
-        actions.add(discardButton);
-        actions.add(retryButton);
-        actions.add(backButton);
-        actions.add(confirmButton);
-        actions.add(checkoutButton);
-
-        JPanel footer = CatalogStyle.surface(new BorderLayout(0, 8));
-        footer.add(notice, BorderLayout.CENTER);
-        footer.add(actions, BorderLayout.SOUTH);
-        return footer;
+        notice.setEditable(false);notice.setLineWrap(true);notice.setWrapStyleWord(true);notice.setOpaque(false);notice.setFocusable(false);
+        notice.setBorder(BorderFactory.createEmptyBorder());notice.setFont(new java.awt.Font(java.awt.Font.SANS_SERIF,java.awt.Font.PLAIN,14));
+        noticeStrip=CatalogStyle.alertStrip(notice);noticeStrip.setVisible(false);
+        JPanel actions=CatalogStyle.panel(new java.awt.GridBagLayout());
+        java.awt.GridBagConstraints action=new java.awt.GridBagConstraints();action.gridx=0;action.gridy=0;action.fill=java.awt.GridBagConstraints.HORIZONTAL;action.weightx=1;action.insets=new java.awt.Insets(4,0,0,0);
+        for(JButton button:new JButton[]{setAsideButton,discardButton,retryButton,backButton,confirmButton,checkoutButton}){actions.add(button,action);action.gridy++;}
+        checkoutButton.putClientProperty("JComponent.minimumHeight",46);
+        JPanel footer=CatalogStyle.panel(new BorderLayout(0,12));footer.add(totalLabel,BorderLayout.NORTH);
+        footer.add(noticeStrip,BorderLayout.CENTER);footer.add(actions,BorderLayout.SOUTH);return footer;
     }
 
     private void connectControls() {
@@ -689,7 +695,7 @@ public final class SalesPanel extends JPanel {
 
     private static <T extends JTable> T styledTable(T table, String name) {
         table.setName(name);
-        table.setRowHeight(34);
+        table.setRowHeight(40);
         CatalogStyle.styleTable(table);
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         table.setShowVerticalLines(false);
@@ -718,7 +724,8 @@ public final class SalesPanel extends JPanel {
                                                                  boolean focused, int row, int column) {
             Component cell = super.getTableCellRendererComponent(table, value, selected, focused, row, column);
             if (table.isCellEditable(row, column)) {
-                setBorder(BorderFactory.createLineBorder(CatalogStyle.MUTED));
+                setHorizontalAlignment(SwingConstants.RIGHT);
+                setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(CatalogStyle.MUTED),BorderFactory.createEmptyBorder(0,8,0,8)));
                 if (!selected) setBackground(Color.WHITE);
             }
             return cell;

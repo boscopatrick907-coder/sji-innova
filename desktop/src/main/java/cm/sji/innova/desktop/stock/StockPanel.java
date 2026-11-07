@@ -140,7 +140,7 @@ public final class StockPanel extends JPanel {
         JPanel header=CatalogStyle.panel(new BorderLayout(12,0));header.add(titles,BorderLayout.CENTER);
         header.add(createRefreshPanel(),BorderLayout.EAST);add(header,BorderLayout.NORTH);
         JPanel main=CatalogStyle.panel(new BorderLayout(0,16));
-        main.add(createReceiptForm(),BorderLayout.NORTH);main.add(createTables(),BorderLayout.CENTER);
+        main.add(CatalogStyle.widthLimited(createReceiptForm(),720),BorderLayout.NORTH);main.add(createTables(),BorderLayout.CENTER);
         add(CatalogStyle.scrollContent(main,690),BorderLayout.CENTER);
         statusLabel.setForeground(CatalogStyle.MUTED);add(statusLabel,BorderLayout.SOUTH);
     }
@@ -155,6 +155,7 @@ public final class StockPanel extends JPanel {
         panel.add(CatalogStyle.label(message("stock.receive.title","Receive Stock"),18,true),c);
         c.gridwidth=1;
 
+        productSelector.setName("stockProduct");quantityField.setName("stockQuantity");reasonField.setName("stockReason");
         productSelector.setRenderer(new DefaultListCellRenderer() {
             @Override
             public Component getListCellRendererComponent(
@@ -234,11 +235,13 @@ public final class StockPanel extends JPanel {
     }
 
     private JPanel createTables() {
-        stockTable.setRowHeight(34);historyTable.setRowHeight(34);
+        stockTable.setRowHeight(40);historyTable.setRowHeight(40);
         stockTable.setName("stockLevels");historyTable.setName("stockMovements");
         JPanel panel=CatalogStyle.panel(new GridLayout(2,1,0,16));
-        panel.add(CatalogStyle.tableCard(message("stock.overview.title","Stock Overview"),stockTable));
-        panel.add(CatalogStyle.tableCard(message("stock.history.title","Movement History"),historyTable));
+        panel.add(CatalogStyle.tableCard(message("stock.overview.title","Stock Overview"),stockTable,message("empty.stock","No products yet")));
+        panel.add(CatalogStyle.tableCard(message("stock.history.title","Movement History"),historyTable,message("empty.movements","No movements yet")));
+        CatalogStyle.alignColumns(stockTable,2,3);CatalogStyle.alignColumns(historyTable,2);
+        stockTable.getColumnModel().getColumn(4).setCellRenderer(CatalogStyle.statusBadge(message("stock.status.low","LOW STOCK")));
         return panel;
     }
 
