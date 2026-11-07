@@ -1,6 +1,8 @@
 package cm.sji.innova.desktop.catalog;
 
 import java.awt.*;
+import com.formdev.flatlaf.FlatClientProperties;
+import com.formdev.flatlaf.icons.FlatSearchIcon;
 import javax.swing.*;
 
 /** Shared desktop colors and small hand-drawn icons. No web assets or fonts needed. */
@@ -31,12 +33,51 @@ public final class CatalogStyle {
             @Override protected void paintComponent(Graphics graphics){
                 Graphics2D g=(Graphics2D)graphics.create();
                 g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
-                g.setColor(Color.WHITE);g.fillRoundRect(0,0,getWidth()-1,getHeight()-1,18,18);
-                g.setColor(LINE);g.drawRoundRect(0,0,getWidth()-1,getHeight()-1,18,18);g.dispose();
+                g.setColor(new Color(0,0,0,12));g.fillRoundRect(1,3,getWidth()-2,getHeight()-4,18,18);
+                g.setColor(Color.WHITE);g.fillRoundRect(0,0,getWidth()-1,getHeight()-4,18,18);
+                g.setColor(LINE);g.drawRoundRect(0,0,getWidth()-1,getHeight()-4,18,18);g.dispose();
             }
         };
         panel.setOpaque(false);panel.setBorder(BorderFactory.createEmptyBorder(14,16,14,16));
         return panel;
+    }
+    /** Keep large monetary amounts fully visible in a narrow basket without changing their text. */
+    public static JLabel amountLabel(){
+        Font base=new Font(Font.SANS_SERIF,Font.BOLD,26);
+        JLabel label=new JLabel(){
+            @Override public Dimension getPreferredSize(){return new Dimension(0,36);}
+            @Override public Dimension getMinimumSize(){return new Dimension(0,36);}
+            @Override protected void paintComponent(Graphics graphics){
+                Insets insets=getInsets();int available=getWidth()-insets.left-insets.right;if(available<=0)return;
+                Graphics2D g=(Graphics2D)graphics.create();g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+                Font font=base;String text=getText()==null?"":getText();
+                while(g.getFontMetrics(font).stringWidth(text)>available&&font.getSize2D()>8)font=font.deriveFont(font.getSize2D()-.5f);
+                g.setFont(font);g.setColor(getForeground());FontMetrics metrics=g.getFontMetrics();
+                g.drawString(text,getWidth()-insets.right-metrics.stringWidth(text),(getHeight()-metrics.getHeight())/2+metrics.getAscent());g.dispose();
+            }
+        };
+        label.setFont(base);label.setForeground(INK);label.setHorizontalAlignment(SwingConstants.RIGHT);return label;
+    }
+    public static void searchField(JTextField field,String placeholder){
+        field.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT,placeholder);
+        field.putClientProperty(FlatClientProperties.TEXT_FIELD_LEADING_ICON,new FlatSearchIcon());
+        field.putClientProperty(FlatClientProperties.TEXT_FIELD_SHOW_CLEAR_BUTTON,true);
+    }
+    public enum BadgeTone { NORMAL, LOW, EMPTY, UNKNOWN }
+    public static Component badgeCell(JTable table,String text,BadgeTone tone,boolean selected,int row,int column){return badgeCell(table,text,tone,selected,row,column,true);}
+    private static Component badgeCell(JTable table,String text,BadgeTone tone,boolean selected,int row,int column,boolean right){
+        Color background=switch(tone){case EMPTY->new Color(0xFDECEA);case LOW->new Color(0xFFF0D1);case NORMAL->new Color(0xE4F0E8);case UNKNOWN->new Color(0xEBEEE9);};
+        Color foreground=switch(tone){case EMPTY->new Color(0xA52D26);case LOW->new Color(0x8A571E);case NORMAL->GREEN;case UNKNOWN->MUTED;};
+        JPanel cell=new JPanel(new GridBagLayout());cell.setBackground(selected?table.getSelectionBackground():table.getBackground());
+        JLabel badge=new JLabel(text){
+            @Override protected void paintComponent(Graphics graphics){
+                Graphics2D g=(Graphics2D)graphics.create();g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
+                g.setColor(background);g.fillRoundRect(0,0,getWidth(),getHeight(),getHeight(),getHeight());g.dispose();super.paintComponent(graphics);
+            }
+        };
+        badge.setForeground(foreground);badge.setFont(new Font(Font.SANS_SERIF,Font.BOLD,12));badge.setBorder(BorderFactory.createEmptyBorder(4,9,4,9));
+        GridBagConstraints c=new GridBagConstraints();c.weightx=1;c.anchor=right?GridBagConstraints.EAST:GridBagConstraints.WEST;c.insets=new Insets(0,6,0,6);cell.add(badge,c);
+        cell.setToolTipText(text);cell.setSize(table.getColumnModel().getColumn(column).getWidth(),table.getRowHeight(row));cell.doLayout();return cell;
     }
     public static JScrollPane tableScroll(JTable table) {return tableScroll(table,"");}
     public static JScrollPane tableScroll(JTable table,String emptyText) {
@@ -106,11 +147,9 @@ public final class CatalogStyle {
     }
     public static javax.swing.table.TableCellRenderer statusBadge(String lowText){
         return (table,value,selected,focus,row,column)->{
-            JPanel cell=new JPanel(new GridBagLayout());cell.setBackground(selected?table.getSelectionBackground():table.getBackground());
-            boolean low=lowText.equals(String.valueOf(value));JLabel badge=label(String.valueOf(value),13,true);
-            badge.setOpaque(true);badge.setBackground(low?new Color(0xFFF0D1):new Color(0xE4F0E8));badge.setForeground(low?new Color(0x8A571E):GREEN);
-            badge.setBorder(BorderFactory.createEmptyBorder(4,8,4,8));cell.add(badge);
-            cell.setSize(table.getColumnModel().getColumn(column).getWidth(),table.getRowHeight(row));cell.doLayout();return cell;
+            boolean low=lowText.equals(String.valueOf(value));
+            boolean empty=low&&"0".equals(String.valueOf(table.getModel().getValueAt(table.convertRowIndexToModel(row),2)));
+            return badgeCell(table,String.valueOf(value),empty?BadgeTone.EMPTY:low?BadgeTone.LOW:BadgeTone.NORMAL,selected,row,column,false);
         };
     }
     public static JPanel tableCard(String title,JTable table) {return tableCard(title,table,"");}

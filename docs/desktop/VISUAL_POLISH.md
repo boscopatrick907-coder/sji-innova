@@ -141,3 +141,35 @@ reported `capabilities: []`; no desktop JavaScript/computer-use or browser tool 
 exposed, and no Xvfb executable was installed. An interactive Linux or Windows
 window was therefore not verified. Native file choosers, OS window decoration and
 hands-on keyboard/accessibility checks still require a local desktop.
+
+## Visual details adapted from the supplied VentesPanel demo
+
+The supplied standalone example is used as a visual reference. The actual Cella
+SalesPanel, service calls, immutable checkout request, file ownership protections,
+confirmation and restart recovery remain in place.
+
+- Products and Sales searches have a leading magnifier and a clear-text control.
+  Existing accent-insensitive, multi-token matching and basket state are retained.
+- Shared cards have a subtle lower shadow in the approved palette.
+- Stock counts and statuses use rounded badges: zero red, configured low stock
+  amber, normal green, unavailable gray. Thresholds come from persisted StockLevel,
+  not the example's fixed five-item rule. Units and fractional quantities remain.
+- Total has its own caption and a larger amount. Long amounts scale to the basket
+  width for display; the underlying amount, exact FCFA arithmetic and accessible
+  text remain unchanged. Encaisser is slightly more prominent.
+- The demo's immediate basket clearing, integer-only quantities, hard-coded piece
+  labels and minimum 400px basket width were not adopted.
+
+[Before](images/sales-layout-960.png) ·
+[Updated Sales](images/sales-demo-details.png) ·
+[Search control and unavailable stock](images/sales-search-details.png) ·
+[Stock badges](images/stock-rounded-badges.png) ·
+[Product search](images/products-search-details.png)
+
+Verification: 251 tests passed, zero failures/errors/skips, plus packaged startup.
+Existing tests still cover failed/uncertain checkout, retry ownership, fractional
+quantities and rounding. Updated total-label assertions verify the same displayed
+amounts with the new separate caption. Layout tests retain the 960px/1600px guards
+and check badge/header alignment and full-row selection. Previews use actual Java
+components with temporary data; the amber rice badge uses a saved minimum of four
+bags in that fixture only. The interactive desktop limitation recorded above remains.

@@ -115,7 +115,7 @@ public final class SalesPanel extends JPanel {
     private final JTable basketTable;
     private final JButton removeButton;
     private final JLabel basketHint = new JLabel(" ");
-    private final JLabel totalLabel = CatalogStyle.label(" ", 20, true);
+    private final JLabel totalLabel = CatalogStyle.amountLabel();
     private final JTextArea notice = new JTextArea(2, 20);
     private final JButton checkoutButton;
     private final JButton confirmButton;
@@ -543,7 +543,9 @@ public final class SalesPanel extends JPanel {
         if (selected >= 0 && selected < basket.lines().size()) {
             basketTable.changeSelection(selected, COLUMN_QUANTITY, false, false);
         }
-        totalLabel.setText(t("sales.total", money.format(basket.total())));
+        totalLabel.setText(money.format(basket.total())+" FCFA");
+        totalLabel.setToolTipText(t("sales.total",money.format(basket.total())));
+        totalLabel.getAccessibleContext().setAccessibleName(t("sales.total",money.format(basket.total())));
         if(cartHost!=null&&compactCart!=basket.isEmpty()){compactCart=basket.isEmpty();cartHost.remove(cartCard);cartHost.add(cartCard,compactCart?BorderLayout.NORTH:BorderLayout.CENTER);cartHost.revalidate();}
         basketHint.setText(basket.isEmpty()?"":t("sales.quantityHint"));
     }
@@ -584,7 +586,7 @@ public final class SalesPanel extends JPanel {
     }
 
     private JComponent buildResultsArea() {
-        search.putClientProperty("JTextField.placeholderText",t("catalog.search"));
+        CatalogStyle.searchField(search,t("catalog.search"));
         search.getAccessibleContext().setAccessibleName(t("catalog.search"));results.getAccessibleContext().setAccessibleName(t("sales.results"));
         results.getColumnModel().getColumn(0).setPreferredWidth(200);
         results.getColumnModel().getColumn(3).setPreferredWidth(95);results.getColumnModel().getColumn(4).setPreferredWidth(135);
@@ -602,6 +604,11 @@ public final class SalesPanel extends JPanel {
                 setHorizontalAlignment(SwingConstants.RIGHT);setText("<html><div style='text-align:right'>"+money.format(p.unitPrice())+" FCFA<br>/ "+unitName(p.unit())+"</div></html>");
                 setBorder(BorderFactory.createEmptyBorder(3,8,3,8));setToolTipText(String.valueOf(value));return this;
             }
+        });
+        results.getColumnModel().getColumn(3).setCellRenderer((table,value,selected,focus,row,col)->{
+            StockLevel level=levels.get(visible.get(table.convertRowIndexToModel(row)).id());
+            CatalogStyle.BadgeTone tone=stockFailed||level==null?CatalogStyle.BadgeTone.UNKNOWN:level.quantityMilli()==0?CatalogStyle.BadgeTone.EMPTY:level.lowStock()?CatalogStyle.BadgeTone.LOW:CatalogStyle.BadgeTone.NORMAL;
+            return CatalogStyle.badgeCell(table,String.valueOf(value),tone,selected,row,col);
         });
         area.add(below,BorderLayout.SOUTH);return area;
     }
@@ -636,8 +643,11 @@ public final class SalesPanel extends JPanel {
         JPanel actions=CatalogStyle.panel(new java.awt.GridBagLayout());
         java.awt.GridBagConstraints action=new java.awt.GridBagConstraints();action.gridx=0;action.gridy=0;action.fill=java.awt.GridBagConstraints.HORIZONTAL;action.weightx=1;action.insets=new java.awt.Insets(4,0,0,0);
         for(JButton button:new JButton[]{setAsideButton,discardButton,retryButton,backButton,confirmButton,checkoutButton}){actions.add(button,action);action.gridy++;}
-        checkoutButton.putClientProperty("JComponent.minimumHeight",46);
-        JPanel footer=CatalogStyle.panel(new BorderLayout(0,12));footer.add(totalLabel,BorderLayout.NORTH);
+        checkoutButton.putClientProperty("JComponent.minimumHeight",48);checkoutButton.setFont(checkoutButton.getFont().deriveFont(java.awt.Font.BOLD,16f));
+        JLabel totalCaption=CatalogStyle.label(t("sales.totalCaption"),16,false);totalCaption.setForeground(CatalogStyle.MUTED);
+        totalLabel.setHorizontalAlignment(SwingConstants.RIGHT);
+        JPanel totalBlock=CatalogStyle.panel(new BorderLayout(0,4));totalBlock.add(totalCaption,BorderLayout.NORTH);totalBlock.add(totalLabel,BorderLayout.CENTER);
+        JPanel footer=CatalogStyle.panel(new BorderLayout(0,12));footer.add(totalBlock,BorderLayout.NORTH);
         footer.add(noticeStrip,BorderLayout.CENTER);footer.add(actions,BorderLayout.SOUTH);return footer;
     }
 

@@ -57,7 +57,9 @@ class PageLayoutTest {
             Component number=picker.prepareRenderer(picker.getCellRenderer(0,3),0,3);
             assertEquals(text.getBackground(),number.getBackground(),"Selection must cover the full row");
             assertEquals(picker.getSelectionBackground(),text.getBackground());
-            assertEquals(SwingConstants.RIGHT,((JLabel)number).getHorizontalAlignment());
+            Component badge=((Container)number).getComponent(0);
+            assertTrue(number.getWidth()-badge.getX()-badge.getWidth()<=10,"Stock badge must align with the numeric header");
+            assertEquals(SwingConstants.RIGHT,((JLabel)picker.getColumnModel().getColumn(3).getHeaderRenderer().getTableCellRendererComponent(picker,"Stock",false,false,-1,3)).getHorizontalAlignment());
             find(shell,JButton.class,"salesAdd").doClick();for(int i=0;i<5;i++)layout(shell);
             assertEquals(1,cart.getRowCount());assertTrue(pay.isEnabled());
             find(shell,JButton.class,"salesCheckout").doClick();for(int i=0;i<5;i++)layout(shell);

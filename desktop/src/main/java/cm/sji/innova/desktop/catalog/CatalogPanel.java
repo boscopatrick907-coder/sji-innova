@@ -61,7 +61,7 @@ public final class CatalogPanel extends JPanel {
         add(top,BorderLayout.NORTH);add(body,BorderLayout.CENTER);error.setForeground(new Color(0xA43B2D));
         add(error,BorderLayout.SOUTH);
         search.getAccessibleContext().setAccessibleName(t("catalog.search"));
-        search.putClientProperty("JTextField.placeholderText",t("catalog.search"));
+        CatalogStyle.searchField(search,t("catalog.search"));
         search.getDocument().addDocumentListener(new DocumentListener(){
             public void insertUpdate(DocumentEvent e){filter=search.getText();renderResults();}
             public void removeUpdate(DocumentEvent e){filter=search.getText();renderResults();}
