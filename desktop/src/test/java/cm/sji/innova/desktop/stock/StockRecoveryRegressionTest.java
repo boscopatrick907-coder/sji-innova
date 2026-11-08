@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class StockRecoveryRegressionTest {
     @TempDir Path directory;
     UUID shop=UUID.randomUUID(),device=UUID.randomUUID();
+    private final Map<StockPanel, CountDownLatch> initialHistories = new IdentityHashMap<>();
     SqliteDatabase db;ProductService products;StockService stock;Product product;
     @BeforeEach void setup()throws Exception{
         db=new SqliteDatabase(directory.resolve("shop.db"));db.initialize();products=new ProductService(new SqliteProductRepository(db));
@@ -30,7 +31,17 @@ class StockRecoveryRegressionTest {
     }
     <T>T edt(Supplier<T> action)throws Exception{var result=new AtomicReference<T>();SwingUtilities.invokeAndWait(()->result.set(action.get()));return result.get();}
     StockPanel open(PendingReceiptStore r,PendingStockAdjustmentStore a,StockService service)throws Exception{
-        return edt(()->{FlatLightLaf.setup();CatalogStyle.installDefaults();var panel=new StockPanel(service,products,shop,device,Messages.load(Locale.ENGLISH).bundle(),r,a);panel.setErrorHandler(text->{});return panel;});
+        return edt(()->{FlatLightLaf.setup();CatalogStyle.installDefaults();var panel=new StockPanel(service,products,shop,device,Messages.load(Locale.ENGLISH).bundle(),r,a);panel.setErrorHandler(text->{});
+            CountDownLatch historyDone = new CountDownLatch(1);
+            panel.setOnHistoryWorkerDone(historyDone::countDown);
+            initialHistories.put(panel, historyDone);
+            return panel;});
+    }
+    private void awaitReady(StockPanel panel) throws Exception {
+        panel.initialLoadCompletion().toCompletableFuture().get(10, TimeUnit.SECONDS);
+        // Product loading starts a separate history worker. Its completion releases
+        // the SQLite connection before JUnit removes the temporary database on Windows.
+        await(initialHistories.get(panel));
     }
     FilePendingReceiptStore receipts(){return new FilePendingReceiptStore(directory.resolve("pending-stock-receipt.properties"));}
     FilePendingStockAdjustmentStore adjustments(){return new FilePendingStockAdjustmentStore(directory.resolve("pending-stock-adjustment.properties"));}
@@ -41,7 +52,7 @@ class StockRecoveryRegressionTest {
 
     @Test void recoveredReceiptShouldExplainThatItIsPending()throws Exception{
         var store=receipts();store.save(new PendingReceipt(UUID.randomUUID(),shop,product.id(),device,"piece",1000,"Delivery"));
-        var panel=open(store,adjustments(),stock);panel.initialLoadCompletion().toCompletableFuture().get(10,TimeUnit.SECONDS);
+        var panel=open(store,adjustments(),stock);awaitReady(panel);
         assertEquals(0,stock.current(shop,product.id()).quantityMilli(),"Opening recovery must not send anything");
         edt(()->{assertTrue(panel.hasPendingReceipt());assertTrue(panel.statusLabel().getText().toLowerCase(Locale.ROOT).contains("pending"),panel.statusLabel().getText());return null;});
     }
@@ -54,10 +65,11 @@ class StockRecoveryRegressionTest {
         var panel=open(flaky,adjustments(),stock);assertThrows(ExecutionException.class,()->panel.initialLoadCompletion().toCompletableFuture().get(10,TimeUnit.SECONDS));
         fail.set(false);CountDownLatch loaded=new CountDownLatch(1);
         edt(()->{panel.setOnLoadWorkerDone(loaded::countDown);panel.refreshButton().doClick();return null;});await(loaded);
+        await(initialHistories.get(panel));
         edt(()->{assertTrue(panel.receiveButton().isEnabled(),"A successful refresh must clear the temporary recovery block");return null;});
     }
     @Test void quantitiesAndHistoryShouldRemainReachableBelowTheThreeForms()throws Exception{
-        var panel=open(receipts(),adjustments(),stock);panel.initialLoadCompletion().toCompletableFuture().get(10,TimeUnit.SECONDS);
+        var panel=open(receipts(),adjustments(),stock);awaitReady(panel);
         edt(()->{panel.setSize(918,720);for(int i=0;i<5;i++)layout(panel);
             assertTrue(panel.stockTable().getParent().getHeight()>=40,"Stock table has height "+panel.stockTable().getHeight());
             assertTrue(panel.historyTable().getParent().getHeight()>=40,"History table has height "+panel.historyTable().getHeight());return null;});
@@ -86,8 +98,8 @@ class StockRecoveryRegressionTest {
             public java.util.List<StockMovement> history(UUID s,UUID p)throws SQLException{return real.history(s,p);}
             public StockLevel setMinimum(UUID s,UUID p,long q)throws SQLException{return real.setMinimum(s,p,q);}
         };
-        var first=open(receiptWriter,oppositeAdjustmentCheck,new StockService(uncertain));first.initialLoadCompletion().toCompletableFuture().get(10,TimeUnit.SECONDS);
-        var second=open(oppositeReceiptCheck,a,new StockService(uncertain));second.initialLoadCompletion().toCompletableFuture().get(10,TimeUnit.SECONDS);
+        var first=open(receiptWriter,oppositeAdjustmentCheck,new StockService(uncertain));awaitReady(first);
+        var second=open(oppositeReceiptCheck,a,new StockService(uncertain));awaitReady(second);
         CountDownLatch firstDone=new CountDownLatch(1),secondDone=new CountDownLatch(1);armed.set(true);
         edt(()->{first.setOnReceiptWorkerDone(firstDone::countDown);first.quantityField().setText("1");first.reasonField().setText("Delivery");first.receiveButton().doClick();return null;});await(receiptChecked);
         edt(()->{second.setOnReceiptWorkerDone(secondDone::countDown);((JTextField)named(second,"stockAdjustmentQuantity")).setText("1");((JTextField)named(second,"stockAdjustmentReason")).setText("Count");button(second,"Apply Adjustment").doClick();return null;});
@@ -109,7 +121,7 @@ class StockRecoveryRegressionTest {
             public Path file() { return real.file(); }
         };
         var panel = open(observed, adjustments(), stock);
-        panel.initialLoadCompletion().toCompletableFuture().get(10, TimeUnit.SECONDS);
+        awaitReady(panel);
         CountDownLatch done = new CountDownLatch(1);
         edt(() -> { panel.setOnReceiptWorkerDone(done::countDown);
             panel.quantityField().setText("1"); panel.reasonField().setText("Delivery");
