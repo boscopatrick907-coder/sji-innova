@@ -120,9 +120,9 @@ Offline release does not depend on a cloud account, web API, WhatsApp, online fo
 
 **Accepted when:** someone outside the development team can install the app and complete the basic workflow following the guide, with internet disconnected.
 
-## 4. P1 — refine the design across the whole application
+## 4. P1 — major application redesign and visual quality
 
-### OFF-07 · Larger, more elegant sidebar and typography — proposed owner: Patrick; Charles integrates
+### OFF-07 · Full visual and interaction redesign — proposed owner: Patrick; Charles integrates
 
 - [ ] Preserve the approved green palette and gradient; refine the main area to match it rather than replacing it with another visual theme.
 - [ ] Prototype an expanded sidebar around 220–240 logical pixels at 1100px+ windows, with a compact/collapsible layout at 960px. Choose the final width using real previews, not a fixed width that crowds checkout.
@@ -141,6 +141,59 @@ Offline release does not depend on a cloud account, web API, WhatsApp, online fo
 **Accepted when:** approve real Java previews at 960×600, 1100×720 and 1600×1000 for Products, add/edit/details, photos, CSV, Stock, checkout, history/details, Dashboard and Settings, including failure/pending states. Then perform native-window checks; static pictures alone are insufficient.
 
 Implementation starts in [STYLE_GUIDE.md](../desktop/STYLE_GUIDE.md), `CatalogStyle`, `FeedbackStrip`, and the shared shell. Update the guide when a design choice is approved. Do not scatter per-screen fonts, palettes or UIManager overrides.
+
+### OFF-07A · Design direction: a calm, distinctive retail workspace
+
+**Scope:** redesign the complete experience, not just enlarge controls. The target is a coherent application with its own identity, polished composition and clear everyday actions. Preserve the green character Patrick likes; improve everything around it. Avoid decorative clutter, oversized blank panels and repetitive generic cards.
+
+#### Visual foundation to prototype
+
+- [ ] Create two substantially different full-screen proposals: **Editorial retail** (warm ivory, confident typography, generous whitespace, photo-led products) and **Precision retail** (cooler neutral surfaces, compact information hierarchy, stronger numeric alignment). Both retain the green sidebar and support the same tasks. Compare complete screens rather than isolated buttons.
+- [ ] Prototype a deep forest-to-emerald sidebar gradient, a warm near-white canvas, white working surfaces, dark ink text and restrained amber/red feedback. Example starting tokens: forest `#123E32`, emerald `#28785E`, canvas `#F4F5EF`, surface `#FFFFFF`, ink `#20332C`. These are candidates; validate contrast and approve final tokens before implementation.
+- [ ] Try a refined 240–256px expanded sidebar on larger windows, adapting the existing 220–240px proposal where necessary. Include a deliberate Cella wordmark, shop identity, 44–48px navigation targets, clear section spacing and one consistent icon family. Use a compact mode on small windows; widening navigation must not squeeze the work area.
+- [ ] Compare locally bundled Inter and Source Sans 3, or suitable equivalents, with their redistribution licenses. Test actual Java rendering and French accents. Use consistent weights and tabular numerals for prices and quantities. Avoid thin body text, ornamental headings in forms, and mixed unrelated fonts.
+- [ ] Define a shared 4/8px spacing rhythm, restrained 8–12px corner radii, subtle borders and minimal shadows. Distinguish the page, content sections and primary action through spacing and hierarchy before adding decoration.
+- [ ] Define component tokens for type, color, spacing, focus, borders, radius and density. Produce a reusable component sheet with navigation, buttons, search, inputs, selectors, cards, tables, badges, alerts, dialogs and all interaction states.
+
+#### Redesign each important screen
+
+| Screen | Desired composition and interaction | Keep easy to find |
+| --- | --- | --- |
+| Dashboard | Clear period selector, 3–4 primary statistics, one readable revenue trend, top products and an actionable low-stock list; secondary data can sit below | What sold, what needs attention, create a sale, receive stock |
+| Products | Strong title/actions, full-width useful search, tidy family/category filters, photo-led product rows or compact cards with reference and distinguishing variant details | Product identity, selling price, availability, add/import actions |
+| Family and variants | Family heading and optional photo, concise variant list showing brand/weight/size/color as applicable; a visible route back to the catalogue | The exact sellable variant; do not hide different bag sizes behind ambiguous names |
+| Product details | Balanced photo and identity area, readable price/stock summary, structured characteristics and clearly grouped edit/stock actions | Reference, unit, family, photo, current stock and permitted actions |
+| Add/edit product | Sections for identity, selling information and optional details; an obvious photo area with preview; advanced information progressively revealed | Required fields, save/cancel, validation at the field; no confidential buying cost exposed to a cashier |
+| Stock | Quantity overview and search first; delivery/correction in a focused section or side panel after selecting a product; compact thresholds and readable signed movement history | Selected variant, unit, current stock, resulting correction and any pending request |
+| Sales | Strong product picker beside a composed basket with clear line quantities, remove/edit affordances, total and payment area; use space deliberately | Search, quantity, total, amount tendered/change if implemented, payment/retry action |
+| History and receipt | Calm searchable list; a well-typeset receipt detail with aligned amounts, status, saved items and obvious back navigation | Receipt identity, date, paid/voided state, total and allowed print/export actions |
+| CSV import | Clear Choose file → Map/validate → Preview → Confirm → Result progression, with a compact error summary and precise row guidance | What will change, valid/rejected counts, duplicate policy and safe retry |
+| Settings and backups | Small labelled groups for shop, language, users, backup and support; explain restore with a focused confirmation | Last successful backup, destination, restore implications and current app version |
+
+The screen proposals above are target designs. They do not imply that every listed action already exists; implement missing behavior through the corresponding functional task first.
+
+#### Interaction and wording quality
+
+- [ ] Make the main task on each page evident within five seconds. Prefer one dominant primary action; place secondary actions nearby and destructive ones separately.
+- [ ] Use short, human French/English wording: “Ajouter un produit”, “Recevoir une livraison”, “Stock faible”, “Réessayer cette opération”. Avoid internal terminology, UUIDs, technical stack traces and long instructional paragraphs in ordinary forms.
+- [ ] Make row opening, selection, hover and keyboard activation consistent. Avoid invisible click targets and icon-only actions with uncertain meaning. Preserve focus, filters, scroll position and unfinished input when navigating back.
+- [ ] Put field errors beside the relevant control and operation errors in a clear alert. Explicitly distinguish “saved”, “still saving”, “not saved” and “confirmation uncertain”; never use a success animation to conceal uncertainty.
+- [ ] Use brief transitions only where they explain a change, respect reduced-motion preferences where supported, and keep performance suitable for the pilot laptop. No animation is required for offline functionality.
+- [ ] Ensure every meaningful hover/selected state has a keyboard equivalent. Check contrast against WCAG AA targets where applicable, and keep at least 44px targets for frequently used controls when space allows.
+- [ ] Show honest empty states with a next action, loading states that do not imply zero values, and helpful placeholders without invented sample business figures.
+
+#### Delivery sequence and approval evidence
+
+1. Audit every current route with screenshots, note confusing tasks and identify shared inconsistencies.
+2. Produce the two design directions for Dashboard, Products and Sales at realistic window sizes. Use representative French names, photos and FCFA amounts; include a narrow layout.
+3. Patrick compares the proposals with the secretary/shop owner, selects a direction and records the chosen tokens and reasons in the style guide. Do not start parallel implementations of competing themes.
+4. Implement shared navigation, typography and components first; verify them in Java before migrating screens in small PRs.
+5. Migrate Products/details/forms, then Stock, then Sales/history, then Dashboard/Settings/import. Maintain existing services and recovery behavior throughout.
+6. Perform a whole-app consistency pass, keyboard/scaling checks and a short observed usability trial. Record unresolved issues instead of declaring the design finished from screenshots.
+
+**Redesign accepted when:** a new user can find a specific rice variant, add a product/photo, receive a delivery and start a sale without coaching after a short introduction. Aim for no critical task confusion in a five-person pilot trial; record observed completion times and errors and iterate. At 960×600, 1100×720 and 1600×1000, essential actions remain reachable, monetary values remain readable and no screen looks like an unrelated app. All relevant Windows/Linux checks still pass.
+
+**Budget:** proposals can use Penpot, Figma's free tier where available, or local HTML/SVG mockups. Final acceptance uses the real Swing application. Use original or suitably licensed fonts, icons and photography, with no paid service required at runtime.
 
 ### OFF-08 · Offline statistics dashboard — proposed owners: Emmanuel queries; Charles UI; Patrick design
 
