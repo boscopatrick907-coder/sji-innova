@@ -85,7 +85,8 @@ this shop's all count as damage. A future format must use a new `format` number.
 
 ## Known limitations
 
-- Sales history and detail are the next delivery; for now, saved sales are checked through tests.
+- Opening one sale from the history is the next delivery. For now the list shows its receipt, date, total and status.
+- The history reads every sale of the shop each time it opens, because the service has no paging. This suits the pilot; a shop with years of sales will need paging.
 - A basket keeps the price from when the line was added. Core has no product edit yet, so a price
   cannot change while a basket is open. When an edit screen arrives, this needs another look.
 - Checkout recovery is coordinated across copies of Cella using the same local data folder:
@@ -107,10 +108,36 @@ Everything is in `desktop/src/main/java/cm/sji/innova/desktop/sales/`.
 | `PendingCheckoutStore` | The file above |
 | `Checkout` | The safety rules, with no screen code |
 | `SalesPanel` | The page: what can be clicked at each moment |
+| `SaleHistoryFilter` | Sorting and filtering saved sales, with no screen code |
+| `SalesHistoryPanel` | The saved sales page, shown inside `SalesPanel` |
 
 `shell/SalesSlot` builds the panel from `AppContext`. The panel reads nothing until it is opened, and it
 reads products and stock again each time it is opened.
 
+
+## Sales history
+
+**Historique des ventes** at the top of Ventes opens the saved sales of this shop. **Retour à la caisse**
+returns to the checkout. Both are pages of the same `SalesPanel`, so going there only swaps what is shown:
+the basket, a waiting cash confirmation and an unfinished sale stay exactly as they were.
+
+- **It only reads.** `SalesHistoryPanel` calls `SaleService.listSaleStates` in a background thread. It never
+  changes a sale, the stock or `pending-checkout.txt`.
+- **Effective status.** Each row shows Payée or Annulée in words, from `SaleState`. A cancelled sale keeps its row.
+- **Order.** Newest first; two sales saved at the same instant are ordered by their ID, so the order never
+  changes between reads. The sort works on a copy of what the service returned.
+- **Filters.** Any part of the receipt, ignoring case; all, paid or cancelled; and an optional range of days
+  written `jj/mm/aaaa`, both days included. The filters stay in place when the page is left and opened again.
+- **Time zone.** Saved times stay in UTC. They are displayed in Africa/Douala by `CatalogStyle.localDateTime`, and
+  the day filters use the same zone: a Douala day starts at 23:00 UTC on the day before.
+- **What replaces the table when there is no row:** loading, no sale saved yet, no sale matching the filters,
+  a wrong date, or a failed read with **Réessayer**. A failed read says that it does not mean there are no
+  sales, and it removes the old rows rather than leaving them looking current.
+- **Newest read wins.** Each read has a number, and an older read that finishes late is ignored.
+- **While a sale is being saved** the history button is disabled. If a sale is unfinished or its file is damaged,
+  the history can still be opened, and a warning says the sale is still waiting at the checkout.
+- **A quantity still being typed** is finished first, as when clicking anywhere else. If it is refused, the
+  line keeps its previous quantity and the reason stays on the basket.
 
 ## Review correction — pending checkout ownership
 

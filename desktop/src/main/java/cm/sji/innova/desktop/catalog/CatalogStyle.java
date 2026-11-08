@@ -158,12 +158,12 @@ public final class CatalogStyle {
     public static JScrollPane scrollContent(JComponent content,int minimumHeight) {
         class View extends JPanel implements Scrollable {
             View(){super(new BorderLayout());setOpaque(false);add(content);}
-            @Override public Dimension getPreferredSize(){return new Dimension(700,minimumHeight);}
+            @Override public Dimension getPreferredSize(){return new Dimension(700,Math.max(minimumHeight,content.getPreferredSize().height));}
             public Dimension getPreferredScrollableViewportSize(){return getPreferredSize();}
             public int getScrollableUnitIncrement(Rectangle r,int orientation,int direction){return 22;}
             public int getScrollableBlockIncrement(Rectangle r,int orientation,int direction){return Math.max(22,r.height-30);}
             public boolean getScrollableTracksViewportWidth(){return true;}
-            public boolean getScrollableTracksViewportHeight(){return getParent()!=null&&getParent().getHeight()>=minimumHeight;}
+            public boolean getScrollableTracksViewportHeight(){return getParent()!=null&&getParent().getHeight()>=getPreferredSize().height;}
         }
         JScrollPane scroll=new JScrollPane(new View());scroll.setBorder(null);
         scroll.getViewport().setBackground(PAPER);scroll.getVerticalScrollBar().setUnitIncrement(22);
