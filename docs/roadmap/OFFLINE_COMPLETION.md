@@ -4,7 +4,7 @@ Updated: 8 November 2026. Baseline: merged main commit `ffe2700` (PR #40).
 
 **Goal:** a beautiful, easy-to-use desktop application that a shop secretary can operate without internet, with dependable records, recovery, useful statistics, and a straightforward installation.
 
-This is a planning document, not a claim that the tasks below are implemented. Check boxes mean accepted work, not code merely submitted. Owners are proposed for coordination; this document does not replace or silently expand the current individual briefs in `docs/team/`. Patrick confirms assignments before simultaneous work starts.
+This is a planning document, not a claim that the tasks below are implemented. Check boxes mean accepted work, not code merely submitted. Patrick has assigned Charles ownership of all remaining work in this roadmap, including the complete redesign. His single current assignment file is [CHARLES.md](../team/CHARLES.md). Patrick remains the product reviewer and coordinates shop acceptance; other collaborators may help only when explicitly coordinated.
 
 Being competitive requires reliable shop trials and comparison with real alternatives. “Best on the market” is the ambition; this roadmap defines measurable improvements rather than promising that result.
 
@@ -48,7 +48,7 @@ Offline release does not depend on a cloud account, web API, WhatsApp, online fo
 
 ## 3. P0 — complete the everyday transaction loop
 
-### OFF-01 · Historical receipt details — proposed owner: Charles
+### OFF-01 · Historical receipt details — owner: Charles
 
 - [ ] Open a receipt from history by double-click, Enter, or a clear labelled action.
 - [ ] Show receipt reference, local date/time, status, saved product names/references, quantities, charged unit prices and saved totals.
@@ -58,7 +58,7 @@ Offline release does not depend on a cloud account, web API, WhatsApp, online fo
 
 **Accepted when:** sell two products, change a current catalogue price later, reopen the historical receipt, and still see exactly what was charged. Opening history/details must create no stock or sale writes.
 
-### OFF-02 · Recovery and integrity acceptance — proposed owners: Willy + Emmanuel; Pascal verifies
+### OFF-02 · Recovery and integrity acceptance — owner: Charles
 
 - [ ] Test receipt, stock correction, cash sale and CSV recovery with a request saved before submission.
 - [ ] Simulate “database committed, response lost”; restart and retry the original UUID. Verify exactly one committed operation.
@@ -71,7 +71,7 @@ Offline release does not depend on a cloud account, web API, WhatsApp, online fo
 
 **Accepted when:** each scenario records starting balance, operation UUID, final balance, movement/sale count and recovery-file state. No duplicate sale, duplicate delivery, negative balance or silently discarded uncertain operation.
 
-### OFF-03 · Backup and restore — proposed owner: Emmanuel; Patrick tests usability
+### OFF-03 · Backup and restore — owner: Charles
 
 - [ ] Add Settings actions for “Create backup” and “Restore backup”, with destination, progress, result and last successful backup time.
 - [ ] Define a versioned backup format containing a consistent database snapshot, local product photos and required shop/configuration metadata; include a manifest and checksums.
@@ -85,7 +85,7 @@ Offline release does not depend on a cloud account, web API, WhatsApp, online fo
 
 **Accepted when:** back up a shop with photos and transactions, restore into an isolated installation, and match products, sale totals, balances, photos and recovery behavior. Corrupt/incompatible backups must leave existing data intact.
 
-### OFF-04 · Catalogue and stock completion review — proposed owners: Patrick + Willy
+### OFF-04 · Catalogue and stock completion review — owner: Charles
 
 - [ ] Audit which create/edit/archive actions are actually reachable, then implement missing essential actions without duplicating existing services.
 - [ ] Allow safe correction of product name, category, family, specifications, selling price and photo, with clear save/cancel behavior.
@@ -98,7 +98,7 @@ Offline release does not depend on a cloud account, web API, WhatsApp, online fo
 
 **Accepted when:** a secretary can identify the correct rice variant, receive it, set its threshold, correct a counted discrepancy with a reason, and reopen the app without losing the result.
 
-### OFF-05 · Cashier verification — proposed owners: Charles + Pascal
+### OFF-05 · Cashier verification — owner: Charles
 
 - [ ] Test the full flow without internet: add product → receive 10 → sell 2 → restart → stock 8 and one saved sale.
 - [ ] Validate empty basket, unavailable products, fractional restrictions, overflow, duplicate clicks, insufficient stock and a sale rejected after stock changed in another window.
@@ -108,7 +108,7 @@ Offline release does not depend on a cloud account, web API, WhatsApp, online fo
 
 **Accepted when:** complete a written set of cashier scenarios on Windows/Linux; compare the recorded stock and money with expected values to the FCFA.
 
-### OFF-06 · Installation and pilot delivery — proposed owners: Patrick + Emmanuel
+### OFF-06 · Installation and pilot delivery — owner: Charles
 
 - [ ] Produce a versioned Windows installer and a documented Linux package/launcher with a bundled compatible Java runtime; ordinary users should not need Maven or Java setup.
 - [ ] Set app name, icon, version, data location and desktop shortcut. Upgrade without deleting or silently moving shop data.
@@ -122,7 +122,7 @@ Offline release does not depend on a cloud account, web API, WhatsApp, online fo
 
 ## 4. P1 — major application redesign and visual quality
 
-### OFF-07 · Full visual and interaction redesign — proposed owner: Patrick; Charles integrates
+### OFF-07 · Full visual and interaction redesign — owner: Charles
 
 - [ ] Preserve the approved green palette and gradient; refine the main area to match it rather than replacing it with another visual theme.
 - [ ] Prototype an expanded sidebar around 220–240 logical pixels at 1100px+ windows, with a compact/collapsible layout at 960px. Choose the final width using real previews, not a fixed width that crowds checkout.
@@ -142,7 +142,7 @@ Offline release does not depend on a cloud account, web API, WhatsApp, online fo
 
 Implementation starts in [STYLE_GUIDE.md](../desktop/STYLE_GUIDE.md), `CatalogStyle`, `FeedbackStrip`, and the shared shell. Update the guide when a design choice is approved. Do not scatter per-screen fonts, palettes or UIManager overrides.
 
-### OFF-07A · Design direction: a calm, distinctive retail workspace
+### OFF-07A · Design direction: a calm, distinctive retail workspace — owner: Charles
 
 **Scope:** redesign the complete experience, not just enlarge controls. The target is a coherent application with its own identity, polished composition and clear everyday actions. Preserve the green character Patrick likes; improve everything around it. Avoid decorative clutter, oversized blank panels and repetitive generic cards.
 
@@ -195,7 +195,7 @@ The screen proposals above are target designs. They do not imply that every list
 
 **Budget:** proposals can use Penpot, Figma's free tier where available, or local HTML/SVG mockups. Final acceptance uses the real Swing application. Use original or suitably licensed fonts, icons and photography, with no paid service required at runtime.
 
-### OFF-08 · Offline statistics dashboard — proposed owners: Emmanuel queries; Charles UI; Patrick design
+### OFF-08 · Offline statistics dashboard — owner: Charles
 
 The dashboard runs entirely against local SQLite records. It requires no online service. Start with a useful summary, then add drill-downs.
 
@@ -222,7 +222,7 @@ The dashboard runs entirely against local SQLite records. It requires no online 
 
 **Accepted when:** hand-calculate a fixture with paid sales, retries, a later cancellation, price changes, a date-boundary sale and an empty period; dashboard values match. Everything still works with internet disconnected and after restart.
 
-### OFF-09 · Permissions and confidential information — proposed owners: Emmanuel + Patrick
+### OFF-09 · Permissions and confidential information — owner: Charles
 
 - [ ] Define local owner/cashier roles and local sign-in/unlock/session locking, with a recovery procedure. Initial shop/device UUIDs are not authentication.
 - [ ] Restrict buying costs, margins, backups/restores, exports, stock corrections, voids and shop settings according to the agreed role matrix.
@@ -232,7 +232,7 @@ The dashboard runs entirely against local SQLite records. It requires no online 
 
 **Accepted when:** a cashier can sell and inspect allowed receipts but cannot reveal buying costs or perform owner-only actions through another screen or export. Session locking preserves pending operations safely.
 
-### OFF-10 · Sale cancellation, receipts and reports — proposed owners: Charles + Emmanuel
+### OFF-10 · Sale cancellation, receipts and reports — owner: Charles
 
 - [ ] Add an authorized, reason-required full cash-sale void flow using the existing core operation; do not delete sales or edit stock directly.
 - [ ] Add durable recovery/idempotency to the void UI and show its effect before confirmation. Confirm restart and double-click cannot restore stock twice.
@@ -243,7 +243,7 @@ The dashboard runs entirely against local SQLite records. It requires no online 
 
 **Accepted when:** receive 10, sell 2, void with permission/reason, and see stock 10 with the original sale and audit retained. Reprinting/exporting must never submit a new sale.
 
-### OFF-11 · Speed, maintenance and support — proposed owners: Emmanuel + Pascal
+### OFF-11 · Speed, maintenance and support — owner: Charles
 
 - [ ] Agree a realistic shop dataset, for example 5,000 variants and 100,000 sale lines, then measure on the pilot laptop before claiming performance.
 - [ ] Establish pilot targets: a typical search within 300ms after debounce, first usable page within 2s, dashboard within 2s, and no I/O on the Swing event thread. Record hardware and actual results; revise targets from measurements.
@@ -256,7 +256,7 @@ The dashboard runs entirely against local SQLite records. It requires no online 
 
 ## 5. P2 — extensions after a successful pilot
 
-These are candidates to prioritize with actual shops, not prerequisites for finishing the current core. Each needs its own data model, acceptance checks and ownership decision.
+These are candidates to prioritize with actual shops, not prerequisites for finishing the current core. Charles owns these extensions as well. Each needs its own data model and acceptance checks; Patrick prioritizes them after the core offline release. They do not all have to ship before the first release.
 
 - [ ] Supplier directory, purchase orders, goods received, purchase costs and supplier balances.
 - [ ] Cost history and an agreed inventory valuation method before publishing profit/margin analytics.
@@ -271,19 +271,23 @@ These are candidates to prioritize with actual shops, not prerequisites for fini
 - [ ] Scheduled local backup, richer reports and optional user-configurable dashboard tiles after the base backup and reporting contracts are trusted.
 - [ ] Multi-counter/local-network use only after an explicit server/ownership design; do not share a live SQLite file over an arbitrary network folder.
 
-## 6. Proposed work split and small delivery order
+## 6. Charles owns delivery; Patrick reviews
 
-| Person | First proposed work | Then | Coordination boundary |
-| --- | --- | --- | --- |
-| Charles | OFF-01 receipt details | OFF-08 dashboard UI, then OFF-10 desktop void/receipt output | Own Sales; agree shell/shared layout edits with Patrick |
-| Willy | OFF-02 stock restart and process acceptance; verify OFF-04 correction/threshold usability | OFF-11 stock performance, then stock-count proposal | Preserve operation identity, shared leases and append-only movements |
-| Emmanuel | OFF-03 backup/restore design and implementation | OFF-08 reporting queries; OFF-09 local permission design | Agree core contracts/schema before UI depends on them |
-| Patrick | OFF-07 two shared design proposals and approval; real-shop acceptance | OFF-06 pilot/install coordination and product priorities | Own shared visual decisions; keep team briefs aligned |
-| Pascal | Native Windows/Linux checks, FR/EN and accessibility | Repeat pilot scenarios and report reproducible issues | Pair with Willy where useful; do not change shared contracts independently |
+Patrick assigned Charles the entire remaining offline roadmap on 8 November 2026. This includes OFF-01 through OFF-11, OFF-07A's full redesign, and the later P2 backlog. Existing work and collaborator commits must remain intact; this assignment is to finish and improve the merged app, not rebuild it from scratch.
 
-Suggested first five small PRs: receipt details; recovery acceptance gaps; backup format/snapshot with tests; shared sidebar/typography refinement; dashboard read queries with metric fixtures. Dashboard UI follows agreed queries. Owner permissions and installer work can be prepared alongside these with clear file boundaries.
+| Responsibility | Owner | Expected result |
+| --- | --- | --- |
+| Remaining offline features, recovery and backup/restore | Charles | Complete P0 tasks and provide evidence for each acceptance check |
+| Whole-app redesign, sidebar, typography and components | Charles | Produce two proposals; implement the direction approved by Patrick across all routes |
+| Dashboard, reporting, permissions and packaging | Charles | Deliver end-to-end local workflows, including core queries, UI, migrations where needed and tests |
+| Later P2 extensions | Charles | Implement in Patrick's chosen order after pilot priorities are met |
+| Product decisions, design approval and shop acceptance | Patrick | Review demonstrated results and approve milestones; this is review, not a separate coding assignment |
 
-Before starting a task: claim its ID, agree ownership, preserve local work, update from main, and create a feature branch. Preserve original collaborators’ commits; no force pushes. Include the task ID, behavior change, validation, screenshots when relevant, and remaining limitations in each PR. Never merge a red Windows/Linux build.
+Delivery order: OFF-01 receipt details → OFF-02 recovery acceptance → OFF-03 backup/restore. Prepare the OFF-07/OFF-07A design proposals early; then migrate shared components and screens in small PRs. Continue P0 catalogue/cashier/install work, followed by dashboard queries/UI, permissions, reports and measured polish. Keep dependencies explicit rather than promising one giant “everything finished” PR.
+
+Read [Charles's current assignment](../team/CHARLES.md) before starting. Other collaborators are not automatically assigned new tasks by this document; Patrick coordinates any requested help to prevent duplicate changes.
+
+Before starting a task: Charles records its ID and scope, preserves local work, updates from main, and creates a feature branch. Preserve original collaborators’ commits; no force pushes. Include the task ID, behavior change, validation, screenshots when relevant, and remaining limitations in each PR. Never merge a red Windows/Linux build.
 
 The older [visual roadmap](ROADMAP.md) and HTML roadmap contain historical status/assignments from October. This document is the current offline completion plan; those older snapshots must not be used as current task assignments.
 
