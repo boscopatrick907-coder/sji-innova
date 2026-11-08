@@ -32,6 +32,8 @@ final class PendingReceiptFileLease implements AutoCloseable {
         ReentrantLock local = JVM_LOCKS.computeIfAbsent(lockPath, ignored -> new ReentrantLock());
         if (!local.tryLock()) throw new FilePendingReceiptStore.BusyException();
 
+        if (local.getHoldCount() > 1) return new PendingReceiptFileLease(local, null, null);
+
         FileChannel channel = null;
         try {
             channel = FileChannel.open(lockPath, StandardOpenOption.CREATE, StandardOpenOption.WRITE);
@@ -55,9 +57,9 @@ final class PendingReceiptFileLease implements AutoCloseable {
 
     @Override public void close() throws IOException {
         try {
-            fileLock.release();
+            if (fileLock != null) fileLock.release();
         } finally {
-            try { channel.close(); }
+            try { if (channel != null) channel.close(); }
             finally { localLock.unlock(); }
         }
     }

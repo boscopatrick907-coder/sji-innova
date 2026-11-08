@@ -313,7 +313,12 @@ final class SalesHistoryPanel extends JPanel {
         place.gridy = 0;
         place.fill = GridBagConstraints.HORIZONTAL;
         place.weightx = 1;
+        place.gridwidth = 6;
+        place.insets = new Insets(0, 0, 10, 0);
         row.add(search, place);
+        place.gridy = 1;
+        place.gridwidth = 1;
+        place.insets = new Insets(0, 0, 0, 0);
         place.weightx = 0;
         addLabelled(row, place, "sales.history.status", status);
         addLabelled(row, place, "sales.history.from", from);

@@ -43,12 +43,13 @@ public final class StockPanel extends JPanel {
     private final JComboBox<Product> productSelector = new JComboBox<>();
     private final JTextField quantityField = new JTextField(12);
     private final JTextField reasonField = new JTextField(20);
-    private final JComboBox<String> adjustmentDirection = new JComboBox<>(new String[]{"Add", "Remove"});
+    private final JComboBox<String> adjustmentDirection = new JComboBox<>();
     private final JTextField adjustmentQuantityField = new JTextField(12);
     private final JTextField adjustmentReasonField = new JTextField(20);
     private final JButton adjustButton = CatalogStyle.button("Apply Adjustment", true);
     private final JTextField minimumField = new JTextField(12);
     private final JButton saveMinimumButton = CatalogStyle.button("Save Minimum", false);
+    private final java.util.Map<UUID, Long> availableByProduct = new java.util.HashMap<>();
     private final java.util.Map<UUID, Long> minimumByProduct = new java.util.HashMap<>();
     private boolean minimumSaving;
 
@@ -188,6 +189,8 @@ public final class StockPanel extends JPanel {
     }
 
     private void createInterface() {
+        adjustmentDirection.addItem(message("stock.adjust.add", "Add"));
+        adjustmentDirection.addItem(message("stock.adjust.remove", "Remove"));
         setLayout(new BorderLayout(0,18));setBorder(new EmptyBorder(22,30,18,30));setBackground(CatalogStyle.PAPER);
         JPanel titles=CatalogStyle.panel(new BorderLayout(0,7));
         titles.add(CatalogStyle.label(message("stock.title","Stock Management"),28,true),BorderLayout.NORTH);
@@ -196,10 +199,13 @@ public final class StockPanel extends JPanel {
         JPanel header=CatalogStyle.panel(new BorderLayout(12,0));header.add(titles,BorderLayout.CENTER);
         header.add(createRefreshPanel(),BorderLayout.EAST);add(header,BorderLayout.NORTH);
         JPanel main=CatalogStyle.panel(new BorderLayout(0,16));
-        JPanel forms = CatalogStyle.panel(new GridLayout(3, 1, 0, 12));
-        forms.add(CatalogStyle.widthLimited(createReceiptForm(), 720));
-        forms.add(CatalogStyle.widthLimited(createAdjustmentForm(), 720));
-        forms.add(CatalogStyle.widthLimited(createMinimumForm(), 720));
+        JPanel forms = CatalogStyle.panel(new GridBagLayout());
+        GridBagConstraints formRow = new GridBagConstraints();
+        formRow.gridx = 0; formRow.weightx = 1; formRow.fill = GridBagConstraints.HORIZONTAL;
+        formRow.insets = new Insets(0, 0, 12, 0);
+        forms.add(CatalogStyle.widthLimited(createReceiptForm(), 720), formRow);
+        forms.add(CatalogStyle.widthLimited(createAdjustmentForm(), 720), formRow);
+        forms.add(CatalogStyle.widthLimited(createMinimumForm(), 720), formRow);
         main.add(forms, BorderLayout.NORTH);
         main.add(createTables(),BorderLayout.CENTER);
         add(CatalogStyle.scrollContent(main,690),BorderLayout.CENTER);
@@ -399,6 +405,9 @@ public final class StockPanel extends JPanel {
                     }
 
                     InitialData data = get();
+                    recoveryBlocked = false;
+                    pendingReceipt = null; pendingProduct = null;
+                    pendingAdjustment = null; pendingAdjustmentProduct = null;
                     boolean pendingOperationExists = data.pendingReceipt() != null || data.pendingAdjustment() != null;
                     boolean preserveOperationFeedback = keepFeedback || pendingOperationExists;
                     if (data.pendingReceipt() != null) {
@@ -471,10 +480,10 @@ public final class StockPanel extends JPanel {
                         reasonField.setText(pendingReceipt.reason());
                         receiveButton.setText(message("stock.action.retry", "Retry Original Receipt"));
                         statusFeedback.setTone(FeedbackStrip.Tone.WARNING);
-                        if (!preserveOperationFeedback) {
-    statusLabel.setText(message("stock.receipt.pending",
-            "An original receipt is pending. Retry it without changing its details."));
-}
+                        if (!keepFeedback) {
+                            statusLabel.setText(message("stock.receipt.pending",
+                                    "An original receipt is pending. Retry it without changing its details."));
+                        }
                     }
 
                     if (pendingAdjustment != null && !recoveryBlocked) {
@@ -486,20 +495,22 @@ public final class StockPanel extends JPanel {
                         setReceiptControlsEnabled(false);
                         adjustmentDirection.setEnabled(false); adjustmentQuantityField.setEnabled(false); adjustmentReasonField.setEnabled(false);
                         statusFeedback.setTone(FeedbackStrip.Tone.WARNING);
-                        if (!preserveOperationFeedback) statusLabel.setText(message("stock.adjust.pending", "An original adjustment is pending. Retry it without changing its details."));
+                        if (!keepFeedback) statusLabel.setText(message("stock.adjust.pending", "An original adjustment is pending. Retry it without changing its details."));
                     }
                     minimumByProduct.clear();
+                    availableByProduct.clear();
                     for (StockLevel level : data.levels()) {
                         minimumByProduct.put(level.productId(), level.minimumMilli());
+                        availableByProduct.put(level.productId(), level.quantityMilli());
                     }
                     displayStock(data.levels());
                     updateMinimumFieldForSelectedProduct();
 
-                    if (!preserveOperationFeedback&&data.products().isEmpty()) {
+                    if (!recoveryBlocked && !preserveOperationFeedback&&data.products().isEmpty()) {
                         statusLabel.setText(message(
                                 "stock.empty",
                                 "No products found for this shop."));
-                    } else if(!preserveOperationFeedback) {
+                    } else if(!recoveryBlocked && !preserveOperationFeedback) {
                         statusLabel.setText(
                                 data.products().size()
                                         + " "
@@ -823,13 +834,20 @@ public final class StockPanel extends JPanel {
 
             @Override
             protected ReceiptOutcome doInBackground() throws Exception {
+                try (var lease = operationLease()) {
                 // Do not allow two different durable operations in this shop data folder.
                 if (pendingAdjustmentStore.load().isPresent()) throw new IOException("A stock adjustment is already pending");
                 // Persist the immutable operation before any database submission.
                 pendingReceiptStore.save(request);
-                StockResult result = stock.receive(
-                        request.operationId(), request.shopId(), request.productId(),
-                        request.deviceId(), request.quantityMilli(), request.reason());
+                StockResult result;
+                try {
+                    result = stock.receive(request.operationId(), request.shopId(), request.productId(),
+                            request.deviceId(), request.quantityMilli(), request.reason());
+                } catch (IllegalArgumentException | ArithmeticException rejected) {
+                    try { pendingReceiptStore.clear(request.operationId()); }
+                    catch (IOException cleanup) { rejected.addSuppressed(cleanup); throw new IOException("Recovery cleanup pending", rejected); }
+                    throw rejected;
+                }
                 try {
                     pendingReceiptStore.clear(request.operationId());
                     return new ReceiptOutcome(result, true);
@@ -837,6 +855,7 @@ public final class StockPanel extends JPanel {
                     // The service confirmed it, but the durable request remains.
                     // A retry with the same UUID is safe and will replay the result.
                     return new ReceiptOutcome(result, false);
+                }
                 }
             }
 
@@ -874,9 +893,7 @@ public final class StockPanel extends JPanel {
                 } catch (ExecutionException exception) {
                     Throwable cause = exception.getCause();
                     if (cause instanceof IllegalArgumentException || cause instanceof ArithmeticException) {
-                        // Clear only after a known service rejection; retain if cleanup fails.
-                        try {
-                            pendingReceiptStore.clear(request.operationId());
+                        // The worker already cleared the file after a known service rejection.
                             pendingReceipt = null;
                             pendingProduct = null;
                             receiptPending = false;
@@ -888,9 +905,6 @@ public final class StockPanel extends JPanel {
                             minimumField.setEnabled(true);
                             saveMinimumButton.setEnabled(true);
                             receiveButton.setText(message("stock.action.receive", "Receive Stock"));
-                        } catch (IOException cleanupFailure) {
-                            preservePendingReceipt();
-                        }
                     } else {
                         preservePendingReceipt();
                     }
@@ -901,6 +915,12 @@ public final class StockPanel extends JPanel {
                 }
             }
         }.execute();
+    }
+
+    private PendingReceiptFileLease operationLease() throws IOException {
+        // Compatibility constructors use memory-only stores and must not touch disk.
+        return pendingReceiptStore instanceof InMemoryPendingReceiptStore ? null
+                : PendingReceiptFileLease.acquire(pendingReceiptStore.file());
     }
 
     private void submitAdjustment() {
@@ -919,9 +939,16 @@ public final class StockPanel extends JPanel {
             catch (IllegalArgumentException ex) { showError(ex.getMessage()); adjustmentQuantityField.requestFocusInWindow(); return; }
             boolean decrease = adjustmentDirection.getSelectedIndex() == 1;
             long delta = decrease ? Math.negateExact(magnitude) : magnitude;
+            long current = availableByProduct.getOrDefault(selected.id(), 0L);
+            long resulting;
+            try { resulting = Math.addExact(current, delta); }
+            catch (ArithmeticException overflow) { showError(message("error.stock.quantityFormat", "Quantity is too large.")); return; }
+            if (resulting < 0) { showError(message("error.stock.insufficient", "Insufficient stock for this correction.")); return; }
             if (decrease && !GraphicsEnvironment.isHeadless()) {
                 int answer = JOptionPane.showConfirmDialog(this,
-                        message("stock.adjust.confirm", "This will reduce available stock. Continue?"),
+                        message("stock.adjust.preview", "Current / change / resulting quantity") + ": "
+                                + formatQuantity(current) + " / " + formatQuantity(delta) + " / " + formatQuantity(resulting)
+                                + "\n" + reason + "\n" + message("stock.adjust.confirm", "This will reduce available stock. Continue?"),
                         message("stock.adjust.title", "Manual Stock Adjustment"), JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
                 if (answer != JOptionPane.YES_OPTION) return;
             }
@@ -945,12 +972,21 @@ public final class StockPanel extends JPanel {
         statusLabel.setText(message("stock.adjust.saving", "Saving stock adjustment..."));
         new SwingWorker<StockResult, Void>() {
             @Override protected StockResult doInBackground() throws Exception {
+                try (var lease = operationLease()) {
                 if (pendingReceiptStore.load().isPresent()) throw new IOException("A stock receipt is already pending");
                 pendingAdjustmentStore.save(request);
-                StockResult result = stock.adjust(request.operationId(), request.shopId(), request.productId(),
-                        request.deviceId(), request.deltaMilli(), request.reason());
+                StockResult result;
+                try {
+                    result = stock.adjust(request.operationId(), request.shopId(), request.productId(),
+                            request.deviceId(), request.deltaMilli(), request.reason());
+                } catch (IllegalArgumentException | ArithmeticException rejected) {
+                    try { pendingAdjustmentStore.clear(request.operationId()); }
+                    catch (IOException cleanup) { rejected.addSuppressed(cleanup); throw new IOException("Recovery cleanup pending", rejected); }
+                    throw rejected;
+                }
                 pendingAdjustmentStore.clear(request.operationId());
                 return result;
+                }
             }
             @Override protected void done() {
                 try {
@@ -970,9 +1006,7 @@ public final class StockPanel extends JPanel {
                 } catch (ExecutionException ex) {
                     Throwable cause = ex.getCause();
                     if (cause instanceof IllegalArgumentException || cause instanceof ArithmeticException) {
-                        // The service/repository rejected the operation before commit; it is safe to return to editing.
-                        try {
-                            pendingAdjustmentStore.clear(request.operationId());
+                        // The worker cleared the rejected request before returning to editing.
                             pendingAdjustment = null;
                             pendingAdjustmentProduct = null;
                             receiptPending = false;
@@ -984,9 +1018,6 @@ public final class StockPanel extends JPanel {
                             adjustButton.setEnabled(true);
                             minimumField.setEnabled(true);
                             saveMinimumButton.setEnabled(true);
-                        } catch (IOException cleanupFailure) {
-                            preservePendingAdjustment();
-                        }
                     } else {
                         preservePendingAdjustment();
                     }
