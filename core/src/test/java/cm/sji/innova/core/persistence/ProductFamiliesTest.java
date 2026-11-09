@@ -91,19 +91,32 @@ class ProductFamiliesTest {
             s.execute("INSERT INTO products VALUES('"+UUID.randomUUID()+"','"+shop+"','Old rice',500,'2026-01-01T00:00:00Z','2026-01-01T00:00:00Z',7,'R-OLD',NULL,'Food','piece',10000,2000)");
         }
     }
+    /** A cash sale and its cancellation, written row by row as schema 5 wrote them, without today's code. */
+    void legacySaleAndVoid(SqliteDatabase db, Sale sale) throws Exception {
+        var item=sale.items().getFirst();UUID voided=UUID.randomUUID(),cashier=UUID.randomUUID(),saleMove=UUID.randomUUID(),voidMove=UUID.randomUUID();
+        String at=sale.createdAt().toString(),later=sale.createdAt().plusSeconds(60).toString(),receipt=sale.receiptNumber();
+        try(var c=db.open();var s=c.createStatement()) {
+            s.execute("INSERT INTO sales VALUES('%s','%s','%s','%s','cash',%d,'%s')".formatted(sale.id(),shop,receipt,device,sale.totalAmount(),at));
+            s.execute("INSERT INTO sale_items VALUES('%s','%s','%s','%s','%s',%d,%d,%d)".formatted(item.id(),sale.id(),item.productId(),item.productName(),item.unit(),item.quantityMilli(),item.unitPrice(),item.subtotal()));
+            s.execute("INSERT INTO sale_events VALUES('%s','%s','%s','%s','created',NULL,'Sale %s','%s')".formatted(SaleEvent.createdEventId(sale.id()),sale.id(),shop,device,receipt,at));
+            s.execute("INSERT INTO stock_movements VALUES('%s','%s','%s','%s','sale',%d,'Sale %s','%s')".formatted(saleMove,shop,item.productId(),device,-item.quantityMilli(),receipt,at));
+            s.execute("INSERT INTO sale_events VALUES('%s','%s','%s','%s','voided','%s','Old void','%s')".formatted(voided,sale.id(),shop,device,cashier,later));
+            s.execute("INSERT INTO stock_movements VALUES('%s','%s','%s','%s','void',%d,'Void sale %s: Old void','%s')".formatted(voidMove,shop,item.productId(),device,item.quantityMilli(),receipt,later));
+            s.execute("INSERT INTO sale_void_items VALUES('%s','%s','%s','%s','%s','%s',%d)".formatted(item.id(),voided,shop,sale.id(),item.productId(),voidMove,item.quantityMilli()));
+            s.execute("INSERT INTO audit_log VALUES('%s','%s','%s','%s','VOID_SALE','sales','%s','%s','Old void','{\"status\":\"paid\"}','{\"status\":\"voided\"}','%s')".formatted(UUID.randomUUID(),shop,device,cashier,sale.id(),voided,later));
+        }
+    }
     @ParameterizedTest
     @ValueSource(strings = {"LF", "CRLF"})
     void schemaFiveUpgradePreservesHistoricalSalesVoidsAndReferencesOnRepeat(String lineEndings) throws Exception {
         var db=new SqliteDatabase(directory.resolve("legacy.db"));legacy(db, lineEndings);
         UUID id;
         try(var c=db.open();var s=c.createStatement();var rows=s.executeQuery("SELECT id FROM products")){rows.next();id=UUID.fromString(rows.getString(1));}
-        // Old sales service can persist directly using a snapshot without reading new catalog columns.
-        var item=new SaleItem(UUID.randomUUID(),UUID.randomUUID(),id,"Old rice","piece",2000,500,1000);
-        var sale=new Sale(item.saleId(),shop,"OLD-1",device,PaymentMethod.CASH,1000,java.time.Instant.now(),List.of(item));
-        var repo=new SqliteSaleRepository(db);
-        repo.recordSale(sale,new CashSaleRequest(sale.id(),shop,device,sale.receiptNumber(),List.of(new SaleItemRequest(id,2000))));
-        var service=new SaleService(repo,new SqliteProductRepository(db));
-        service.voidCashSale(UUID.randomUUID(),shop,sale.id(),device,UUID.randomUUID(),"Old void");
+        // The schema-5 sale line has no reference; the upgrade gives it the product's new one, P-0001.
+        var item=new SaleItem(UUID.randomUUID(),UUID.randomUUID(),id,"P-0001","Old rice","piece",2000,500,1000);
+        var sale=new Sale(item.saleId(),shop,"OLD-1",device,PaymentMethod.CASH,1000,java.time.Instant.parse("2026-01-02T00:00:00Z"),List.of(item));
+        legacySaleAndVoid(db,sale);
+        var service=new SaleService(new SqliteSaleRepository(db),new SqliteProductRepository(db));
         db.initialize();var migrated=products(db).list(shop).getFirst();
         assertEquals(id,migrated.id());assertEquals(7,migrated.version());assertNull(migrated.familyId());assertEquals("P-0001",migrated.reference());
         assertNull(migrated.costPrice());assertEquals(10000,new StockService(new SqliteStockRepository(db)).current(shop,id).quantityMilli());

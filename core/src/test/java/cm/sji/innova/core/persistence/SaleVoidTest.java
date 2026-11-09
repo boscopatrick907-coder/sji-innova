@@ -296,9 +296,9 @@ class SaleVoidTest {
                     VALUES ('%s', '%s', 'MOMO-001', '%s', 'momo', 3000, '2026-11-02T10:00:00Z')
                     """.formatted(momoSaleId, shop, device));
             stmt.execute("""
-                    INSERT INTO sale_items (id, sale_id, product_id, product_name, unit, quantity_milli, unit_price, subtotal)
-                    VALUES ('%s', '%s', '%s', 'Polo T-shirt', 'piece', 1000, 3000, 3000)
-                    """.formatted(momoItemId, momoSaleId, shirt.id()));
+                    INSERT INTO sale_items (id, sale_id, product_id, product_reference, product_name, unit, quantity_milli, unit_price, subtotal)
+                    VALUES ('%s', '%s', '%s', '%s', 'Polo T-shirt', 'piece', 1000, 3000, 3000)
+                    """.formatted(momoItemId, momoSaleId, shirt.id(), shirt.reference()));
             stmt.execute("""
                     INSERT INTO sale_events (id, sale_id, shop_id, device_id, type, performed_by, reason, created_at)
                     VALUES ('%s', '%s', '%s', '%s', 'created', NULL, 'Sale MOMO-001', '2026-11-02T10:00:00Z')

@@ -120,7 +120,7 @@ class SaleRetryAndRoundingTest {
     private Sale candidate(UUID id, long quantity, long price) {
         return new Sale(id, shop, "RECEIPT", device, PaymentMethod.CASH,
                 Math.multiplyExact(quantity / 1000, price), Instant.now(),
-                List.of(new SaleItem(UUID.randomUUID(), id, product.id(), product.name(), product.unit(),
+                List.of(new SaleItem(UUID.randomUUID(), id, product.id(), product.reference(), product.name(), product.unit(),
                         quantity, price, Math.multiplyExact(quantity / 1000, price))));
     }
 
@@ -223,7 +223,7 @@ class SaleRetryAndRoundingTest {
     void legacyTruncatedSaleIsReturnedUnchangedRatherThanRepriced() throws Exception {
         var rice = measured(501);
         UUID id = UUID.randomUUID();
-        var oldItem = new SaleItem(UUID.randomUUID(), id, rice.id(), rice.name(), rice.unit(), 500, 501, 250);
+        var oldItem = new SaleItem(UUID.randomUUID(), id, rice.id(), rice.reference(), rice.name(), rice.unit(), 500, 501, 250);
         var oldSale = new Sale(id, shop, "RECEIPT", device, PaymentMethod.CASH, 250, Instant.now(), List.of(oldItem));
         repository.recordSale(oldSale); // Represents an existing sale written by the old rounding implementation.
         var retry = checkout(id, List.of(new SaleItemRequest(rice.id(), 500)));

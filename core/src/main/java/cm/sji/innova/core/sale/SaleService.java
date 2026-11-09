@@ -52,7 +52,7 @@ public final class SaleService {
                     .multiply(BigDecimal.valueOf(unitPrice))
                     .setScale(0, RoundingMode.HALF_UP).longValueExact();
             totalAmount = Math.addExact(totalAmount, subtotal);
-            items.add(new SaleItem(UUID.randomUUID(), saleId, prod.id(), prod.name(),
+            items.add(new SaleItem(UUID.randomUUID(), saleId, prod.id(), prod.reference(), prod.name(),
                     prod.unit(), req.quantityMilli(), unitPrice, subtotal));
         }
 

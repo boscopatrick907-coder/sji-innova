@@ -11,7 +11,7 @@ import java.util.UUID;
 
 /** File-backed connections. Call initialize before using repositories. */
 public final class SqliteDatabase {
-    public static final int SCHEMA_VERSION = 8;
+    public static final int SCHEMA_VERSION = 9;
     private final Path file;
 
     public SqliteDatabase(Path file) {
@@ -263,6 +263,11 @@ public final class SqliteDatabase {
                     ProductImportMigration.apply(connection);
                     statement.execute("PRAGMA user_version = 8");
                     version = 8;
+                }
+                if (version == 8) {
+                    SaleLineReferenceMigration.apply(connection);
+                    statement.execute("PRAGMA user_version = 9");
+                    version = 9;
                 }
                 try (var violations = statement.executeQuery("PRAGMA foreign_key_check")) {
                     if (violations.next()) throw new SQLException("Migration would leave broken foreign keys");
