@@ -85,9 +85,6 @@ this shop's all count as damage. A future format must use a new `format` number.
 
 ## Known limitations
 
-- A receipt shows each line's saved product name, not its reference: a saved sale line keeps the name, unit,
-  quantity, price and line total, but no reference. Showing today's reference would mix catalogue data into
-  a saved record, so it is left out until the sale itself saves one.
 - The history reads every sale of the shop each time it opens, because the service has no paging. This suits the pilot; a shop with years of sales will need paging.
 - A basket keeps the price from when the line was added. Core has no product edit yet, so a price
   cannot change while a basket is open. When an edit screen arrives, this needs another look.
@@ -150,9 +147,13 @@ opens nothing. **← Retour à l’historique** or Escape returns to the list wi
 dates and selected sale, and **Retour à la caisse** from there finds the basket as it was.
 
 - **Only saved values.** The receipt, date and time (Africa/Douala), payment, status, and each line's
-  product name, quantity in its unit, charged unit price and line total all come from the saved sale.
-  The total is the saved total. Nothing is looked up in today's catalogue or calculated again, so a later
-  price or name change never alters an old receipt. A saved sale has no buying price, so none can appear.
+  product name, reference (such as `P-0001`), quantity in its unit, charged unit price and line total all
+  come from the saved sale. The total is the saved total. Nothing is looked up in today's catalogue or
+  calculated again, so a later price, name or reference change never alters an old receipt. A saved sale
+  has no buying price, so none can appear.
+- **References of older sales.** Each sale line has saved its product's reference since schema 9. Lines
+  saved before took their product's reference during the upgrade; shop references are never edited, so it is
+  the reference the product had when it was sold.
 - **Cancelled sales** say Annulée, with a notice giving the cancellation date and the reason exactly as it
   was recorded. The original lines and total stay on the page.
 - **It only reads.** The receipt uses the sale already read for the list, so opening it makes no new
