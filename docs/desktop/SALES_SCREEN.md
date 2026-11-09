@@ -85,7 +85,9 @@ this shop's all count as damage. A future format must use a new `format` number.
 
 ## Known limitations
 
-- Opening one sale from the history is the next delivery. For now the list shows its receipt, date, total and status.
+- A receipt shows each line's saved product name, not its reference: a saved sale line keeps the name, unit,
+  quantity, price and line total, but no reference. Showing today's reference would mix catalogue data into
+  a saved record, so it is left out until the sale itself saves one.
 - The history reads every sale of the shop each time it opens, because the service has no paging. This suits the pilot; a shop with years of sales will need paging.
 - A basket keeps the price from when the line was added. Core has no product edit yet, so a price
   cannot change while a basket is open. When an edit screen arrives, this needs another look.
@@ -110,6 +112,7 @@ Everything is in `desktop/src/main/java/cm/sji/innova/desktop/sales/`.
 | `SalesPanel` | The page: what can be clicked at each moment |
 | `SaleHistoryFilter` | Sorting and filtering saved sales, with no screen code |
 | `SalesHistoryPanel` | The saved sales page, shown inside `SalesPanel` |
+| `SaleDetailsPanel` | One saved receipt, shown inside `SalesHistoryPanel` |
 
 `shell/SalesSlot` builds the panel from `AppContext`. The panel reads nothing until it is opened, and it
 reads products and stock again each time it is opened.
@@ -138,6 +141,26 @@ the basket, a waiting cash confirmation and an unfinished sale stay exactly as t
   the history can still be opened, and a warning says the sale is still waiting at the checkout.
 - **A quantity still being typed** is finished first, as when clicking anywhere else. If it is refused, the
   line keeps its previous quantity and the reason stays on the basket.
+
+## Receipt details (OFF-01)
+
+Select a sale in the history, then click **Ouvrir le reçu →**, press Enter, or double-click it. Typing part of
+a receipt in the search box then pressing Enter also opens the selected sale; Enter in an empty search box
+opens nothing. **← Retour à l’historique** or Escape returns to the list with the same search, status,
+dates and selected sale, and **Retour à la caisse** from there finds the basket as it was.
+
+- **Only saved values.** The receipt, date and time (Africa/Douala), payment, status, and each line's
+  product name, quantity in its unit, charged unit price and line total all come from the saved sale.
+  The total is the saved total. Nothing is looked up in today's catalogue or calculated again, so a later
+  price or name change never alters an old receipt. A saved sale has no buying price, so none can appear.
+- **Cancelled sales** say Annulée, with a notice giving the cancellation date and the reason exactly as it
+  was recorded. The original lines and total stay on the page.
+- **It only reads.** The receipt uses the sale already read for the list, so opening it makes no new
+  database call and writes nothing.
+- **Reads while it is open.** If the history is read again while a receipt is open, for example when you
+  come back to Ventes from another screen, the receipt shows the newer read of the same sale, such as a
+  cancellation made meanwhile. If that read
+  fails, the receipt stays on screen, and the list shows the failure on the way back.
 
 ## Review correction — pending checkout ownership
 
