@@ -14,8 +14,12 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.KeyboardFocusManager;
+import java.awt.event.ActionEvent;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
+import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.text.MessageFormat;
 import java.text.NumberFormat;
 import java.time.LocalDate;
@@ -28,6 +32,7 @@ import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
@@ -37,6 +42,7 @@ import javax.swing.JPanel;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
@@ -45,11 +51,13 @@ import javax.swing.event.DocumentListener;
 import javax.swing.table.AbstractTableModel;
 
 /**
- * The saved sales of this shop, shown inside Ventes.
+ * The saved sales of this shop, shown inside Ventes, and the details of one of them.
  *
  * <p>This page only reads: nothing here can change a sale, the stock or the unfinished sale file. It
  * reads in the background, and only the newest read may update the page. A failed read says so, so it
- * can never be mistaken for a shop with no sales. All methods must be called on the Swing event thread.
+ * can never be mistaken for a shop with no sales. Opening a receipt swaps the list for
+ * {@link SaleDetailsPanel}; the list keeps its filters and selection while it is hidden. All methods
+ * must be called on the Swing event thread.
  */
 final class SalesHistoryPanel extends JPanel {
     static final int COLUMN_RECEIPT = 0;
@@ -60,6 +68,8 @@ final class SalesHistoryPanel extends JPanel {
     private static final Logger LOG = Logger.getLogger(SalesHistoryPanel.class.getName());
     private static final String LIST_CARD = "list";
     private static final String MESSAGE_CARD = "message";
+    private static final String LIST_PAGE = "listPage";
+    private static final String DETAILS_PAGE = "detailsPage";
 
     private final SaleService sales;
     private final UUID shopId;
@@ -77,6 +87,9 @@ final class SalesHistoryPanel extends JPanel {
     private final JButton refresh;
     private final JButton retry;
     private final JButton clear;
+    private final JButton open;
+    private final SaleDetailsPanel details;
+    private final CardLayout pages = new CardLayout();
     private final JLabel count = named(CatalogStyle.label(" ", 12, false), "historyCount");
     private final JTextArea message = named(new JTextArea(1, 30), "historyMessage");
     private final FeedbackStrip messageStrip = CatalogStyle.feedback(message, FeedbackStrip.Tone.INFO);
@@ -93,11 +106,11 @@ final class SalesHistoryPanel extends JPanel {
     private boolean loading;
     private boolean failed;
     private boolean fillingTable;
+    private boolean showingDetails;
     private long generation;                        // only the newest read may update the page
     private int activeWorkers;
 
     SalesHistoryPanel(SaleService sales, UUID shopId, ResourceBundle messages, Runnable onBack) {
-        super(new BorderLayout(0, 10));
         this.sales = Objects.requireNonNull(sales, "sales");
         this.shopId = Objects.requireNonNull(shopId, "shopId");
         this.messages = Objects.requireNonNull(messages, "messages");
@@ -114,12 +127,18 @@ final class SalesHistoryPanel extends JPanel {
         refresh = named(CatalogStyle.button(t("catalog.refresh"), false), "historyRefresh");
         retry = named(CatalogStyle.button(t("sales.history.retry"), true), "historyRetry");
         clear = named(CatalogStyle.button(t("sales.history.clear"), false), "historyClear");
+        open = named(CatalogStyle.arrowButton(t("sales.history.openReceipt"), false, false), "historyOpen");
         JButton back = named(CatalogStyle.arrowButton(t("sales.history.back"), false, true), "historyBack");
         back.addActionListener(event -> onBack.run());
+        details = new SaleDetailsPanel(messages, this::closeDetails);
 
         setOpaque(false);
-        add(buildHeader(back), BorderLayout.NORTH);
-        add(buildBody(), BorderLayout.CENTER);
+        setLayout(pages);
+        JPanel listPage = CatalogStyle.panel(new BorderLayout(0, 10));
+        listPage.add(buildHeader(back), BorderLayout.NORTH);
+        listPage.add(buildBody(), BorderLayout.CENTER);
+        add(listPage, LIST_PAGE);
+        add(details, DETAILS_PAGE);
         connectControls();
         updateView();
     }
@@ -153,6 +172,28 @@ final class SalesHistoryPanel extends JPanel {
 
     void focusSearch() { search.requestFocusInWindow(); }
 
+    /** For tests: true while one sale's details replace the list. */
+    boolean showingDetails() { return showingDetails; }
+
+    /** Opens the selected receipt. Nothing happens when no sale is selected. */
+    private void openSelected() {
+        int row = table.getSelectedRow();
+        if (showingDetails || row < 0 || row >= visible.size()) return;
+        SaleState state = visible.get(row);
+        selectedSale = state.sale().id();
+        details.show(state);
+        showingDetails = true;
+        pages.show(this, DETAILS_PAGE);
+        details.focusBack();
+    }
+
+    /** Back to the list exactly as it was left: same filters, same selected sale. */
+    private void closeDetails() {
+        showingDetails = false;
+        pages.show(this, LIST_PAGE);
+        (visible.isEmpty() ? search : table).requestFocusInWindow();
+    }
+
     private void applyRead(SwingWorker<List<SaleState>, Void> worker) {
         loading = false;
         try {
@@ -164,6 +205,11 @@ final class SalesHistoryPanel extends JPanel {
             readFailed(failure);
         }
         refill();
+        if (showingDetails && !failed) {
+            // A newer read of the receipt on screen, for example one cancelled since it was opened.
+            UUID onScreen = details.shown().sale().id();
+            saved.stream().filter(state -> state.sale().id().equals(onScreen)).findFirst().ifPresent(details::show);
+        }
     }
 
     private void readFailed(Exception failure) {
@@ -202,6 +248,7 @@ final class SalesHistoryPanel extends JPanel {
     /** The one place that decides what the list area shows. */
     private void updateView() {
         refresh.setEnabled(!loading);
+        open.setEnabled(!visible.isEmpty());
         retry.setVisible(false);
         clear.setVisible(false);
         if (failed) {
@@ -289,10 +336,13 @@ final class SalesHistoryPanel extends JPanel {
 
         listArea.add(buildList(), LIST_CARD);
         listArea.add(buildMessageBox(), MESSAGE_CARD);
+        JPanel bottom = CatalogStyle.panel(new BorderLayout(12, 0));
+        bottom.add(count, BorderLayout.CENTER);
+        bottom.add(open, BorderLayout.EAST);
         JPanel card = CatalogStyle.surface(new BorderLayout(0, 12));
         card.add(buildFilters(), BorderLayout.NORTH);
         card.add(listArea, BorderLayout.CENTER);
-        card.add(count, BorderLayout.SOUTH);
+        card.add(bottom, BorderLayout.SOUTH);
 
         JPanel body = CatalogStyle.panel(new BorderLayout(0, 10));
         body.add(CatalogStyle.feedback(pending, FeedbackStrip.Tone.WARNING), BorderLayout.NORTH);
@@ -404,6 +454,26 @@ final class SalesHistoryPanel extends JPanel {
         table.getSelectionModel().addListSelectionListener(event -> {
             int row = table.getSelectedRow();
             if (!fillingTable && !event.getValueIsAdjusting() && row >= 0) selectedSale = visible.get(row).sale().id();
+        });
+
+        // Four ways to open a receipt: the button, Enter or a double-click in the list, and Enter
+        // in a search that is not empty, so typing part of a receipt then Enter opens it.
+        open.addActionListener(event -> openSelected());
+        table.getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "openReceipt");
+        table.getActionMap().put("openReceipt", new AbstractAction() {
+            @Override public void actionPerformed(ActionEvent event) { openSelected(); }
+        });
+        table.addMouseListener(new MouseAdapter() {
+            @Override public void mouseClicked(MouseEvent event) {
+                int row = table.rowAtPoint(event.getPoint());
+                if (event.getClickCount() != 2 || !SwingUtilities.isLeftMouseButton(event) || row < 0) return;
+                table.setRowSelectionInterval(row, row);    // open the row that was clicked, whatever was selected
+                openSelected();
+            }
+        });
+        search.addActionListener(event -> {
+            if (!search.getText().isBlank()) openSelected();
         });
     }
 
