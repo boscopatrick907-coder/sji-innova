@@ -1,8 +1,10 @@
 package cm.sji.innova.desktop.stock;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cm.sji.innova.core.persistence.SqliteDatabase;
@@ -249,6 +251,8 @@ class StockRecoveryAcceptanceTest {
         UUID operation = corrections.load().orElseThrow().operationId();
         assertEquals(13_000, balance(), "The database confirmed it");
         assertEquals(2, movementIds().size());
+        assertEquals("Adjustment was confirmed, but recovery cleanup is pending. Retry the same adjustment.",
+                edt(() -> panel.statusLabel().getText()), "Said like a receipt's, not as a failure");
 
         corrections.failClear = false;
         retryCorrection(panel, true);
@@ -292,6 +296,154 @@ class StockRecoveryAcceptanceTest {
         Files.delete(receipts.file());
         Files.writeString(corrections.file(), "format=1\ndeltaMilli=12\n", StandardCharsets.UTF_8);
         assertBlockedAndKept(corrections.file(), false);
+    }
+
+    // ----- OFF-02b: a saved request the screen cannot use can be set aside, never deleted -----
+
+    @Test
+    void aDamagedReceiptStillShowsTheStockAndCanBeSetAsideWithoutLosingTheFile() throws Exception {
+        stock.receive(UUID.randomUUID(), shop, rice.id(), device, 10_000, "Opening count");
+        Files.writeString(receipts.file(), "format=1\noperationId=not-a-uuid\n", StandardCharsets.UTF_8);
+        byte[] damaged = Files.readAllBytes(receipts.file());
+
+        StockPanel panel = open(true);
+        edt(() -> {
+            assertEquals(1, panel.stockTable().getRowCount(), "The stock is shown, not hidden by the damaged file");
+            assertEquals(english.getString("stock.receipt.damaged"), panel.statusLabel().getText());
+            assertTrue(setAsideButton(panel).isVisible() && setAsideButton(panel).isEnabled());
+            assertFalse(panel.receiveButton().isEnabled());
+            return null;
+        });
+
+        Path kept = setAside(panel);
+
+        assertTrue(kept.getFileName().toString().startsWith("pending-stock-receipt-damaged-"), kept.toString());
+        assertArrayEquals(damaged, Files.readAllBytes(kept), "The damaged file is kept byte for byte");
+        assertFalse(Files.exists(receipts.file()));
+        assertEquals(english.getString("stock.setAside.check"),
+                edt(() -> panel.statusLabel().getText()));
+        assertUnblockedAndNothingSent(panel, 10_000, 1);
+    }
+
+    @Test
+    void aDamagedCorrectionCanBeSetAsideWithoutLosingTheFile() throws Exception {
+        Files.writeString(corrections.file(), "format=1\ndeltaMilli=12\n", StandardCharsets.UTF_8);
+        byte[] damaged = Files.readAllBytes(corrections.file());
+
+        StockPanel panel = open(true);
+        assertEquals(english.getString("stock.adjust.damaged"), edt(() -> panel.statusLabel().getText()));
+        Path kept = setAside(panel);
+
+        assertTrue(kept.getFileName().toString().startsWith("pending-stock-adjustment-damaged-"), kept.toString());
+        assertArrayEquals(damaged, Files.readAllBytes(kept));
+        assertFalse(Files.exists(corrections.file()));
+        assertUnblockedAndNothingSent(panel, 0, 0);
+    }
+
+    @Test
+    void aReceiptFromAnotherComputerThatWasNeverSavedIsSetAsideAndReportedAsNotAdded() throws Exception {
+        receipts.real.save(new PendingReceipt(UUID.randomUUID(), shop, rice.id(), UUID.randomUUID(), "piece", 7_000, "Other computer"));
+        byte[] saved = Files.readAllBytes(receipts.file());
+
+        StockPanel panel = open(true);
+        assertEquals(english.getString("stock.receipt.wrongOwner"), edt(() -> panel.statusLabel().getText()));
+        Path kept = setAside(panel);
+
+        assertTrue(kept.getFileName().toString().startsWith("pending-stock-receipt-set-aside-"), kept.toString());
+        assertArrayEquals(saved, Files.readAllBytes(kept));
+        assertEquals(english.getString("stock.setAside.notSaved"),
+                edt(() -> panel.statusLabel().getText()));
+        assertUnblockedAndNothingSent(panel, 0, 0);
+    }
+
+    @Test
+    void aReceiptFromAnotherComputerAlreadyInTheHistoryIsSetAsideAndReportedAsSaved() throws Exception {
+        UUID operation = UUID.randomUUID();
+        UUID otherComputer = UUID.randomUUID();
+        stock.receive(operation, shop, rice.id(), otherComputer, 7_000, "Delivery 12");
+        receipts.real.save(new PendingReceipt(operation, shop, rice.id(), otherComputer, "piece", 7_000, "Delivery 12"));
+
+        StockPanel panel = open(true);
+        Path kept = setAside(panel);
+
+        assertEquals(english.getString("stock.setAside.saved"),
+                edt(() -> panel.statusLabel().getText()));
+        assertUnblockedAndNothingSent(panel, 7_000, 1);
+    }
+
+    @Test
+    void aReceiptFromAnotherShopIsSetAsideAndReportedAsNotAddedToThisShop() throws Exception {
+        receipts.real.save(new PendingReceipt(UUID.randomUUID(), UUID.randomUUID(), rice.id(), device, "piece", 1_000, "Other shop"));
+
+        StockPanel panel = open(true);
+        Path kept = setAside(panel);
+
+        assertEquals(english.getString("stock.setAside.notSaved"),
+                edt(() -> panel.statusLabel().getText()));
+        assertUnblockedAndNothingSent(panel, 0, 0);
+    }
+
+    @Test
+    void aCorrectionForAProductThatNoLongerExistsIsSetAsideWithAnInvitationToCheckTheHistory() throws Exception {
+        corrections.real.save(new PendingStockAdjustment(UUID.randomUUID(), shop, UUID.randomUUID(), device, "piece", 1_000, "Unknown product"));
+
+        StockPanel panel = open(true);
+        assertEquals(english.getString("stock.adjust.invalidProduct"), edt(() -> panel.statusLabel().getText()));
+        Path kept = setAside(panel);
+
+        assertTrue(kept.getFileName().toString().startsWith("pending-stock-adjustment-set-aside-"), kept.toString());
+        assertEquals(english.getString("stock.setAside.check"),
+                edt(() -> panel.statusLabel().getText()));
+        assertUnblockedAndNothingSent(panel, 0, 0);
+    }
+
+    @Test
+    void aRequestThisScreenCanRetryIsNeverOfferedToBeSetAside() throws Exception {
+        receipts.real.save(new PendingReceipt(UUID.randomUUID(), shop, rice.id(), device, "piece", 7_000, "Delivery 12"));
+
+        StockPanel panel = open(true);
+
+        edt(() -> {
+            assertFalse(setAsideButton(panel).isVisible(), "An uncertain request is retried, never set aside");
+            assertEquals("Retry Original Receipt", panel.receiveButton().getText());
+            return null;
+        });
+        assertThrows(FilePendingReceiptStore.ConflictException.class, () -> receipts.real.setAsideDamaged(),
+                "The store refuses to set a readable request aside as damaged");
+        assertThrows(FilePendingReceiptStore.ConflictException.class, () -> receipts.real.setAside(UUID.randomUUID()),
+                "The store refuses to set aside a request other than the one the screen showed");
+        assertTrue(Files.exists(receipts.file()));
+    }
+
+    private static JButton setAsideButton(StockPanel panel) { return (JButton) named(panel, "stockSetAside"); }
+
+    /** Clicks Set the file aside, waits for it and the reload after it, and returns the kept file. */
+    private Path setAside(StockPanel panel) throws Exception {
+        List<Path> before;
+        try (var files = Files.list(directory)) { before = files.toList(); }
+        edt(() -> {
+            assertTrue(setAsideButton(panel).isVisible() && setAsideButton(panel).isEnabled());
+            setAsideButton(panel).doClick();
+            return null;
+        });
+        afterOperation(panel, true);
+        try (var files = Files.list(directory)) {
+            List<Path> added = files.filter(file -> !before.contains(file)).toList();
+            assertEquals(1, added.size(), "One file was kept under a new name: " + added);
+            return added.getFirst();
+        }
+    }
+
+    private void assertUnblockedAndNothingSent(StockPanel panel, long balance, int movements) throws Exception {
+        edt(() -> {
+            assertFalse(setAsideButton(panel).isVisible());
+            assertTrue(panel.receiveButton().isEnabled(), "Receiving works again");
+            assertEquals("Add to stock", panel.receiveButton().getText());
+            return null;
+        });
+        assertEquals(0, repository.attempts.get(), "Nothing was sent");
+        assertEquals(balance, balance());
+        assertEquals(movements, movementIds().size());
     }
 
     /** Opens the screen on a saved request it must not use, and checks that nothing moved. */
@@ -647,6 +799,8 @@ class StockRecoveryAcceptanceTest {
             real.clear(expectedOperationId);
         }
         @Override public Path file() { return real.file(); }
+        @Override public Path setAsideDamaged() throws IOException { return real.setAsideDamaged(); }
+        @Override public Path setAside(UUID expectedOperationId) throws IOException { return real.setAside(expectedOperationId); }
     }
 
     /** The real pending-correction file, whose writing or removal can be made to fail. */
@@ -667,5 +821,7 @@ class StockRecoveryAcceptanceTest {
             real.clear(expectedOperationId);
         }
         @Override public Path file() { return real.file(); }
+        @Override public Path setAsideDamaged() throws IOException { return real.setAsideDamaged(); }
+        @Override public Path setAside(UUID expectedOperationId) throws IOException { return real.setAside(expectedOperationId); }
     }
 }

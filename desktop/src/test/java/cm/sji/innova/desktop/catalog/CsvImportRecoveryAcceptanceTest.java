@@ -168,7 +168,7 @@ class CsvImportRecoveryAcceptanceTest {
             CsvImportPanel blocked = edt(() -> new CsvImportPanel(new ProductImportService(counted()), shop, data,
                     english, () -> { }, () -> { }, busy -> { }));
             assertThrows(ExecutionException.class, () -> blocked.ready().toCompletableFuture().get(10, TimeUnit.SECONDS));
-            assertEquals(english.getString("csv.recoveryError"), edt(() -> feedback(blocked)));
+            assertEquals(english.getString("csv.busy"), edt(() -> feedback(blocked)), "Said as busy, not as damaged");
             assertThrows(ExecutionException.class,
                     () -> edt(() -> blocked.previewFile(csv)).toCompletableFuture().get(10, TimeUnit.SECONDS),
                     "Nothing can be imported from this window");
@@ -187,6 +187,85 @@ class CsvImportRecoveryAcceptanceTest {
         assertEquals(1, products.list(shop).size());
         assertFalse(Files.exists(pending));
         edt(() -> { after.leave(); return null; });
+    }
+
+    // ----- OFF-02b: a saved import the screen cannot use can be set aside, never deleted -----
+
+    @Test
+    void aDamagedSavedImportCanBeSetAsideWithoutLosingTheFileThenANewImportWorks() throws Exception {
+        Files.createDirectories(data);
+        Files.writeString(pending, "version=1\nshop=" + shop + "\nrows=not-a-number\n");
+        byte[] damaged = Files.readAllBytes(pending);
+
+        CsvImportPanel panel = edt(() -> new CsvImportPanel(new ProductImportService(counted()), shop, data,
+                english, () -> { }, () -> { }, busy -> { }));
+        assertThrows(ExecutionException.class, () -> panel.ready().toCompletableFuture().get(10, TimeUnit.SECONDS));
+        assertEquals(english.getString("csv.damaged"), edt(() -> feedback(panel)));
+        assertTrue(edt(() -> named(panel, "csvSetAside").isVisible()));
+        assertThrows(ExecutionException.class,
+                () -> edt(() -> panel.previewFile(csv)).toCompletableFuture().get(10, TimeUnit.SECONDS),
+                "Nothing can be imported over the damaged file");
+        assertThrows(PendingImportStore.BusyException.class, () -> new PendingImportStore(data, shop),
+                "The screen keeps the folder, so no other window imports over the damaged file meanwhile");
+
+        Path kept = edt(panel::setAsideDamagedFile).toCompletableFuture().get(10, TimeUnit.SECONDS);
+
+        assertTrue(kept.getFileName().toString().startsWith("pending-csv-set-aside-"), kept.toString());
+        assertTrue(java.util.Arrays.equals(damaged, Files.readAllBytes(kept)), "The damaged file is kept byte for byte");
+        assertFalse(Files.exists(pending));
+        assertEquals(english.getString("csv.setAsideDone").replace("{0}", kept.getFileName().toString()), edt(() -> feedback(panel)));
+        assertFalse(edt(() -> named(panel, "csvSetAside").isVisible()));
+        assertEquals(0, attempts.get(), "Nothing was sent");
+
+        edt(() -> panel.previewFile(csv)).toCompletableFuture().get(10, TimeUnit.SECONDS);
+        assertEquals(1, edt(panel::submit).toCompletableFuture().get(10, TimeUnit.SECONDS).importedCount());
+        assertEquals(1, products.list(shop).size());
+        assertFalse(Files.exists(pending));
+        edt(() -> { panel.leave(); return null; });
+    }
+
+    @Test
+    void aSavedImportFromAnotherShopIsTreatedAsDamagedAndCanBeSetAside() throws Exception {
+        UUID otherShop = UUID.randomUUID();
+        var otherPreview = new ProductImportService(real).preview(otherShop, new java.io.StringReader(Files.readString(csv)),
+                cm.sji.innova.core.product.importer.ImportOptions.DEFAULT);
+        try (var other = new PendingImportStore(data, otherShop)) {
+            other.save(new PendingImportStore.Pending(new cm.sji.innova.core.product.importer.ConfirmedImportRequest(
+                    UUID.randomUUID(), otherPreview.previewId(), otherPreview.contentHash(), List.of(1)), otherPreview));
+        }
+
+        CsvImportPanel panel = edt(() -> new CsvImportPanel(new ProductImportService(counted()), shop, data,
+                english, () -> { }, () -> { }, busy -> { }));
+        assertThrows(ExecutionException.class, () -> panel.ready().toCompletableFuture().get(10, TimeUnit.SECONDS));
+        assertEquals(english.getString("csv.damaged"), edt(() -> feedback(panel)));
+
+        Path kept = edt(panel::setAsideDamagedFile).toCompletableFuture().get(10, TimeUnit.SECONDS);
+
+        assertTrue(Files.exists(kept));
+        assertFalse(Files.exists(pending));
+        assertTrue(products.list(shop).isEmpty());
+        edt(() -> { panel.leave(); return null; });
+    }
+
+    @Test
+    void aReadableSavedImportIsResumedAndNeverSetAside() throws Exception {
+        var preview = new ProductImportService(real).preview(shop, new java.io.StringReader(Files.readString(csv)),
+                cm.sji.innova.core.product.importer.ImportOptions.DEFAULT);
+        try (var store = new PendingImportStore(data, shop)) {
+            store.save(new PendingImportStore.Pending(new cm.sji.innova.core.product.importer.ConfirmedImportRequest(
+                    UUID.randomUUID(), preview.previewId(), preview.contentHash(), List.of(1)), preview));
+            byte[] saved = Files.readAllBytes(pending);
+            assertThrows(java.io.IOException.class, store::setAside, "An uncertain import is retried, never set aside");
+            assertTrue(java.util.Arrays.equals(saved, Files.readAllBytes(pending)));
+        }
+
+        CsvImportPanel panel = open();
+        edt(() -> {
+            assertEquals(english.getString("csv.resume"), feedback(panel));
+            assertFalse(named(panel, "csvSetAside").isVisible());
+            return null;
+        });
+        edt(() -> { panel.leave(); return null; });
     }
 
     // ----- Helpers -----
