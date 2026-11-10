@@ -55,6 +55,12 @@ public final class StockPanel extends JPanel {
 
     private final JButton receiveButton = CatalogStyle.button("",true);
     private final JButton refreshButton = CatalogStyle.button("",false);
+    private final JButton setAsideButton = CatalogStyle.button("",false);
+
+    /** A saved request this screen cannot use. {@code operationId} is null when its file is damaged. */
+    private record Unusable(boolean receipt, UUID operationId, UUID productId, boolean thisShop) { }
+    private record SetAside(Boolean alreadySaved) { }
+    private Unusable unusable;
 
     private final DefaultTableModel stockModel;
     private final DefaultTableModel historyModel;
@@ -360,6 +366,14 @@ public final class StockPanel extends JPanel {
 
         refreshButton.addActionListener(e -> loadProductsAndStock());
 
+        // Shown only while a saved request blocks the screen and cannot be used here.
+        setAsideButton.setText(message("stock.action.setAside", "Set the file aside"));
+        setAsideButton.setName("stockSetAside");
+        setAsideButton.setVisible(false);
+        setAsideButton.addActionListener(e -> setAsideUnusableRequest());
+
+        panel.add(setAsideButton);
+        panel.add(Box.createHorizontalStrut(8));
         panel.add(refreshButton);
         return panel;
     }
@@ -380,6 +394,7 @@ public final class StockPanel extends JPanel {
         receiveButton.setEnabled(false);
         adjustButton.setEnabled(false);
         saveMinimumButton.setEnabled(false);
+        setAsideButton.setEnabled(false);
 
         if(!keepFeedback)statusLabel.setText(
                 message("state.loading", "Loading products and stock..."));
@@ -390,9 +405,18 @@ public final class StockPanel extends JPanel {
             protected InitialData doInBackground() throws Exception {
                 List<Product> productList = products.list(shopId);
                 List<StockLevel> stockList = stock.list(shopId);
-                Optional<PendingReceipt> saved = pendingReceiptStore.load();
-                Optional<PendingStockAdjustment> savedAdjustment = pendingAdjustmentStore.load();
-                return new InitialData(productList, stockList, saved.orElse(null), savedAdjustment.orElse(null));
+                // A damaged request file must not hide the stock: it is reported, and can be set aside.
+                // Any other read failure may be temporary, so it fails the load and Refresh tries again.
+                Optional<PendingReceipt> saved = Optional.empty();
+                boolean receiptDamaged = false;
+                try { saved = pendingReceiptStore.load(); }
+                catch (DamagedPendingFileException damaged) { receiptDamaged = true; }
+                Optional<PendingStockAdjustment> savedAdjustment = Optional.empty();
+                boolean adjustmentDamaged = false;
+                try { savedAdjustment = pendingAdjustmentStore.load(); }
+                catch (DamagedPendingFileException damaged) { adjustmentDamaged = true; }
+                return new InitialData(productList, stockList, saved.orElse(null), savedAdjustment.orElse(null),
+                        receiptDamaged, adjustmentDamaged);
             }
 
             @Override
@@ -406,16 +430,23 @@ public final class StockPanel extends JPanel {
 
                     InitialData data = get();
                     recoveryBlocked = false;
+                    unusable = null;
                     pendingReceipt = null; pendingProduct = null;
                     pendingAdjustment = null; pendingAdjustmentProduct = null;
                     boolean pendingOperationExists = data.pendingReceipt() != null || data.pendingAdjustment() != null;
                     boolean preserveOperationFeedback = keepFeedback || pendingOperationExists;
-                    if (data.pendingReceipt() != null) {
+                    if (data.receiptDamaged()) {
+                        recoveryBlocked = true;
+                        unusable = new Unusable(true, null, null, true);
+                        showError(message("stock.receipt.damaged",
+                                "The saved receipt file is damaged and cannot be retried. Set the file aside to continue; it will be kept."));
+                    } else if (data.pendingReceipt() != null) {
                         PendingReceipt saved = data.pendingReceipt();
                         if (!shopId.equals(saved.shopId()) || !deviceId.equals(saved.deviceId())) {
                             recoveryBlocked = true;
+                            unusable = new Unusable(true, saved.operationId(), saved.productId(), shopId.equals(saved.shopId()));
                             showError(message("stock.receipt.wrongOwner",
-                                    "A pending receipt belongs to another shop or device. Do not submit a new receipt."));
+                                    "The saved receipt comes from another shop or computer. Set the file aside to continue; it will be kept."));
                         } else {
                             pendingReceipt = saved;
                             pendingProduct = data.products().stream()
@@ -423,8 +454,9 @@ public final class StockPanel extends JPanel {
                                     .findFirst().orElse(null);
                             if (pendingProduct == null || !pendingProduct.unit().equals(saved.unit())) {
                                 recoveryBlocked = true;
+                                unusable = new Unusable(true, saved.operationId(), saved.productId(), true);
                                 showError(message("stock.receipt.invalidProduct",
-                                        "The saved receipt product or unit no longer matches this shop."));
+                                        "The product or unit of the saved receipt has changed. Set the file aside to continue; it will be kept."));
                             }
                         }
                     }
@@ -433,11 +465,18 @@ public final class StockPanel extends JPanel {
                         recoveryBlocked = true;
                         showError(message("stock.operation.multiplePending",
                                 "Both a receipt and an adjustment are pending. Preserve both files and resolve them before continuing."));
+                    } else if (data.adjustmentDamaged()) {
+                        recoveryBlocked = true;
+                        if (unusable == null) unusable = new Unusable(false, null, null, true);
+                        showError(message("stock.adjust.damaged",
+                                "The saved adjustment file is damaged and cannot be retried. Set the file aside to continue; it will be kept."));
                     } else if (data.pendingAdjustment() != null) {
                         PendingStockAdjustment saved = data.pendingAdjustment();
                         if (!shopId.equals(saved.shopId()) || !deviceId.equals(saved.deviceId())) {
                             recoveryBlocked = true;
-                            showError(message("stock.adjust.wrongOwner", "A pending adjustment belongs to another shop or device."));
+                            if (unusable == null) unusable = new Unusable(false, saved.operationId(), saved.productId(), shopId.equals(saved.shopId()));
+                            showError(message("stock.adjust.wrongOwner",
+                                    "The saved adjustment comes from another shop or computer. Set the file aside to continue; it will be kept."));
                         } else {
                             pendingAdjustment = saved;
                             pendingAdjustmentProduct = data.products().stream()
@@ -445,7 +484,9 @@ public final class StockPanel extends JPanel {
                                     .findFirst().orElse(null);
                             if (pendingAdjustmentProduct == null || !pendingAdjustmentProduct.unit().equals(saved.unit())) {
                                 recoveryBlocked = true;
-                                showError(message("stock.adjust.invalidProduct", "The saved adjustment product or unit no longer matches this shop."));
+                                if (unusable == null) unusable = new Unusable(false, saved.operationId(), saved.productId(), true);
+                                showError(message("stock.adjust.invalidProduct",
+                                        "The product or unit of the saved adjustment has changed. Set the file aside to continue; it will be kept."));
                             }
                         }
                     }
@@ -540,6 +581,7 @@ public final class StockPanel extends JPanel {
 
                     loadingProducts = false;
                     recoveryBlocked = true;
+                    unusable = null;
 
                     showError(message(
                             "error.stock.load",
@@ -549,6 +591,8 @@ public final class StockPanel extends JPanel {
                 } finally {
                     if (generation == loadGeneration) {
                         refreshButton.setEnabled(true);
+                        setAsideButton.setVisible(unusable != null);
+                        setAsideButton.setEnabled(unusable != null);
                         if (!recoveryBlocked && pendingAdjustment == null && pendingReceipt == null) {
                             adjustButton.setEnabled(true);
                             saveMinimumButton.setEnabled(!minimumSaving && productSelector.getItemCount() > 0);
@@ -970,8 +1014,8 @@ public final class StockPanel extends JPanel {
         minimumField.setEnabled(false);
         statusFeedback.setTone(FeedbackStrip.Tone.INFO);
         statusLabel.setText(message("stock.adjust.saving", "Saving stock adjustment..."));
-        new SwingWorker<StockResult, Void>() {
-            @Override protected StockResult doInBackground() throws Exception {
+        new SwingWorker<AdjustmentOutcome, Void>() {
+            @Override protected AdjustmentOutcome doInBackground() throws Exception {
                 try (var lease = operationLease()) {
                 if (pendingReceiptStore.load().isPresent()) throw new IOException("A stock receipt is already pending");
                 pendingAdjustmentStore.save(request);
@@ -984,13 +1028,26 @@ public final class StockPanel extends JPanel {
                     catch (IOException cleanup) { rejected.addSuppressed(cleanup); throw new IOException("Recovery cleanup pending", rejected); }
                     throw rejected;
                 }
-                pendingAdjustmentStore.clear(request.operationId());
-                return result;
+                try {
+                    pendingAdjustmentStore.clear(request.operationId());
+                    return new AdjustmentOutcome(result, true);
+                } catch (IOException cleanupFailure) {
+                    // The service confirmed it, but the durable request remains.
+                    // A retry with the same UUID is safe and will replay the result.
+                    return new AdjustmentOutcome(result, false);
+                }
                 }
             }
             @Override protected void done() {
                 try {
-                    StockResult result = get();
+                    AdjustmentOutcome outcome = get();
+                    if (!outcome.cleared()) {
+                        preservePendingAdjustment();
+                        statusLabel.setText(message("stock.adjust.cleanupPending",
+                                "Adjustment was confirmed, but recovery cleanup is pending. Retry the same adjustment."));
+                        loadProductsAndStock(true);
+                        return;
+                    }
                     pendingAdjustment = null; pendingAdjustmentProduct = null; receiptPending = false;
                     adjustmentQuantityField.setText(""); adjustmentReasonField.setText("");
                     adjustmentDirection.setSelectedIndex(0);
@@ -1226,9 +1283,67 @@ public final class StockPanel extends JPanel {
     }
 
     private record InitialData(List<Product> products, List<StockLevel> levels,
-                               PendingReceipt pendingReceipt, PendingStockAdjustment pendingAdjustment) { }
+                               PendingReceipt pendingReceipt, PendingStockAdjustment pendingAdjustment,
+                               boolean receiptDamaged, boolean adjustmentDamaged) { }
 
     private record ReceiptOutcome(StockResult result, boolean cleared) { }
+
+    private record AdjustmentOutcome(StockResult result, boolean cleared) { }
+
+    /**
+     * Renames the saved request this screen cannot use, keeping it in the data folder, then says whether
+     * it is already in the movement history. The file is never deleted, and a request this screen can
+     * retry is never offered here.
+     */
+    private void setAsideUnusableRequest() {
+        Unusable target = unusable;
+        if (target == null || receiptPending) return;
+        setAsideButton.setEnabled(false);
+        refreshButton.setEnabled(false);
+        new SwingWorker<SetAside, Void>() {
+            @Override protected SetAside doInBackground() throws Exception {
+                // The store renames the file next to the original; the evidence page gives the name pattern.
+                if (target.receipt() && target.operationId() == null) pendingReceiptStore.setAsideDamaged();
+                else if (target.receipt()) pendingReceiptStore.setAside(target.operationId());
+                else if (target.operationId() == null) pendingAdjustmentStore.setAsideDamaged();
+                else pendingAdjustmentStore.setAside(target.operationId());
+                Boolean alreadySaved = null;
+                if (target.operationId() != null && !target.thisShop()) {
+                    alreadySaved = false;   // Movements are kept per shop: another shop's request is never here.
+                } else if (target.operationId() != null) {
+                    try {
+                        alreadySaved = stock.history(shopId, target.productId()).stream()
+                                .anyMatch(movement -> movement.id().equals(target.operationId()));
+                    } catch (Exception unknown) {
+                        alreadySaved = null;  // For example, the product no longer exists.
+                    }
+                }
+                return new SetAside(alreadySaved);
+            }
+
+            @Override protected void done() {
+                try {
+                    SetAside result = get();
+                    unusable = null;
+                    String text = result.alreadySaved() == null
+                            ? message("stock.setAside.check", "The file was kept in the data folder. Check the movement history before entering this operation again.")
+                            : result.alreadySaved()
+                            ? message("stock.setAside.saved", "The file was kept in the data folder. This operation is already in the movement history: nothing to redo.")
+                            : message("stock.setAside.notSaved", "The file was kept in the data folder. This operation was never added: enter it again only if it happened.");
+                    statusFeedback.setTone(FeedbackStrip.Tone.WARNING);
+                    statusLabel.setText(text);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                } catch (ExecutionException failed) {
+                    showError(message("stock.setAside.failed", "The file could not be set aside, and nothing was changed")
+                            + ": " + errorMessage(failed.getCause()));
+                } finally {
+                    notifyReceiptWorkerDone();
+                    loadProductsAndStock(true);
+                }
+            }
+        }.execute();
+    }
 
     /** Compatibility store for callers using the legacy constructor; production injects the file store. */
     private static final class InMemoryPendingReceiptStore implements PendingReceiptStore {

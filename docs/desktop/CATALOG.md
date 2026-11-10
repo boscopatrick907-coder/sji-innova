@@ -49,8 +49,11 @@ Before submission, pending-csv.properties stores the immutable request and revie
 snapshot using atomic replacement. The same operation is restored on the next
 Import CSV opening after restart; it never runs automatically. Partial/uncertain
 results keep the request frozen for safe retry. A successful confirmation clears
-pending state. A damaged/wrong-shop file is preserved and import is blocked for
-recovery. A local .csv-import.lock prevents two import flows in the same folder.
+pending state. A damaged/wrong-shop file is preserved and import is blocked until
+the user chooses Set the file aside: it is renamed pending-csv-set-aside-<id>.properties
+in the same folder, never deleted, and a readable request is never set aside. Another
+window with an import open is reported as such, not as a damaged file.
+A local .csv-import.lock prevents two import flows in the same folder.
 Do not remove an active lock file. The store is local-filesystem only; it is not
 multi-device synchronization. Input is limited to 10 MiB and persisted snapshots
 to 16 MiB; oversized snapshots block submission rather than run untracked.

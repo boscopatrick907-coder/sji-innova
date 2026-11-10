@@ -21,7 +21,7 @@ public final class CsvImportPanel extends JPanel {
     private final Path directory;
     private final Runnable back,finished;
     private final Consumer<Boolean> busy;
-    private final JButton choose,confirm,returnButton,template;
+    private final JButton choose,confirm,returnButton,template,setAside;
     private final JComboBox<String> delimiter;
     private final JCheckBox duplicates;
     private final JTextArea status=new JTextArea(2,20);
@@ -33,6 +33,8 @@ public final class CsvImportPanel extends JPanel {
     private final JTextArea diagnostics=new JTextArea(2,20);
     private final CompletableFuture<Void> ready=new CompletableFuture<>();
     private PendingImportStore store;
+    /** Holds the folder while a damaged saved import waits to be set aside; nothing can be imported meanwhile. */
+    private PendingImportStore damagedStore;
     private PendingImportStore.Pending pending;
     private ImportPreview preview;
     private boolean running,completed;
@@ -72,7 +74,8 @@ public final class CsvImportPanel extends JPanel {
         add(reviewScroll,BorderLayout.CENTER);
         duplicates=new JCheckBox(t("csv.duplicates"));duplicates.setOpaque(false);
         confirm=CatalogStyle.button(t("csv.confirm"),true);confirm.setName("confirmCsv");returnButton=CatalogStyle.arrowButton(t("catalog.back"),false,true);
-        JPanel bottom=CatalogStyle.surface(new BorderLayout(0,10));JPanel actions=CatalogStyle.panel(new FlowLayout(FlowLayout.RIGHT));actions.add(returnButton);actions.add(confirm);bottom.add(duplicates,BorderLayout.NORTH);statusFeedback=CatalogStyle.feedback(status,FeedbackStrip.Tone.INFO);status.setName("csvFeedback");bottom.add(statusFeedback,BorderLayout.CENTER);bottom.add(actions,BorderLayout.SOUTH);add(bottom,BorderLayout.SOUTH);
+        setAside=CatalogStyle.button(t("csv.setAside"),false);setAside.setName("csvSetAside");setAside.setVisible(false);setAside.addActionListener(e->setAsideDamagedFile());
+        JPanel bottom=CatalogStyle.surface(new BorderLayout(0,10));JPanel actions=CatalogStyle.panel(new FlowLayout(FlowLayout.RIGHT));actions.add(setAside);actions.add(returnButton);actions.add(confirm);bottom.add(duplicates,BorderLayout.NORTH);statusFeedback=CatalogStyle.feedback(status,FeedbackStrip.Tone.INFO);status.setName("csvFeedback");bottom.add(statusFeedback,BorderLayout.CENTER);bottom.add(actions,BorderLayout.SOUTH);add(bottom,BorderLayout.SOUTH);
         template.addActionListener(e->{
             JFileChooser picker=new JFileChooser();picker.setSelectedFile(new java.io.File("products_template.csv"));
             if(picker.showSaveDialog(this)!=JFileChooser.APPROVE_OPTION)return;
@@ -90,7 +93,13 @@ public final class CsvImportPanel extends JPanel {
         setRunning(true);
         new SwingWorker<Optional<PendingImportStore.Pending>,Void>(){
             protected Optional<PendingImportStore.Pending> doInBackground()throws Exception{store=new PendingImportStore(directory,shop);return store.read();}
-            protected void done(){try{var previous=get();if(previous.isPresent()){pending=previous.get();preview=pending.preview();filename.setText(t("csv.savedRequest"));display();message("csv.resume",FeedbackStrip.Tone.WARNING);}ready.complete(null);}catch(Exception ex){message("csv.recoveryError",FeedbackStrip.Tone.ERROR);closeStore();ready.completeExceptionally(ex);}finally{setRunning(false);}}
+            protected void done(){try{var previous=get();if(previous.isPresent()){pending=previous.get();preview=pending.preview();filename.setText(t("csv.savedRequest"));display();message("csv.resume",FeedbackStrip.Tone.WARNING);}ready.complete(null);}catch(Exception ex){
+                Throwable cause=ex instanceof ExecutionException&&ex.getCause()!=null?ex.getCause():ex;
+                if(cause instanceof PendingImportStore.DamagedException&&store!=null){
+                    // Keep the folder, so no other window starts an import over the damaged file; offer to set it aside.
+                    damagedStore=store;store=null;message("csv.damaged",FeedbackStrip.Tone.ERROR);setAside.setVisible(true);setAside.setEnabled(true);
+                }else{message(cause instanceof PendingImportStore.BusyException?"csv.busy":"csv.recoveryError",FeedbackStrip.Tone.ERROR);closeStore();}
+                ready.completeExceptionally(ex);}finally{setRunning(false);}}
         }.execute();
     }
     private void message(String key,FeedbackStrip.Tone tone){statusFeedback.setTone(tone);status.setText(t(key));}
@@ -133,5 +142,19 @@ public final class CsvImportPanel extends JPanel {
         }.execute();return completion;
     }
     public void leave(){if(!running){closeStore();if(completed)finished.run();else back.run();}}
-    private void closeStore(){if(store!=null){try{store.close();}catch(java.io.IOException ignored){}store=null;}}
+    /** Renames the damaged saved import, keeping it in the data folder, so a new import can start here. */
+    public CompletionStage<Path> setAsideDamagedFile(){
+        PendingImportStore target=damagedStore;
+        if(running||target==null)return CompletableFuture.failedFuture(new IllegalStateException("No damaged import to set aside"));
+        CompletableFuture<Path> result=new CompletableFuture<>();setAside.setEnabled(false);setRunning(true);
+        new SwingWorker<Path,Void>(){
+            protected Path doInBackground()throws Exception{return target.setAside();}
+            protected void done(){try{Path kept=get();store=target;damagedStore=null;setAside.setVisible(false);statusFeedback.setTone(FeedbackStrip.Tone.WARNING);status.setText(t("csv.setAsideDone").replace("{0}",kept.getFileName().toString()));result.complete(kept);}
+                catch(Exception ex){message("csv.setAsideFailed",FeedbackStrip.Tone.ERROR);setAside.setEnabled(true);result.completeExceptionally(ex);}finally{setRunning(false);}}
+        }.execute();return result;
+    }
+    private void closeStore(){
+        if(store!=null){try{store.close();}catch(java.io.IOException ignored){}store=null;}
+        if(damagedStore!=null){try{damagedStore.close();}catch(java.io.IOException ignored){}damagedStore=null;}
+    }
 }
