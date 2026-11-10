@@ -307,6 +307,14 @@ class ProductImportStorageTest {
                 """);
             stmt.execute("CREATE UNIQUE INDEX products_shop_id_id ON products(shop_id, id)");
             stmt.execute("CREATE TABLE product_reference_sequences (shop_id TEXT PRIMARY KEY, last_value INTEGER)");
+            // Every real database has had sale lines since schema 4; later upgrades rebuild them.
+            stmt.execute("""
+                CREATE TABLE sale_items (
+                    id TEXT PRIMARY KEY NOT NULL, sale_id TEXT NOT NULL, product_id TEXT NOT NULL,
+                    product_name TEXT NOT NULL, unit TEXT NOT NULL, quantity_milli INTEGER NOT NULL,
+                    unit_price INTEGER NOT NULL, subtotal INTEGER NOT NULL
+                )
+                """);
             stmt.execute("""
                 CREATE TABLE product_photos (
                     shop_id TEXT NOT NULL,
@@ -334,7 +342,6 @@ class ProductImportStorageTest {
             try (var rs = stmt.executeQuery("PRAGMA user_version")) {
                 assertTrue(rs.next());
                 assertEquals(SqliteDatabase.SCHEMA_VERSION, rs.getInt(1));
-                assertEquals(8, rs.getInt(1));
             }
             try (var rs = stmt.executeQuery("PRAGMA foreign_key_check")) {
                 assertFalse(rs.next(), "Foreign key check must return zero violations");

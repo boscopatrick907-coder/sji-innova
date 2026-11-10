@@ -47,19 +47,27 @@ public final class SqliteSaleRepository implements SaleRepository {
                 for (SaleItem item : sale.items()) {
                     long currentStock;
                     String unit;
+                    String reference;
                     try (PreparedStatement prodStmt = connection.prepareStatement(
-                            "SELECT unit, current_stock_milli FROM products WHERE shop_id = ? AND id = ?")) {
+                            "SELECT unit, current_stock_milli, reference FROM products WHERE shop_id = ? AND id = ?")) {
                         prodStmt.setString(1, sale.shopId().toString());
                         prodStmt.setString(2, item.productId().toString());
                         try (ResultSet rs = prodStmt.executeQuery()) {
                             if (!rs.next()) throw new IllegalArgumentException("Product not found: " + item.productId());
                             unit = rs.getString("unit");
                             currentStock = rs.getLong("current_stock_milli");
+                            reference = rs.getString("reference");
                         }
                     }
 
                     if (("piece".equals(unit) || "bag".equals(unit)) && item.quantityMilli() % 1000 != 0) {
                         throw new IllegalArgumentException("Piece and bag quantities must be whole items (multiples of 1000)");
+                    }
+
+                    // A saved line must name the product it sold: its reference is the product's own.
+                    if (!reference.equals(item.productReference())) {
+                        throw new IllegalArgumentException("Sale line reference " + item.productReference()
+                                + " is not the reference of product " + item.productId());
                     }
 
                     if (currentStock < item.quantityMilli()) {
@@ -114,18 +122,19 @@ public final class SqliteSaleRepository implements SaleRepository {
 
                 // Insert sale items
                 try (PreparedStatement itemStmt = connection.prepareStatement("""
-                        INSERT INTO sale_items (id, sale_id, product_id, product_name, unit, quantity_milli, unit_price, subtotal)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        INSERT INTO sale_items (id, sale_id, product_id, product_reference, product_name, unit, quantity_milli, unit_price, subtotal)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """)) {
                     for (SaleItem item : sale.items()) {
                         itemStmt.setString(1, item.id().toString());
                         itemStmt.setString(2, sale.id().toString());
                         itemStmt.setString(3, item.productId().toString());
-                        itemStmt.setString(4, item.productName());
-                        itemStmt.setString(5, item.unit());
-                        itemStmt.setLong(6, item.quantityMilli());
-                        itemStmt.setLong(7, item.unitPrice());
-                        itemStmt.setLong(8, item.subtotal());
+                        itemStmt.setString(4, item.productReference());
+                        itemStmt.setString(5, item.productName());
+                        itemStmt.setString(6, item.unit());
+                        itemStmt.setLong(7, item.quantityMilli());
+                        itemStmt.setLong(8, item.unitPrice());
+                        itemStmt.setLong(9, item.subtotal());
                         itemStmt.addBatch();
                     }
                     itemStmt.executeBatch();
@@ -658,7 +667,7 @@ public final class SqliteSaleRepository implements SaleRepository {
 
     private List<SaleItem> loadSaleItems(Connection connection, UUID saleId) throws SQLException {
         try (PreparedStatement stmt = connection.prepareStatement("""
-                SELECT id, sale_id, product_id, product_name, unit, quantity_milli, unit_price, subtotal
+                SELECT id, sale_id, product_id, product_reference, product_name, unit, quantity_milli, unit_price, subtotal
                 FROM sale_items
                 WHERE sale_id = ?
                 ORDER BY rowid ASC
@@ -669,6 +678,7 @@ public final class SqliteSaleRepository implements SaleRepository {
                 while (rs.next()) {
                     items.add(new SaleItem(UUID.fromString(rs.getString("id")), saleId,
                             UUID.fromString(rs.getString("product_id")),
+                            rs.getString("product_reference"),
                             rs.getString("product_name"),
                             rs.getString("unit"),
                             rs.getLong("quantity_milli"),

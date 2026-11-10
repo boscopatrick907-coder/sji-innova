@@ -25,6 +25,7 @@ Sales, stock deductions, and sale voids are **strictly atomic** within single SQ
    - `id`: Item UUID.
    - `sale_id`: Foreign key referencing `sales(id)`.
    - `product_id`: Foreign key referencing `products(id)`.
+   - `product_reference` (added in Schema v9): Snapshot of the product's shop reference (e.g. `P-0001`) at moment of sale, `NOT NULL` and non-blank. `SaleService` copies it from the product, and the repository refuses a line whose reference is not its product's own. Lines saved before v9 took their product's reference during the upgrade (shop references are never edited); the table rebuild keeps each line's rowid, so line order, indexes and append-only triggers are unchanged.
    - `product_name`: Snapshot of product name at moment of sale.
    - `unit`: Snapshot of unit (`piece`, `kg`, `litre`).
    - `quantity_milli`: Quantity sold in thousandths (`long`, e.g. 2 pieces = 2000).

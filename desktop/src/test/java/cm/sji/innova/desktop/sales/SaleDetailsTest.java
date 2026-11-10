@@ -218,13 +218,15 @@ class SaleDetailsTest {
                 cell.x + 5, cell.y + cell.height / 2, 2, false, MouseEvent.BUTTON1));
     }
 
-    private void changeTheCatalogue(Product product, String newName, long newPrice) throws Exception {
+    /** No screen edits a reference today; a direct change stands in for a future edit or import. */
+    private void changeTheCatalogue(Product product, String newName, String newReference, long newPrice) throws Exception {
         try (Connection connection = database.open();
              PreparedStatement update = connection.prepareStatement(
-                     "UPDATE products SET name = ?, unit_price = ? WHERE id = ?")) {
+                     "UPDATE products SET name = ?, reference = ?, unit_price = ? WHERE id = ?")) {
             update.setString(1, newName);
-            update.setLong(2, newPrice);
-            update.setString(3, product.id().toString());
+            update.setString(2, newReference);
+            update.setLong(3, newPrice);
+            update.setString(4, product.id().toString());
             assertEquals(1, update.executeUpdate());
         }
     }
@@ -273,15 +275,17 @@ class SaleDetailsTest {
     @Test
     void theReceiptShowsWhatWasChargedEvenAfterTheCatalogueChanged() throws Exception {
         Sale sale = sellRiceAndCement("REC-1");
-        changeTheCatalogue(rice, "Cheap rice", 500);
-        changeTheCatalogue(cement, "Grey cement", 30_000);
+        assertEquals(List.of("P-0001", "P-0002"), List.of(rice.reference(), cement.reference()));
+        changeTheCatalogue(rice, "Cheap rice", "P-0101", 500);
+        changeTheCatalogue(cement, "Grey cement", "P-0102", 30_000);
 
         SalesHistoryPanel panel = history();
         edt(() -> button(panel, "historyOpen").doClick());
 
         assertEquals(List.of(
-                List.of("Basmati rice", "1.5 kg", "1,001 / kg", "1,502"),
-                List.of("Cement", "2 bags", "28,000 / bag", "56,000")), receiptLines(panel));
+                List.of("Basmati rice", "P-0001", "1.5 kg", "1,001 / kg", "1,502"),
+                List.of("Cement", "P-0002", "2 bags", "28,000 / bag", "56,000")), receiptLines(panel));
+        assertEquals("Reference", edt(() -> lines(panel).getColumnName(SaleDetailsPanel.COLUMN_REFERENCE)));
         edt(() -> {
             assertEquals("57,502 FCFA", text(panel, "receiptTotal"));
             assertEquals(CatalogStyle.localDateTime(sale.createdAt(), Locale.UK), text(panel, "receiptDate"));
@@ -293,6 +297,7 @@ class SaleDetailsTest {
         });
         String everything = everythingOnTheReceipt(panel);
         assertFalse(everything.contains("Cheap rice") || everything.contains("Grey cement"), everything);
+        assertFalse(everything.contains("P-0101") || everything.contains("P-0102"), everything);
         assertFalse(everything.contains(String.valueOf(BUYING_PRICE)), "A buying price is shown:\n" + everything);
     }
 
@@ -421,8 +426,10 @@ class SaleDetailsTest {
         edt(() -> button(panel, "historyOpen").doClick());
 
         List<List<String>> rows = receiptLines(panel);
+        assertEquals("P-0001", rows.get(0).get(SaleDetailsPanel.COLUMN_REFERENCE));
         assertEquals("1,5 kg", rows.get(0).get(SaleDetailsPanel.COLUMN_QUANTITY));
         assertEquals("2 sacs", rows.get(1).get(SaleDetailsPanel.COLUMN_QUANTITY));
+        assertEquals("Référence", edt(() -> lines(panel).getColumnName(SaleDetailsPanel.COLUMN_REFERENCE)));
         edt(() -> {
             assertEquals("Reçu REC-1", text(panel, "receiptTitle"));
             assertEquals("Espèces", text(panel, "receiptPayment"));

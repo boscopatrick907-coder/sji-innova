@@ -33,15 +33,16 @@ import javax.swing.table.AbstractTableModel;
 /**
  * One saved sale, exactly as it was recorded, shown inside the sales history.
  *
- * <p>Read-only. Every value comes from the saved sale and its events: names, quantities, prices and
- * totals are never looked up in today's catalogue or calculated again, and a saved sale holds no
- * buying price. All methods must be called on the Swing event thread.
+ * <p>Read-only. Every value comes from the saved sale and its events: names, references, quantities,
+ * prices and totals are never looked up in today's catalogue or calculated again, and a saved sale
+ * holds no buying price. All methods must be called on the Swing event thread.
  */
 final class SaleDetailsPanel extends JPanel {
     static final int COLUMN_PRODUCT = 0;
-    static final int COLUMN_QUANTITY = 1;
-    static final int COLUMN_UNIT_PRICE = 2;
-    static final int COLUMN_LINE_TOTAL = 3;
+    static final int COLUMN_REFERENCE = 1;
+    static final int COLUMN_QUANTITY = 2;
+    static final int COLUMN_UNIT_PRICE = 3;
+    static final int COLUMN_LINE_TOTAL = 4;
 
     private final ResourceBundle messages;
     private final Locale locale;
@@ -185,7 +186,8 @@ final class SaleDetailsPanel extends JPanel {
         lines.setFocusTraversalKeys(KeyboardFocusManager.BACKWARD_TRAVERSAL_KEYS, null);
         JComponent list = CatalogStyle.tableScroll(lines);
         CatalogStyle.alignColumns(lines, COLUMN_QUANTITY, COLUMN_UNIT_PRICE, COLUMN_LINE_TOTAL);
-        lines.getColumnModel().getColumn(COLUMN_PRODUCT).setPreferredWidth(280);
+        lines.getColumnModel().getColumn(COLUMN_PRODUCT).setPreferredWidth(260);
+        lines.getColumnModel().getColumn(COLUMN_REFERENCE).setPreferredWidth(100);
         lines.getColumnModel().getColumn(COLUMN_QUANTITY).setPreferredWidth(120);
         lines.getColumnModel().getColumn(COLUMN_UNIT_PRICE).setPreferredWidth(140);
         lines.getColumnModel().getColumn(COLUMN_LINE_TOTAL).setPreferredWidth(120);
@@ -223,8 +225,8 @@ final class SaleDetailsPanel extends JPanel {
 
     /** The saved lines, in the order they were sold. */
     private final class LinesModel extends AbstractTableModel {
-        private final String[] columns = {t("sales.column.product"), t("sales.column.quantity"),
-            t("sales.column.unitPrice"), t("sales.column.lineTotal")};
+        private final String[] columns = {t("sales.column.product"), t("catalog.reference"),
+            t("sales.column.quantity"), t("sales.column.unitPrice"), t("sales.column.lineTotal")};
 
         @Override public int getRowCount() { return items.size(); }
         @Override public int getColumnCount() { return columns.length; }
@@ -234,6 +236,7 @@ final class SaleDetailsPanel extends JPanel {
             SaleItem item = items.get(row);
             return switch (column) {
                 case COLUMN_PRODUCT -> item.productName();
+                case COLUMN_REFERENCE -> item.productReference();
                 case COLUMN_QUANTITY -> quantityText(item);
                 case COLUMN_UNIT_PRICE -> money.format(item.unitPrice()) + " / " + unitName(item.unit());
                 default -> money.format(item.subtotal());

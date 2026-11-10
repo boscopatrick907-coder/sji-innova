@@ -391,6 +391,14 @@ class ProductPhotoStorageTest {
                 """);
             stmt.execute("CREATE UNIQUE INDEX products_shop_id_id ON products(shop_id, id)");
             stmt.execute("CREATE TABLE product_reference_sequences (shop_id TEXT PRIMARY KEY, last_value INTEGER)");
+            // Every real database has had sale lines since schema 4; later upgrades rebuild them.
+            stmt.execute("""
+                CREATE TABLE sale_items (
+                    id TEXT PRIMARY KEY NOT NULL, sale_id TEXT NOT NULL, product_id TEXT NOT NULL,
+                    product_name TEXT NOT NULL, unit TEXT NOT NULL, quantity_milli INTEGER NOT NULL,
+                    unit_price INTEGER NOT NULL, subtotal INTEGER NOT NULL
+                )
+                """);
             stmt.execute("PRAGMA user_version = 6");
             stmt.execute("COMMIT");
             stmt.execute("PRAGMA foreign_keys = ON");

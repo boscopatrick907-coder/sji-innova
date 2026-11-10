@@ -30,7 +30,7 @@ class SaleHistoryFilterTest {
 
     private static SaleState sale(UUID id, String receipt, String savedAt, boolean voided) {
         Instant time = Instant.parse(savedAt);
-        SaleItem item = new SaleItem(UUID.randomUUID(), id, UUID.randomUUID(), "Rice", "piece", 1_000, 100, 100);
+        SaleItem item = new SaleItem(UUID.randomUUID(), id, UUID.randomUUID(), "P-0001", "Rice", "piece", 1_000, 100, 100);
         Sale sale = new Sale(id, SHOP, receipt, DEVICE, PaymentMethod.CASH, 100, time, List.of(item));
         SaleEvent created = new SaleEvent(SaleEvent.createdEventId(id), id, SHOP, SaleEvent.Type.CREATED,
                 DEVICE, null, "Cash sale", time);
