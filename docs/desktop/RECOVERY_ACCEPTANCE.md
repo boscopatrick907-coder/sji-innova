@@ -11,10 +11,10 @@ keep a request on disk until they are sure:
 Every test runs on real SQLite and real pending files in a temporary folder. Failures are injected
 around them. No shop's real data is used. CI runs all of them on Windows and Linux.
 
-Run only these acceptance tests with:
+Run only these acceptance tests and the forced-close drills with:
 
 ```sh
-./mvnw --batch-mode --no-transfer-progress -pl core,desktop test -Dtest="*RecoveryAcceptanceTest" -Dsurefire.failIfNoSpecifiedTests=false
+./mvnw --batch-mode --no-transfer-progress -pl core,desktop test -Dtest="*RecoveryAcceptanceTest,*ForcedCloseDrillTest" -Dsurefire.failIfNoSpecifiedTests=false
 ```
 
 ## The rule all four follow
@@ -105,6 +105,63 @@ valid row, « Huile ».
     example as root).
 - **Another process:** the test starts a second Java process that takes the same lease and waits.
 
+## Forced close and restart (OFF-02c)
+
+New tests are in `StockForcedCloseDrillTest`, `CheckoutForcedCloseDrillTest` and
+`CsvImportForcedCloseDrillTest`. Each drill:
+
+1. Prepares a disposable data folder (shop ID, device ID and database), as Cella's start-up does.
+2. Starts a second Java process. It opens the folder the same way and does one operation on the real
+   screen, wired as the shell wires it.
+3. Kills that process at a chosen moment of the database write. On Windows the process is terminated;
+   on Linux it gets `SIGKILL`. Cella runs no more code, so nothing is rolled back, removed or closed
+   by it.
+4. Waits until the system has released the dead process's files, as a person restarting Cella would.
+5. Opens the same folder again in the test, as restarting Cella does. It checks what the screen
+   offers, then retries.
+
+The two moments:
+
+- **Just before the commit:** the database has written everything but has not committed it. That is
+  the movement and the new balance; or the sale, its lines, its stock change and its event; or, for
+  an import, row 1 committed and row 2 written.
+- **Just after the commit:** the database has committed, but Cella has not yet heard the answer or
+  removed its request file.
+
+Every drill also checks that the request file was on disk before the database was called.
+
+| Operation | Killed | After the kill | After the restart | After the retry | Request file |
+| --- | --- | --- | --- | --- | --- |
+| Receipt of 7 | Before the commit | 0, no movement | 0; nothing sent; the receipt is offered and cannot be changed | 7 000; 1 movement, with the original UUID | Kept byte for byte until the retry, then removed |
+| Receipt of 7 | After the commit | 7 000; 1 movement, with the UUID | 7 000; nothing sent | 7 000; still 1 movement; « Receipt confirmed (retried operation). » | Kept until the retry, then removed |
+| Correction of +3 from 10 000 | Before the commit | 10 000; 1 movement | 10 000; nothing sent; the correction is offered and cannot be changed | 13 000; 2 movements, the new one with the original UUID | Kept byte for byte until the retry, then removed |
+| Correction of +3 from 10 000 | After the commit | 13 000; 2 movements | 13 000; nothing sent | 13 000; still 2 movements | Kept until the retry, then removed |
+| Cash sale of 2 from 10 000 | Before the commit | 10 000; no sale | 10 000; no sale; the sale is shown with its receipt number, and Retry is offered | 8 000; 1 sale, with the original ID and receipt number | Kept byte for byte until the retry, then removed |
+| Cash sale of 2 from 10 000 | After the commit | 8 000; 1 sale, with the ID | 8 000; still 1 sale; the screen checked the database and reports the sale saved | Nothing to retry | Removed by that check |
+| Import of 3 rows | Between rows 1 and 2 | 1 product (« Huile ») | 1 product; nothing sent; the 3 saved rows are offered, selection locked | 3 products, each once | Kept byte for byte until the retry, then removed |
+| Import of 3 rows | After the last row's commit | 3 products | 3 products; nothing sent | 3 products; answered from the saved import | Kept until the retry, then removed |
+
+**How the moment is chosen.** The second process puts a thin wrapper around the SQLite driver (test
+code only; Cella is unchanged). Each statement is reported after it runs. At the chosen statement the
+process prints `PAUSED` and waits to be killed.
+
+**What a kill leaves behind.**
+- The lock files (`.pending-stock-receipt.lock`, `pending-checkout.txt.lock`, `.csv-import.lock`) stay
+  on disk. They never block the restart, because a lease is a lock held by the system, not the
+  file's presence.
+- SQLite's `cella.db-wal` and `cella.db-shm` stay too; every drill checks this, because a clean exit
+  would have removed them. The first connection after the kill folds them into `cella.db`: it keeps
+  what was committed and drops what was not.
+
+**What Windows does after a kill** (found while building the drills):
+- It releases the dead process's file locks a moment after the process ends; Microsoft documents this.
+  Measured here: 8 to 75 ms. Restarting at once would have shown « Another Cella window is using the
+  pending stock receipt file ».
+- For a few milliseconds more, SQLite can report « disk I/O error » while it resets `cella.db-shm`.
+  Measured here: up to 35 ms.
+- Nobody restarts Cella that fast, and both errors are temporary: trying again a moment later works,
+  and the start-up error page offers Retry. The drills wait the same way, then restart.
+
 ## Found while testing (for OFF-02b and Patrick)
 
 Nothing was lost or counted twice in any scenario. These are about what the user is told:
@@ -125,4 +182,8 @@ Nothing was lost or counted twice in any scenario. These are about what the user
 
 ## Not covered here
 
-Killing a real Cella process at the worst moment, then restarting it, on Windows and Linux, is OFF-02c.
+- **A power cut.** It can also lose what the system had not yet written to the disk. The database uses
+  `synchronous = FULL` for this, but a test cannot cut the power.
+- **A kill while a request file is being written.** Every store writes a temporary file, then moves it
+  into place in one step, so a kill leaves either no request or the whole one, plus perhaps a leftover
+  `.tmp` file. There is no way to stop the process inside that write without changing Cella.
