@@ -180,6 +180,18 @@ Nothing was lost or counted twice in any scenario. These are about what the user
    check both. A data folder normally keeps one device ID, so this only matters if `device-id.txt` is
    replaced. Should the sale check it too?
 
+## Review correction: bounded child-process cleanup
+
+All new subprocess helpers use `TestChildProcess`. On normal completion, output timeout or an
+assertion failure, it terminates and waits for the child before closing its pipes and waiting for the
+output reader. Reader threads are daemon threads and cleanup waits are bounded. This avoids waiting
+in `ExecutorService.close()` for a silent child's `readLine()` before reaching the code that kills it.
+
+`TestChildProcessTest` starts a real child holding a file lease. It verifies that a missing output
+marker raises the original timeout, an assertion remains the original failure, the child is gone,
+the output reader finishes, and the lease becomes available again. Windows lock release is allowed a
+bounded settling interval, just as in the forced-close drills.
+
 ## Not covered here
 
 - **A power cut.** It can also lose what the system had not yet written to the disk. The database uses

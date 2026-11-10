@@ -20,6 +20,7 @@ import cm.sji.innova.desktop.shell.Messages;
 import com.formdev.flatlaf.FlatLightLaf;
 import java.awt.Component;
 import java.awt.Container;
+import cm.sji.innova.desktop.TestChildProcess;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -35,7 +36,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.ResourceBundle;
 import java.util.UUID;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -379,13 +379,11 @@ class StockRecoveryAcceptanceTest {
         List<String> command = new ArrayList<>(List.of(javaCommand(), "-cp", System.getProperty("java.class.path"), main.getName()));
         command.addAll(List.of(args));
         Process child = new ProcessBuilder(command).redirectError(ProcessBuilder.Redirect.INHERIT).start();
-        try (var executor = Executors.newSingleThreadExecutor()) {
-            String line = executor.submit(() -> new BufferedReader(new InputStreamReader(child.getInputStream())).readLine())
+        try (var process = new TestChildProcess(child)) {
+            String line = process.readOutput(() -> new BufferedReader(new InputStreamReader(child.getInputStream())).readLine())
                     .get(30, TimeUnit.SECONDS);
             assertTrue(child.waitFor(10, TimeUnit.SECONDS));
             return line;
-        } finally {
-            child.destroyForcibly();
         }
     }
 
@@ -400,8 +398,8 @@ class StockRecoveryAcceptanceTest {
         Process child = new ProcessBuilder(javaCommand(), "-cp", System.getProperty("java.class.path"),
                 LeaseHolder.class.getName(), receipts.file().toString())
                 .redirectError(ProcessBuilder.Redirect.INHERIT).start();
-        try (var executor = Executors.newSingleThreadExecutor()) {
-            var signal = executor.submit(() -> new BufferedReader(new InputStreamReader(child.getInputStream())).readLine());
+        try (var process = new TestChildProcess(child)) {
+            var signal = process.readOutput(() -> new BufferedReader(new InputStreamReader(child.getInputStream())).readLine());
             assertEquals("LOCKED", signal.get(30, TimeUnit.SECONDS));
 
             receive(panel, "7", "Delivery 12", false);
@@ -418,8 +416,6 @@ class StockRecoveryAcceptanceTest {
             assertEquals(1, repository.attempts.get());
             assertEquals(7_000, balance());
             assertFalse(Files.exists(receipts.file()));
-        } finally {
-            child.destroyForcibly();
         }
     }
 

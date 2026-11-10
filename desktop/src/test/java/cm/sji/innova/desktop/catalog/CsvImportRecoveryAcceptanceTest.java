@@ -19,6 +19,7 @@ import cm.sji.innova.desktop.catalog.importing.PendingImportStore;
 import cm.sji.innova.desktop.shell.Messages;
 import java.awt.Component;
 import java.awt.Container;
+import cm.sji.innova.desktop.TestChildProcess;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.file.Files;
@@ -32,7 +33,6 @@ import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -161,8 +161,8 @@ class CsvImportRecoveryAcceptanceTest {
         Process child = new ProcessBuilder(java, "-cp", System.getProperty("java.class.path"),
                 ImportHolder.class.getName(), data.toString(), shop.toString())
                 .redirectError(ProcessBuilder.Redirect.INHERIT).start();
-        try (var executor = Executors.newSingleThreadExecutor()) {
-            var signal = executor.submit(() -> new BufferedReader(new InputStreamReader(child.getInputStream())).readLine());
+        try (var process = new TestChildProcess(child)) {
+            var signal = process.readOutput(() -> new BufferedReader(new InputStreamReader(child.getInputStream())).readLine());
             assertEquals("LOCKED", signal.get(30, TimeUnit.SECONDS));
 
             CsvImportPanel blocked = edt(() -> new CsvImportPanel(new ProductImportService(counted()), shop, data,
@@ -179,8 +179,6 @@ class CsvImportRecoveryAcceptanceTest {
             child.getOutputStream().flush();
             assertTrue(child.waitFor(10, TimeUnit.SECONDS));
             assertEquals(0, child.exitValue());
-        } finally {
-            child.destroyForcibly();
         }
 
         CsvImportPanel after = open();

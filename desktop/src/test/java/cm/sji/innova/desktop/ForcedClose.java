@@ -30,7 +30,6 @@ import java.util.Locale;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Logger;
@@ -156,8 +155,8 @@ public final class ForcedClose {
                 dataFolder.toString()));
         command.addAll(List.of(args));
         Process child = new ProcessBuilder(command).redirectError(ProcessBuilder.Redirect.INHERIT).start();
-        try (var executor = Executors.newSingleThreadExecutor()) {
-            var output = executor.submit(() -> {
+        try (var process = new TestChildProcess(child)) {
+            var output = process.readOutput(() -> {
                 List<String> lines = new ArrayList<>();
                 var reader = new BufferedReader(new InputStreamReader(child.getInputStream(), StandardCharsets.UTF_8));
                 for (String line = reader.readLine(); line != null; line = reader.readLine()) {
@@ -170,9 +169,6 @@ public final class ForcedClose {
             if (lines.isEmpty() || !lines.get(lines.size() - 1).startsWith(PAUSED)) {
                 fail("The process ended before reaching its moment: " + lines);
             }
-        } finally {
-            child.destroyForcibly();
-            assertTrue(child.waitFor(30, TimeUnit.SECONDS), "The killed process is gone");
         }
         // A clean exit folds SQLite's write-ahead log into the database and removes it; a crash leaves it.
         assertTrue(Files.exists(dataFolder.resolve("cella.db-wal")), "The process died without closing the database");
