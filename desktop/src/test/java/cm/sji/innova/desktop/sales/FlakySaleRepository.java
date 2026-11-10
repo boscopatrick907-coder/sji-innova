@@ -12,6 +12,7 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -23,6 +24,8 @@ final class FlakySaleRepository implements SaleRepository {
     volatile boolean failBeforeSaving;
     volatile boolean failAfterSaving;
     volatile boolean failReadingHistory;
+    /** When set, runs once just after a sale is really saved, before the answer goes back. */
+    volatile Callable<?> afterSaving;
     /** When set, the next history read reports here, then waits for {@link #releaseHistoryRead}. */
     volatile CountDownLatch historyReadReached;
     volatile CountDownLatch releaseHistoryRead;
@@ -39,6 +42,15 @@ final class FlakySaleRepository implements SaleRepository {
             throw new SQLException("Simulated failure before saving");
         }
         SaleResult result = real.recordSale(sale, request);
+        Callable<?> hook = afterSaving;
+        if (hook != null) {
+            afterSaving = null;
+            try {
+                hook.call();
+            } catch (Exception failure) {
+                throw new SQLException("The test's after-saving step failed", failure);
+            }
+        }
         if (failAfterSaving) {
             failAfterSaving = false;
             throw new SQLException("Simulated failure after saving");
