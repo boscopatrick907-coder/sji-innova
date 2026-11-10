@@ -66,30 +66,42 @@ public final class FilePendingReceiptStore implements PendingReceiptStore {
         }
     }
 
-    /** Moves a damaged record aside without deleting it. Valid records are never moved by this action. */
-    public Path setAsideDamaged() throws IOException {
+    /**
+     * Moves a damaged record aside without deleting it. Valid records are never moved by this action, and
+     * neither is a file that is only unavailable for a moment.
+     */
+    @Override public Path setAsideDamaged() throws IOException {
         try (var ignored = PendingReceiptFileLease.acquire(file)) {
             if (!Files.exists(file)) throw new IOException("There is no pending receipt file to preserve");
             try {
                 loadLocked();
-                throw new ConflictException();
-            } catch (ConflictException validRecord) {
-                throw validRecord;
-            } catch (IOException damaged) {
+            } catch (DamagedPendingFileException damaged) {
                 Path preserved = file.resolveSibling("pending-stock-receipt-damaged-" + UUID.randomUUID() + ".properties");
                 return Files.move(file, preserved, StandardCopyOption.ATOMIC_MOVE);
             }
+            throw new ConflictException();
+        }
+    }
+
+    /** Moves aside, without deleting, the readable request this screen cannot use. Any other one stays. */
+    @Override public Path setAside(UUID expectedOperationId) throws IOException {
+        Objects.requireNonNull(expectedOperationId, "expectedOperationId");
+        try (var ignored = PendingReceiptFileLease.acquire(file)) {
+            Optional<PendingReceipt> current = loadLocked();
+            if (current.isEmpty() || !current.get().operationId().equals(expectedOperationId)) throw new ConflictException();
+            Path preserved = file.resolveSibling("pending-stock-receipt-set-aside-" + UUID.randomUUID() + ".properties");
+            return Files.move(file, preserved, StandardCopyOption.ATOMIC_MOVE);
         }
     }
 
     private Optional<PendingReceipt> loadLocked() throws IOException {
         if (!Files.exists(file)) return Optional.empty();
-        if (Files.size(file) > MAX_FILE_BYTES) throw new IOException("Pending stock receipt file is too large; original file was preserved");
+        if (Files.size(file) > MAX_FILE_BYTES) throw new DamagedPendingFileException("Pending stock receipt file is too large; original file was preserved");
 
         Properties properties = new Properties();
         try (Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
             properties.load(reader);
-            if (!FORMAT.equals(required(properties, "format"))) throw new IOException("Unknown pending stock receipt format");
+            if (!FORMAT.equals(required(properties, "format"))) throw new DamagedPendingFileException("Unknown pending stock receipt format");
             PendingReceipt receipt = new PendingReceipt(
                     UUID.fromString(required(properties, "operationId")),
                     UUID.fromString(required(properties, "shopId")),
@@ -100,7 +112,7 @@ public final class FilePendingReceiptStore implements PendingReceiptStore {
                     required(properties, "reason"));
             return Optional.of(receipt);
         } catch (IllegalArgumentException | ArithmeticException damaged) {
-            throw new IOException("Pending stock receipt file is damaged; original file was preserved", damaged);
+            throw new DamagedPendingFileException("Pending stock receipt file is damaged; original file was preserved", damaged);
         }
     }
 
@@ -137,7 +149,7 @@ public final class FilePendingReceiptStore implements PendingReceiptStore {
 
     private static String required(Properties properties, String key) throws IOException {
         String value = properties.getProperty(key);
-        if (value == null || value.isBlank()) throw new IOException("Missing pending receipt value: " + key);
+        if (value == null || value.isBlank()) throw new DamagedPendingFileException("Missing pending receipt value: " + key);
         return value;
     }
 }

@@ -58,19 +58,47 @@ public final class FilePendingStockAdjustmentStore implements PendingStockAdjust
         }
     }
 
+    /**
+     * Moves a damaged record aside without deleting it. Valid records are never moved by this action, and
+     * neither is a file that is only unavailable for a moment.
+     */
+    @Override public Path setAsideDamaged() throws IOException {
+        try (var ignored = PendingReceiptFileLease.acquire(file)) {
+            if (!Files.exists(file)) throw new IOException("There is no pending adjustment file to preserve");
+            try {
+                loadLocked();
+            } catch (DamagedPendingFileException damaged) {
+                Path preserved = file.resolveSibling("pending-stock-adjustment-damaged-" + UUID.randomUUID() + ".properties");
+                return Files.move(file, preserved, StandardCopyOption.ATOMIC_MOVE);
+            }
+            throw new ConflictException();
+        }
+    }
+
+    /** Moves aside, without deleting, the readable request this screen cannot use. Any other one stays. */
+    @Override public Path setAside(UUID expectedOperationId) throws IOException {
+        Objects.requireNonNull(expectedOperationId, "expectedOperationId");
+        try (var ignored = PendingReceiptFileLease.acquire(file)) {
+            Optional<PendingStockAdjustment> current = loadLocked();
+            if (current.isEmpty() || !current.get().operationId().equals(expectedOperationId)) throw new ConflictException();
+            Path preserved = file.resolveSibling("pending-stock-adjustment-set-aside-" + UUID.randomUUID() + ".properties");
+            return Files.move(file, preserved, StandardCopyOption.ATOMIC_MOVE);
+        }
+    }
+
     private Optional<PendingStockAdjustment> loadLocked() throws IOException {
         if (!Files.exists(file)) return Optional.empty();
-        if (Files.size(file) > MAX_FILE_BYTES) throw new IOException("Pending adjustment file is too large; original preserved");
+        if (Files.size(file) > MAX_FILE_BYTES) throw new DamagedPendingFileException("Pending adjustment file is too large; original preserved");
         Properties p = new Properties();
         try (Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
             p.load(reader);
-            if (!FORMAT.equals(required(p, "format"))) throw new IOException("Unknown pending adjustment format");
+            if (!FORMAT.equals(required(p, "format"))) throw new DamagedPendingFileException("Unknown pending adjustment format");
             return Optional.of(new PendingStockAdjustment(
                     UUID.fromString(required(p, "operationId")), UUID.fromString(required(p, "shopId")),
                     UUID.fromString(required(p, "productId")), UUID.fromString(required(p, "deviceId")),
                     required(p, "unit"), Long.parseLong(required(p, "deltaMilli")), required(p, "reason")));
-        } catch (IllegalArgumentException ex) {
-            throw new IOException("Pending stock adjustment file is damaged; original preserved", ex);
+        } catch (IllegalArgumentException | ArithmeticException ex) {
+            throw new DamagedPendingFileException("Pending stock adjustment file is damaged; original preserved", ex);
         }
     }
 
@@ -103,7 +131,7 @@ public final class FilePendingStockAdjustmentStore implements PendingStockAdjust
 
     private static String required(Properties p, String key) throws IOException {
         String value = p.getProperty(key);
-        if (value == null || value.isBlank()) throw new IOException("Missing pending adjustment value: " + key);
+        if (value == null || value.isBlank()) throw new DamagedPendingFileException("Missing pending adjustment value: " + key);
         return value;
     }
 }

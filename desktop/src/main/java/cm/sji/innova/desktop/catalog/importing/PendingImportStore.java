@@ -9,6 +9,13 @@ import java.util.*;
 /** A portable snapshot saved before submission; one active importer per local data folder. */
 public final class PendingImportStore implements AutoCloseable {
     public record Pending(ConfirmedImportRequest request,ImportPreview preview){}
+    /** Another window or Cella process has an import open on this data folder. */
+    public static final class BusyException extends IOException{public BusyException(){super("Another import is already open");}}
+    /** The saved import cannot be understood, or belongs to another shop: retrying cannot fix it. */
+    public static final class DamagedException extends IOException{
+        public DamagedException(String message){super(message);}
+        public DamagedException(String message,Throwable cause){super(message,cause);}
+    }
     private final Path file;
     private final UUID shop;
     private final FileChannel channel;
@@ -16,8 +23,12 @@ public final class PendingImportStore implements AutoCloseable {
     public PendingImportStore(Path directory,UUID shop)throws IOException{
         this.shop=shop;Files.createDirectories(directory);file=directory.resolve("pending-csv.properties");
         channel=FileChannel.open(directory.resolve(".csv-import.lock"),StandardOpenOption.CREATE,StandardOpenOption.WRITE);
-        try{lock=channel.tryLock();if(lock==null)throw new IOException("Another import is already open");}
+        FileLock taken;
+        try{taken=channel.tryLock();}
+        catch(OverlappingFileLockException inThisProcess){channel.close();throw new BusyException();}
         catch(IOException|RuntimeException failure){channel.close();throw new IOException("Another import is already open or the folder is unavailable",failure);}
+        if(taken==null){channel.close();throw new BusyException();}
+        lock=taken;
     }
     public void save(Pending pending)throws IOException{
         if(!shop.equals(pending.preview.shopId()))throw new IOException("Pending import belongs to another shop");
@@ -44,9 +55,9 @@ public final class PendingImportStore implements AutoCloseable {
     public Optional<Pending> read()throws IOException{
         if(!Files.exists(file))return Optional.empty();
         try{
-            if(Files.size(file)>16*1024*1024)throw new IOException("Pending import is too large");
+            if(Files.size(file)>16*1024*1024)throw new DamagedException("Pending import is too large");
             Properties p=new Properties();try(var in=Files.newInputStream(file)){p.load(in);}
-            if(!"1".equals(p.getProperty("version"))||!shop.toString().equals(p.getProperty("shop")))throw new IOException("Unsupported pending import or wrong shop");
+            if(!"1".equals(p.getProperty("version"))||!shop.toString().equals(p.getProperty("shop")))throw new DamagedException("Unsupported pending import or wrong shop");
             int count=number(p,"rows",100000);List<ParsedRow> rows=new ArrayList<>();
             for(int i=0;i<count;i++){
                 String k="r."+i+".";List<String> errors=new ArrayList<>(),warnings=new ArrayList<>();
@@ -55,16 +66,26 @@ public final class PendingImportStore implements AutoCloseable {
                 rows.add(new ParsedRow(Integer.parseInt(p.getProperty(k+"number")),p.getProperty(k+"raw"),p.getProperty(k+"name"),p.getProperty(k+"model"),p.getProperty(k+"category"),p.getProperty(k+"unit"),price(p,k+"buying"),price(p,k+"selling"),errors,warnings));
             }
             String hash=ImportFingerprint.content(rows);UUID preview=UUID.fromString(p.getProperty("preview"));
-            if(!hash.equals(p.getProperty("hash"))||!preview.equals(ImportFingerprint.previewId(shop,hash)))throw new IOException("Pending import is damaged");
-            String duplicate=p.getProperty("duplicates");if(!Set.of("true","false").contains(duplicate))throw new IOException("Invalid duplicate decision");
+            if(!hash.equals(p.getProperty("hash"))||!preview.equals(ImportFingerprint.previewId(shop,hash)))throw new DamagedException("Pending import is damaged");
+            String duplicate=p.getProperty("duplicates");if(!Set.of("true","false").contains(duplicate))throw new DamagedException("Invalid duplicate decision");
             var request=new ConfirmedImportRequest(UUID.fromString(p.getProperty("operation")),preview,hash,Arrays.stream(p.getProperty("selection").split(",")).map(Integer::parseInt).toList(),Boolean.parseBoolean(duplicate));
-            if(!ImportFingerprint.request(shop,request).equals(p.getProperty("requestHash")))throw new IOException("Pending request was changed");
+            if(!ImportFingerprint.request(shop,request).equals(p.getProperty("requestHash")))throw new DamagedException("Pending request was changed");
             int valid=(int)rows.stream().filter(ParsedRow::isValid).count();
             var snapshot=new ImportPreview(preview,shop,count,valid,count-valid,(int)rows.stream().filter(ParsedRow::hasWarnings).count(),rows,List.of(),hash);
             return Optional.of(new Pending(request,snapshot));
-        }catch(IOException ex){throw ex;}catch(RuntimeException ex){throw new IOException("Pending import is damaged; file was left untouched",ex);}
+        }catch(IOException ex){throw ex;}catch(RuntimeException ex){throw new DamagedException("Pending import is damaged; file was left untouched",ex);}
     }
-    private static int number(Properties p,String key,int max)throws IOException{int n=Integer.parseInt(p.getProperty(key));if(n<0||n>max)throw new IOException("Invalid pending import size");return n;}
+    /**
+     * Renames a damaged saved import, keeping it next to the original, so a new import can start.
+     * Refuses a readable one, and a file that is only unavailable for a moment. Returns the new path.
+     */
+    public Path setAside()throws IOException{
+        if(!Files.exists(file))throw new IOException("There is no saved import to set aside");
+        try{read();}
+        catch(DamagedException damaged){return Files.move(file,file.resolveSibling("pending-csv-set-aside-"+UUID.randomUUID()+".properties"),StandardCopyOption.ATOMIC_MOVE);}
+        throw new IOException("A readable saved import is resumed, never set aside");
+    }
+    private static int number(Properties p,String key,int max)throws IOException{int n=Integer.parseInt(p.getProperty(key));if(n<0||n>max)throw new DamagedException("Invalid pending import size");return n;}
     private static Long price(Properties p,String key){return p.getProperty(key)==null?null:Long.valueOf(p.getProperty(key));}
     public void clear()throws IOException{Files.deleteIfExists(file);}
     @Override public void close()throws IOException{try{lock.release();}finally{channel.close();}}
