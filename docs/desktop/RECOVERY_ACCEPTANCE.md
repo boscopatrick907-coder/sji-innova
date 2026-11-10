@@ -50,6 +50,10 @@ New tests are in `StockRecoveryAcceptanceTest`. Balances are in thousandths, so 
 | Request from another shop or device | `savedRequestsFromAnotherShopOrDevice…` | Unchanged | Unchanged | Kept byte for byte; receiving, correcting and minimums are blocked |
 | Request for a changed unit or an unknown product | `savedRequestsForAChangedProductOrUnit…` | Unchanged | Unchanged | Kept byte for byte; blocked |
 | Damaged request file | `damagedPendingFilesBlockTheScreen…` | Unchanged | Unchanged | Kept byte for byte; blocked, also after Refresh |
+| Damaged receipt or correction, then **Set the file aside** (OFF-02b) | `aDamagedReceiptStillShowsTheStock…`, `aDamagedCorrectionCanBeSetAside…` | Unchanged; the stock list stays visible | Unchanged | Renamed `…-damaged-<id>.properties`, byte for byte; the screen unblocks and asks to check the history |
+| Request from another computer, then set aside (OFF-02b) | `aReceiptFromAnotherComputerThatWasNeverSaved…`, `…AlreadyInTheHistory…` | Unchanged | Unchanged | Renamed `…-set-aside-<id>.properties`; the screen says whether the operation is already in the history |
+| Request from another shop, or for a product that no longer exists, then set aside (OFF-02b) | `aReceiptFromAnotherShopIsSetAside…`, `aCorrectionForAProductThatNoLongerExists…` | Unchanged | Unchanged | Renamed; « not added to this shop's stock », or « check the movement history » |
+| A request this screen can retry (OFF-02b) | `aRequestThisScreenCanRetryIsNeverOfferedToBeSetAside` | Unchanged | Unchanged | No set-aside button; the store also refuses a readable request as damaged, or one other than the request shown |
 | Temporary read failure, then Refresh | `StockRecoveryRegressionTest.refreshAfterTemporaryReadFailure…` | — | — | The screen unblocks |
 | Two windows: a receipt and a correction at once | `StockRecoveryRegressionTest.receiptAndAdjustmentMustNotBothBecomePending…` | — | — | Only the first is kept |
 | A second Java process holds the stock folder | `whileAnotherProcessHoldsTheStockFolder…` | Unchanged while it holds; 7 000 after it lets go | 0 → 1 | Nothing saved while held; the same request then works |
@@ -87,7 +91,9 @@ valid row, « Huile ».
 | Request file cannot be written | `anImportWhosePendingFileCannotBeWrittenIsNeverSent` | 0; the import is never attempted | None; the retry saves it, then imports once |
 | Confirmed, but the file cannot be removed; restart | `aConfirmedImportWhosePendingFileCannotBeRemoved…` | 1; opening sends nothing; the retry is answered from the saved import (no new insert) | Kept, then removed |
 | Damaged file, or one from another shop | `ImportAndPhotoControlsTest.pendingStoreRejectsConflictingAccessAndDamagedOrWrongShopState` | Unchanged | Kept |
-| Another process has an import open | `whileAnotherProcessHasAnImportOpen…` | 0 while it is open; 1 after | Nothing written; the import works once the other closes |
+| Damaged file, or one from another shop, then **Set the file aside** (OFF-02b) | `aDamagedSavedImportCanBeSetAside…`, `aSavedImportFromAnotherShopIsTreatedAsDamaged…` | Unchanged; nothing can be imported until it is set aside, then a new import works | Renamed `pending-csv-set-aside-<id>.properties`, byte for byte; the screen keeps the folder meanwhile, so no other window imports over it |
+| A readable saved import (OFF-02b) | `aReadableSavedImportIsResumedAndNeverSetAside` | Unchanged | Resumed; the store refuses to set it aside |
+| Another process has an import open | `whileAnotherProcessHasAnImportOpen…` | 0 while it is open; 1 after | Nothing written; the screen says another window has an import open; the import works once the other closes |
 | Changed rows, shop, selection or duplicate consent | core `ProductImportConfirmationTest` | Unchanged | Refused before anything is recorded |
 
 ## How the failures are made
@@ -166,19 +172,22 @@ process prints `PAUSED` and waits to be killed.
 
 Nothing was lost or counted twice in any scenario. These are about what the user is told:
 
-1. **Stock:** a damaged request file, or one from another shop or device, or for a changed product,
-   blocks receiving, correcting and minimums. The file is kept, but the screen gives no next step:
-   - a damaged file shows « Unable to load products or stock » with a technical reason;
-   - the receipt store can already set a damaged file aside, but no screen offers it;
-   - the correction store cannot.
-2. **Imports:** a damaged request file, or one from another shop, shows « Import unavailable or pending
-   file damaged. Preserve the file and contact support. » There is no other way forward in the app.
-3. **Corrections:** when the database confirmed a correction but its file could not be removed, the
-   screen says « Adjustment failed or its outcome is uncertain ». Receipts say « confirmed, but
-   recovery cleanup is pending ». Both are safe, because the retry counts once.
-4. **Cash sales:** a saved sale is checked against the shop, but not against the device; stock requests
-   check both. A data folder normally keeps one device ID, so this only matters if `device-id.txt` is
-   replaced. Should the sale check it too?
+1. **Stock** (fixed in OFF-02b): a damaged request file, or one from another shop or device, or for a
+   changed product, blocked receiving, correcting and minimums with no next step, and a damaged file
+   hid the whole stock list behind « Unable to load products or stock ». Now the stock stays visible,
+   the screen says what is wrong, and **Set the file aside** renames the file in the data folder. The
+   screen then says whether the operation is already in the movement history. A request the screen
+   can retry is never offered; a file that is only unavailable for a moment still asks for Refresh.
+2. **Imports** (fixed in OFF-02b): a damaged request file, or one from another shop, showed « Import
+   unavailable or pending file damaged. Preserve the file and contact support. » Now « another window
+   has an import open » and « the saved import is damaged » are told apart, and the second offers
+   **Set the file aside**.
+3. **Corrections** (fixed in OFF-02b): when the database confirmed a correction but its file could not
+   be removed, the screen said « Adjustment failed or its outcome is uncertain ». It now says, as
+   receipts do, « Adjustment was confirmed, but recovery cleanup is pending ».
+4. **Cash sales** (open, for Patrick): a saved sale is checked against the shop, but not against the
+   device; stock requests check both. A data folder normally keeps one device ID, so this only matters
+   if `device-id.txt` is replaced. Should the sale check it too?
 
 ## Review correction: bounded child-process cleanup
 
