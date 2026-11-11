@@ -1,7 +1,13 @@
 package cm.sji.innova.desktop.shell;
 
 import cm.sji.innova.core.persistence.DatabaseGate;
+import cm.sji.innova.core.persistence.SqliteDatabase;
+import cm.sji.innova.desktop.catalog.importing.PendingImportStore;
+import cm.sji.innova.desktop.sales.CheckoutFileLease;
+import cm.sji.innova.desktop.sales.PendingCheckoutStore;
 import cm.sji.innova.desktop.shell.FolderMaintenanceException.Reason;
+import cm.sji.innova.desktop.stock.FilePendingReceiptStore;
+import cm.sji.innova.desktop.stock.PendingReceiptFileLease;
 import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
@@ -9,28 +15,35 @@ import java.nio.channels.OverlappingFileLockException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import javax.swing.SwingUtilities;
 
 /**
  * OFF-03a1: who is using a shop's data folder. See "Folder ownership and maintenance" in
- * {@code docs/design/BACKUP_RESTORE.md}.
+ * {@code docs/design/BACKUP_RESTORE.md}. It coordinates; it does not make backups.
  *
  * <ul>
  *   <li><b>Every running Cella holds a shared lock</b> on {@value #LOCK_FILE} in its data folder, from
  *       start-up until it exits, even while it is idle. Several Cellas can hold it at once.</li>
- *   <li><b>Maintenance (backup, restore) needs the folder alone.</b> It first pauses this process's
- *       database work: new connections wait, and it waits for the open ones to close. It then gives up
- *       this process's shared lock and tries to take an exclusive one. If another Cella holds the folder,
- *       it takes its shared lock back and refuses: nothing is touched.</li>
- *   <li><b>One coordinator per folder per process.</b> Every window in this process shares its single
- *       file handle: on Linux, closing any second handle to the file would drop this process's lock.</li>
+ *   <li><b>All database and file work passes the folder's gate:</b> every database connection for its
+ *       whole life, and photo changes for their whole duration. Saved receipts, corrections, cash sales
+ *       and imports are covered by their operation leases, which maintenance takes.</li>
+ *   <li><b>Maintenance (backup, restore) needs the folder alone.</b> It pauses new work, waits for the
+ *       work already running, swaps this process's shared lock for an exclusive one, then takes the
+ *       stock, checkout and import leases, in that order. If another Cella is open, or an operation is
+ *       running, it puts everything back and refuses: nothing is touched.</li>
+ *   <li><b>Maintenance uses the database only through {@link Maintenance#openDatabase()}.</b> Any other
+ *       connection waits, including one opened by mistake on the maintenance thread, which is refused.</li>
+ *   <li><b>Nothing waits on the Swing event thread:</b> maintenance cannot start there, and a connection
+ *       opened there during maintenance is refused at once.</li>
+ *   <li><b>One coordinator per folder per process.</b> Every window shares its single lock-file handle:
+ *       on Linux, closing any second handle to the file would drop this process's lock.</li>
  * </ul>
- *
- * <p>Locks are taken in one order: maintenance, then the stock, checkout and import leases. Never begin
- * maintenance while holding one of those. Nothing here waits on the Swing event thread except a
- * connection opened there during maintenance; Cella opens connections in background workers.
  */
 public final class DataFolderCoordinator {
     public static final String LOCK_FILE = ".cella-maintenance.lock";
@@ -41,26 +54,30 @@ public final class DataFolderCoordinator {
     public static DataFolderCoordinator forFolder(LocalAppData location) throws IOException {
         Files.createDirectories(location.directory());
         Path folder = location.directory().toRealPath();
-        return BY_FOLDER.computeIfAbsent(folder, real -> new DataFolderCoordinator(real, location.databaseFile()));
+        return BY_FOLDER.computeIfAbsent(folder, real -> new DataFolderCoordinator(real, location));
     }
 
     private final Path folder;
-    private final Path databaseFile;
-    private final DatabaseGate.Gate gate = new Gate();
+    private final LocalAppData location;
+    private final Gate gate = new Gate();
+    /** How much file work (photos) the current thread is inside; its own connections then never wait. */
+    private final ThreadLocal<int[]> workDepth = ThreadLocal.withInitial(() -> new int[1]);
 
     // All fields below are guarded by "this".
     private FileChannel channel;
     private FileLock lock;
+    private DatabaseGate.Pass pass;
     private int members;
-    private int openConnections;
-    /** The thread running maintenance; other threads' new connections wait while it is set. */
+    /** Open connections and running file work in this process. */
+    private int active;
+    /** The thread running maintenance; while set, all other work waits. */
     private Thread maintainer;
-    /** Set while this process waits to get its shared lock back: every connection waits too. */
+    /** Set while this process waits to get its shared lock back: all work waits too. */
     private boolean blocked;
 
-    private DataFolderCoordinator(Path folder, Path databaseFile) {
+    private DataFolderCoordinator(Path folder, LocalAppData location) {
         this.folder = folder;
-        this.databaseFile = databaseFile;
+        this.location = location;
     }
 
     /** One window's (or one start-up's) use of the folder. Closing it lets go; the last one releases the lock. */
@@ -77,8 +94,8 @@ public final class DataFolderCoordinator {
     }
 
     /**
-     * Joins the folder: the first member in this process takes the shared lock and installs the database
-     * gate. Refused while another Cella is making a backup or restore of this shop.
+     * Joins the folder: the first member in this process takes the shared lock and installs the gate.
+     * Refused while another Cella is making a backup or restore of this shop.
      */
     public synchronized Membership join() throws IOException {
         if (members == 0) {
@@ -102,7 +119,7 @@ public final class DataFolderCoordinator {
             }
             channel = opened;
             lock = shared;
-            DatabaseGate.install(databaseFile, gate);
+            pass = DatabaseGate.install(location.databaseFile(), gate);
         }
         members++;
         return new Membership();
@@ -111,7 +128,8 @@ public final class DataFolderCoordinator {
     private void leave() throws IOException {
         if (--members > 0) return;
         if (maintainer != null) throw new IllegalStateException("The folder is left while maintenance runs");
-        DatabaseGate.remove(databaseFile, gate);
+        DatabaseGate.remove(location.databaseFile(), gate);
+        pass = null;
         try {
             if (lock != null) lock.release();
         } finally {
@@ -120,38 +138,58 @@ public final class DataFolderCoordinator {
         }
     }
 
-    /** Folder maintenance in progress. Closing it gives the folder back to normal use. */
+    /** Folder maintenance in progress. Close it on the thread that began it, to give the folder back. */
     public final class Maintenance implements AutoCloseable {
+        private final Thread owner = Thread.currentThread();
+        private final List<AutoCloseable> leases;
         private boolean closed;
+
+        private Maintenance(List<AutoCloseable> leases) { this.leases = leases; }
+
+        /** A connection for the maintenance itself: the only way to the database while it runs. */
+        public Connection openDatabase() throws SQLException {
+            DatabaseGate.Pass own;
+            synchronized (DataFolderCoordinator.this) {
+                if (closed) throw new IllegalStateException("Maintenance has ended");
+                own = pass;
+            }
+            return new SqliteDatabase(location.databaseFile()).open(own);
+        }
 
         @Override public void close() throws IOException {
             synchronized (DataFolderCoordinator.this) {
                 if (closed) return;
+                if (Thread.currentThread() != owner) throw new IllegalStateException("Close maintenance on the thread that began it");
                 closed = true;
+                Exception failure = closeAll(leases);
                 try {
                     lock.release();
                 } finally {
                     lock = null;
                     resumeShared();
                 }
+                if (failure instanceof IOException io) throw io;
+                if (failure != null) throw new IOException("Could not release an operation lease", failure);
             }
         }
     }
 
     /**
-     * Takes the folder for a backup or restore. First waits up to {@code drain} for this process's open
-     * connections to close, while new ones wait; then swaps the shared lock for an exclusive one.
-     * Call it off the Swing event thread, from a member, holding no stock, checkout or import lease.
+     * Takes the folder for a backup or restore. Pauses new work, waits up to {@code drain} for the work
+     * already running, swaps the shared lock for an exclusive one, then takes the operation leases. Call
+     * it from a member, off the Swing event thread, holding no stock, checkout or import lease.
      */
     public synchronized Maintenance beginMaintenance(Duration drain) throws IOException {
+        if (SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Never begin maintenance on the Swing event thread");
         if (members == 0) throw new IllegalStateException("Join the folder before maintenance");
         if (maintainer != null || blocked) {
             throw new FolderMaintenanceException(Reason.ALREADY_RUNNING, "A backup or restore is already running in this Cella.");
         }
+        if (workDepth.get()[0] > 0) throw new IllegalStateException("Never begin maintenance from inside file work");
         maintainer = Thread.currentThread();
         long deadline = System.nanoTime() + drain.toNanos();
         try {
-            while (openConnections > 0) {
+            while (active > 0) {
                 long left = deadline - System.nanoTime();
                 if (left <= 0) {
                     throw new FolderMaintenanceException(Reason.STILL_WORKING,
@@ -169,6 +207,7 @@ public final class DataFolderCoordinator {
             notifyAll();
             throw tooLong;
         }
+
         // This process is quiet. Swapping the locks is not atomic: another Cella may slip in between.
         FileLock exclusive;
         try {
@@ -186,7 +225,38 @@ public final class DataFolderCoordinator {
                     "Another Cella has this shop open. Close it, then try again.");
         }
         lock = exclusive;
-        return new Maintenance();
+
+        // Then the operation leases, in the agreed order: stock, checkout, import.
+        List<AutoCloseable> leases = new ArrayList<>();
+        List<String> busy = new ArrayList<>();
+        try {
+            try {
+                leases.add(PendingReceiptFileLease.acquire(location.directory().resolve("pending-stock-receipt.properties")));
+            } catch (FilePendingReceiptStore.BusyException inUse) {
+                busy.add("stock");
+            }
+            try {
+                leases.add(CheckoutFileLease.acquire(location.pendingCheckoutFile()));
+            } catch (PendingCheckoutStore.BusyException inUse) {
+                busy.add("sales");
+            }
+            try {
+                leases.add(PendingImportStore.holdFolder(location.directory()));
+            } catch (PendingImportStore.BusyException inUse) {
+                busy.add("import");
+            }
+        } catch (IOException | RuntimeException failure) {
+            closeAll(leases);
+            giveBackExclusive();
+            throw failure;
+        }
+        if (!busy.isEmpty()) {
+            closeAll(leases);
+            giveBackExclusive();
+            throw new FolderMaintenanceException(Reason.OPERATION_RUNNING,
+                    "Finish the operation in progress first (" + String.join(", ", busy) + "), then try again.");
+        }
+        return new Maintenance(leases);
     }
 
     /** True while this process holds the folder exclusively. */
@@ -194,9 +264,32 @@ public final class DataFolderCoordinator {
         return lock != null && !lock.isShared();
     }
 
+    private void giveBackExclusive() {
+        try {
+            lock.release();
+        } catch (IOException ignored) {
+            // the shared lock below replaces it in any case
+        } finally {
+            lock = null;
+            resumeShared();
+        }
+    }
+
+    private static Exception closeAll(List<AutoCloseable> leases) {
+        Exception first = null;
+        for (int i = leases.size() - 1; i >= 0; i--) {
+            try {
+                leases.get(i).close();
+            } catch (Exception failure) {
+                if (first == null) first = failure; else first.addSuppressed(failure);
+            }
+        }
+        return first;
+    }
+
     /**
-     * Takes the shared lock back and reopens the gate. If another Cella took the folder in the gap, every
-     * connection keeps waiting until a background thread gets the shared lock again.
+     * Takes the shared lock back and reopens the gate. If another Cella took the folder in the gap, all
+     * work keeps waiting until a background thread gets the shared lock again.
      */
     private void resumeShared() {
         maintainer = null;
@@ -241,26 +334,53 @@ public final class DataFolderCoordinator {
         }
     }
 
-    /** The database gate: connections wait during maintenance (except the maintainer's own) and are counted. */
+    /** The gate: counts connections and file work, and makes new ones wait during maintenance. */
     private final class Gate implements DatabaseGate.Gate {
         @Override public void enter() throws SQLException {
             synchronized (DataFolderCoordinator.this) {
-                try {
-                    while (blocked || (maintainer != null && maintainer != Thread.currentThread())) {
-                        DataFolderCoordinator.this.wait();
-                    }
-                } catch (InterruptedException interrupted) {
-                    Thread.currentThread().interrupt();
-                    throw new SQLException("Interrupted while a backup or restore was running", interrupted);
-                }
-                openConnections++;
+                // Inside file work that began before maintenance: its own connections never wait for it.
+                if (workDepth.get()[0] == 0) waitUntilOpen();
+                active++;
             }
         }
 
         @Override public void leave() {
             synchronized (DataFolderCoordinator.this) {
-                openConnections--;
+                active--;
                 DataFolderCoordinator.this.notifyAll();
+            }
+        }
+
+        @Override public void enterWork() throws SQLException {
+            synchronized (DataFolderCoordinator.this) {
+                if (workDepth.get()[0] == 0) waitUntilOpen();
+                workDepth.get()[0]++;
+                active++;
+            }
+        }
+
+        @Override public void leaveWork() {
+            synchronized (DataFolderCoordinator.this) {
+                workDepth.get()[0]--;
+                active--;
+                DataFolderCoordinator.this.notifyAll();
+            }
+        }
+
+        private void waitUntilOpen() throws SQLException {
+            try {
+                while (blocked || maintainer != null) {
+                    if (Thread.currentThread() == maintainer) {
+                        throw new SQLException("During maintenance, use Maintenance.openDatabase()");
+                    }
+                    if (SwingUtilities.isEventDispatchThread()) {
+                        throw new SQLException("Cella is busy with a backup or restore. Try again in a moment.");
+                    }
+                    DataFolderCoordinator.this.wait();
+                }
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw new SQLException("Interrupted while a backup or restore was running", interrupted);
             }
         }
     }

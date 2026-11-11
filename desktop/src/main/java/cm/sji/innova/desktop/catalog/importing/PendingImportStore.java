@@ -16,20 +16,42 @@ public final class PendingImportStore implements AutoCloseable {
         public DamagedException(String message){super(message);}
         public DamagedException(String message,Throwable cause){super(message,cause);}
     }
+    /**
+     * Folders with a store open in this process. A second store for the same folder is refused before it
+     * opens the lock file: on Linux, closing any handle to a file drops every lock this process holds on
+     * it, so a refused second handle would silently release the first store's lock.
+     */
+    private static final Set<Path> OPEN_IN_THIS_PROCESS=java.util.concurrent.ConcurrentHashMap.newKeySet();
     private final Path file;
     private final UUID shop;
+    private final Path key;
     private final FileChannel channel;
     private final FileLock lock;
     public PendingImportStore(Path directory,UUID shop)throws IOException{
         this.shop=shop;Files.createDirectories(directory);file=directory.resolve("pending-csv.properties");
-        channel=FileChannel.open(directory.resolve(".csv-import.lock"),StandardOpenOption.CREATE,StandardOpenOption.WRITE);
-        FileLock taken;
-        try{taken=channel.tryLock();}
-        catch(OverlappingFileLockException inThisProcess){channel.close();throw new BusyException();}
-        catch(IOException|RuntimeException failure){channel.close();throw new IOException("Another import is already open or the folder is unavailable",failure);}
-        if(taken==null){channel.close();throw new BusyException();}
-        lock=taken;
+        key=directory.toRealPath();
+        if(!OPEN_IN_THIS_PROCESS.add(key))throw new BusyException();
+        FileChannel opened=null;
+        try{
+            opened=FileChannel.open(key.resolve(".csv-import.lock"),StandardOpenOption.CREATE,StandardOpenOption.WRITE);
+            FileLock taken;
+            try{taken=opened.tryLock();}
+            catch(OverlappingFileLockException inThisProcess){throw new BusyException();}
+            catch(IOException|RuntimeException failure){throw new IOException("Another import is already open or the folder is unavailable",failure);}
+            if(taken==null)throw new BusyException();
+            channel=opened;lock=taken;
+        }catch(IOException|RuntimeException failure){
+            if(opened!=null)try{opened.close();}catch(IOException closing){failure.addSuppressed(closing);}
+            OPEN_IN_THIS_PROCESS.remove(key);
+            throw failure;
+        }
     }
+    /**
+     * Holds the folder's import lock without reading or writing any import, for folder maintenance
+     * (OFF-03a1): while it is held, no import screen can open in any Cella. Refused with
+     * {@link BusyException} while an import screen is open.
+     */
+    public static AutoCloseable holdFolder(Path directory)throws IOException{return new PendingImportStore(directory,new UUID(0L,0L));}
     public void save(Pending pending)throws IOException{
         if(!shop.equals(pending.preview.shopId()))throw new IOException("Pending import belongs to another shop");
         Properties p=new Properties();p.setProperty("version","1");p.setProperty("shop",shop.toString());
@@ -88,5 +110,10 @@ public final class PendingImportStore implements AutoCloseable {
     private static int number(Properties p,String key,int max)throws IOException{int n=Integer.parseInt(p.getProperty(key));if(n<0||n>max)throw new DamagedException("Invalid pending import size");return n;}
     private static Long price(Properties p,String key){return p.getProperty(key)==null?null:Long.valueOf(p.getProperty(key));}
     public void clear()throws IOException{Files.deleteIfExists(file);}
-    @Override public void close()throws IOException{try{lock.release();}finally{channel.close();}}
+    private boolean closed;
+    /** Releases the folder. A second call does nothing, so it never frees a later store's place. */
+    @Override public synchronized void close()throws IOException{
+        if(closed)return;closed=true;
+        try{lock.release();}finally{try{channel.close();}finally{OPEN_IN_THIS_PROCESS.remove(key);}}
+    }
 }

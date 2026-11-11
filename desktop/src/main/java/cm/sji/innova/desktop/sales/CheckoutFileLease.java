@@ -7,14 +7,17 @@ import java.nio.file.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
-/** One checkout-file operation at a time, including its database confirmation. */
-final class CheckoutFileLease implements AutoCloseable {
+/**
+ * One checkout-file operation at a time, including its database confirmation. The backup also takes it,
+ * to hold the folder; close it on the thread that acquired it.
+ */
+public final class CheckoutFileLease implements AutoCloseable {
     private static final ConcurrentHashMap<Path,ReentrantLock> JVM = new ConcurrentHashMap<>();
     private final ReentrantLock local;
     private final FileChannel channel;
     private final FileLock file;
     private CheckoutFileLease(ReentrantLock local,FileChannel channel,FileLock file){this.local=local;this.channel=channel;this.file=file;}
-    static CheckoutFileLease acquire(Path pending)throws IOException{
+    public static CheckoutFileLease acquire(Path pending)throws IOException{
         Files.createDirectories(pending.getParent());
         Path key=pending.getParent().toRealPath().resolve(pending.getFileName());
         ReentrantLock local=JVM.computeIfAbsent(key,ignored->new ReentrantLock());

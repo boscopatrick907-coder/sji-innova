@@ -5,9 +5,19 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import cm.sji.innova.core.persistence.DatabaseGate;
 import cm.sji.innova.core.persistence.SqliteDatabase;
+import cm.sji.innova.core.persistence.SqliteProductPhotoRepository;
+import cm.sji.innova.core.product.Product;
+import cm.sji.innova.core.product.photo.ProductPhotoService;
 import cm.sji.innova.desktop.DesktopApplication;
 import cm.sji.innova.desktop.TestChildProcess;
+import cm.sji.innova.desktop.catalog.importing.PendingImportStore;
+import cm.sji.innova.desktop.sales.PendingCheckoutStore;
+import cm.sji.innova.desktop.stock.FilePendingReceiptStore;
+import java.awt.image.BufferedImage;
+import javax.imageio.ImageIO;
+import javax.swing.SwingUtilities;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -195,7 +205,7 @@ class DataFolderCoordinatorTest {
         workers.submit(() -> {
             try (DataFolderCoordinator.Maintenance taken = coordinator.beginMaintenance(Duration.ofSeconds(20))) {
                 maintenance.complete(taken);
-                try (Connection own = database().open()) {
+                try (Connection own = taken.openDatabase()) {
                     ownConnection.complete(own.isValid(5));
                 }
                 finish.get(20, TimeUnit.SECONDS);
@@ -210,7 +220,7 @@ class DataFolderCoordinatorTest {
             open.close();
             maintenance.get(10, TimeUnit.SECONDS);
             assertTrue(coordinator.inMaintenance());
-            assertTrue(ownConnection.get(10, TimeUnit.SECONDS), "Maintenance itself can use the database");
+            assertTrue(ownConnection.get(10, TimeUnit.SECONDS), "Maintenance uses the database through its own path");
 
             var waiting = workers.submit(() -> { try (Connection ignored = database().open()) { return "opened"; } });
             assertThrows(TimeoutException.class, () -> waiting.get(300, TimeUnit.MILLISECONDS),
@@ -243,6 +253,204 @@ class DataFolderCoordinatorTest {
             open.close();
         }
         assertEquals("READY", start("join").line(), "The folder is still shared");
+    }
+
+    // ----- Every writer takes part (Patrick's review of a1) -----
+
+    @Test
+    void productPhotoAndThresholdWritesWaitDuringMaintenanceAndGoOnAfterwards() throws Exception {
+        join();
+        AppContext shop = AppContextLoader.load(location);
+        Product rice = shop.products().create(shop.shopId(), "Rice", 1_000);
+        Path picture = directory.resolve("rice.png");
+        ImageIO.write(new BufferedImage(40, 40, BufferedImage.TYPE_INT_RGB), "png", picture.toFile());
+        // A leftover from an interrupted photo save. Clean-up deletes it before touching the database.
+        Path leftover = location.directory().resolve("photos").resolve(".staging").resolve("left-over.png");
+        Files.createDirectories(leftover.getParent());
+        Files.writeString(leftover, "interrupted");
+        ExecutorService workers = stoppableWorkers(5);
+        CompletableFuture<Void> started = new CompletableFuture<>(), finish = new CompletableFuture<>();
+        workers.submit(() -> {
+            try (DataFolderCoordinator.Maintenance ignored = coordinator.beginMaintenance(Duration.ofSeconds(20))) {
+                started.complete(null);
+                finish.get(30, TimeUnit.SECONDS);
+            } catch (Exception failure) {
+                started.completeExceptionally(failure);
+            }
+            return null;
+        });
+        try {
+            started.get(10, TimeUnit.SECONDS);
+            // The clean-up first and alone: nothing else holds the photo lock, so only the folder gate stops it.
+            var cleanUp = workers.submit(() -> photos().cleanupOrphans(shop.shopId()));
+            assertThrows(TimeoutException.class, () -> cleanUp.get(300, TimeUnit.MILLISECONDS), "The photo clean-up waits");
+            assertTrue(Files.exists(leftover), "It deleted nothing during maintenance");
+            var product = workers.submit(() -> shop.products().create(shop.shopId(), "Oil", 1_500));
+            var threshold = workers.submit(() -> shop.stock().setMinimum(shop.shopId(), rice.id(), 2_000));
+            var photo = workers.submit(() -> photos().setPhoto(shop.shopId(), rice.id(), picture));
+            for (var write : List.of(product, threshold, photo, cleanUp)) {
+                assertThrows(TimeoutException.class, () -> write.get(300, TimeUnit.MILLISECONDS), "Each write waits during maintenance");
+            }
+            assertEquals(1, filesUnder(location.directory().resolve("photos")),
+                    "No photo file was written or deleted during maintenance: only the leftover is there");
+            assertTrue(Files.exists(leftover));
+            finish.complete(null);
+
+            assertEquals("Oil", product.get(20, TimeUnit.SECONDS).name());
+            assertEquals(2_000, threshold.get(20, TimeUnit.SECONDS).minimumMilli());
+            assertTrue(Files.exists(location.directory().resolve(photo.get(20, TimeUnit.SECONDS).relativePath())),
+                    "Each write goes on once maintenance ends");
+            cleanUp.get(20, TimeUnit.SECONDS);
+            assertFalse(Files.exists(leftover), "The clean-up ran afterwards");
+        } finally {
+            finish.complete(null);
+        }
+    }
+
+    @Test
+    void photoWorkAlreadyRunningHoldsMaintenanceBackAndItsOwnConnectionsDoNotWait() throws Exception {
+        join();
+        AppContextLoader.load(location);
+        ExecutorService workers = stoppableWorkers(2);
+        CompletableFuture<Void> inside = new CompletableFuture<>(), goOn = new CompletableFuture<>();
+        var photoWork = workers.submit(() -> {
+            try (DatabaseGate.Work work = DatabaseGate.enterFolder(location.directory())) {   // as a photo save does
+                inside.complete(null);
+                goOn.get(20, TimeUnit.SECONDS);
+                try (Connection own = database().open()) {   // the photo's own database step
+                    return own.isValid(5);
+                }
+            }
+        });
+        inside.get(10, TimeUnit.SECONDS);
+        var maintenance = workers.submit(() -> {
+            try (DataFolderCoordinator.Maintenance ignored = coordinator.beginMaintenance(Duration.ofSeconds(20))) {
+                return "maintained";
+            }
+        });
+        try {
+            assertThrows(TimeoutException.class, () -> maintenance.get(300, TimeUnit.MILLISECONDS),
+                    "Maintenance waits for the photo work");
+            goOn.complete(null);
+            assertTrue(photoWork.get(10, TimeUnit.SECONDS), "The photo's own connection did not wait for maintenance");
+            assertEquals("maintained", maintenance.get(10, TimeUnit.SECONDS), "Maintenance runs once the photo work ends");
+        } finally {
+            goOn.complete(null);
+        }
+    }
+
+    @Test
+    void anOperationInProgressOrTheImportScreenStopsMaintenanceAndNothingChanges() throws Exception {
+        join();
+        AppContext shop = AppContextLoader.load(location);
+        ExecutorService operation = stoppableWorkers(1);
+        CompletableFuture<Void> held = new CompletableFuture<>(), release = new CompletableFuture<>();
+        operation.submit(() -> {
+            try (var receipt = cm.sji.innova.desktop.stock.PendingReceiptFileLease.acquire(
+                    location.directory().resolve("pending-stock-receipt.properties"))) {
+                held.complete(null);
+                release.get(20, TimeUnit.SECONDS);
+            }
+            return null;
+        });
+        try {
+            held.get(10, TimeUnit.SECONDS);
+            FolderMaintenanceException refused = assertThrows(FolderMaintenanceException.class,
+                    () -> coordinator.beginMaintenance(Duration.ofSeconds(5)));
+            assertEquals(FolderMaintenanceException.Reason.OPERATION_RUNNING, refused.reason());
+            assertTrue(refused.getMessage().contains("stock"), refused.getMessage());
+        } finally {
+            release.complete(null);
+        }
+
+        try (var importScreen = PendingImportStore.holdFolder(location.directory())) {
+            FolderMaintenanceException refused = assertThrows(FolderMaintenanceException.class,
+                    () -> coordinator.beginMaintenance(Duration.ofSeconds(5)));
+            assertEquals(FolderMaintenanceException.Reason.OPERATION_RUNNING, refused.reason());
+            assertTrue(refused.getMessage().contains("import"), refused.getMessage());
+        }
+
+        assertFalse(coordinator.inMaintenance());
+        assertEquals("Oil", shop.products().create(shop.shopId(), "Oil", 1_500).name(), "Normal work goes on");
+        assertEquals("READY", start("join").line(), "The folder is still shared");
+    }
+
+    @Test
+    void maintenanceHoldsEveryOperationLeaseUntilItEnds() throws Exception {
+        join();
+        AppContext shop = AppContextLoader.load(location);
+        ExecutorService other = stoppableWorkers(1);
+        Path receipt = location.directory().resolve("pending-stock-receipt.properties");
+        try (DataFolderCoordinator.Maintenance ignored = coordinator.beginMaintenance(Duration.ofSeconds(5))) {
+            assertThrows(java.util.concurrent.ExecutionException.class,
+                    () -> other.submit(() -> new FilePendingReceiptStore(receipt).load()).get(10, TimeUnit.SECONDS),
+                    "A stock receipt or correction cannot start");
+            assertThrows(java.util.concurrent.ExecutionException.class,
+                    () -> other.submit(() -> new PendingCheckoutStore(location.pendingCheckoutFile()).load()).get(10, TimeUnit.SECONDS),
+                    "A cash sale cannot start");
+            assertThrows(PendingImportStore.BusyException.class, () -> new PendingImportStore(location.directory(), shop.shopId()),
+                    "The import screen cannot open");
+        }
+        other.submit(() -> new FilePendingReceiptStore(receipt).load()).get(10, TimeUnit.SECONDS);
+        other.submit(() -> new PendingCheckoutStore(location.pendingCheckoutFile()).load()).get(10, TimeUnit.SECONDS);
+        new PendingImportStore(location.directory(), shop.shopId()).close();
+    }
+
+    // ----- Explicit paths, and never a wait on the Swing thread -----
+
+    @Test
+    void duringMaintenanceOnlyItsOwnPathReachesTheDatabase() throws Exception {
+        join();
+        AppContextLoader.load(location);
+        try (DataFolderCoordinator.Maintenance maintenance = coordinator.beginMaintenance(Duration.ofSeconds(5))) {
+            assertThrows(java.sql.SQLException.class, () -> database().open(),
+                    "An ordinary connection on the maintenance thread is refused, not let through");
+            try (Connection own = maintenance.openDatabase()) {
+                assertTrue(own.isValid(5));
+            }
+        }
+        try (Connection afterwards = database().open()) {
+            assertTrue(afterwards.isValid(5), "Ordinary connections work again afterwards");
+        }
+    }
+
+    @Test
+    void theSwingThreadNeverWaitsAndNeverStartsMaintenance() throws Exception {
+        join();
+        AppContextLoader.load(location);
+        SwingUtilities.invokeAndWait(() -> assertThrows(IllegalStateException.class,
+                () -> coordinator.beginMaintenance(Duration.ofSeconds(5))));
+
+        ExecutorService maintainer = stoppableWorkers(1);
+        CompletableFuture<Void> started = new CompletableFuture<>(), finish = new CompletableFuture<>();
+        maintainer.submit(() -> {
+            try (DataFolderCoordinator.Maintenance ignored = coordinator.beginMaintenance(Duration.ofSeconds(5))) {
+                started.complete(null);
+                finish.get(20, TimeUnit.SECONDS);
+            } catch (Exception failure) {
+                started.completeExceptionally(failure);
+            }
+            return null;
+        });
+        try {
+            started.get(10, TimeUnit.SECONDS);
+            long before = System.nanoTime();
+            SwingUtilities.invokeAndWait(() -> assertThrows(java.sql.SQLException.class, () -> database().open(),
+                    "On the Swing thread the connection is refused at once"));
+            assertTrue(System.nanoTime() - before < TimeUnit.SECONDS.toNanos(2), "It did not wait");
+        } finally {
+            finish.complete(null);
+        }
+    }
+
+    private static long filesUnder(Path folder) throws Exception {
+        if (!Files.exists(folder)) return 0;
+        try (var walk = Files.walk(folder)) { return walk.filter(Files::isRegularFile).count(); }
+    }
+
+    private ProductPhotoService photos() {
+        return new ProductPhotoService(new SqliteProductPhotoRepository(new SqliteDatabase(location.databaseFile())),
+                location.directory());
     }
 
     @Test

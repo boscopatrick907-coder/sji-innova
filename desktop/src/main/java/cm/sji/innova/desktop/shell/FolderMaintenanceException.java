@@ -12,6 +12,8 @@ public final class FolderMaintenanceException extends IOException {
         OTHER_INSTANCE,
         /** This Cella is still saving something and did not finish in time. */
         STILL_WORKING,
+        /** A receipt, correction, cash sale or import is in progress, or the import screen is open. */
+        OPERATION_RUNNING,
         /** A backup or restore is already running in this Cella. */
         ALREADY_RUNNING,
         /** This computer's file system cannot share the folder lock, so Cella will not risk it. */
