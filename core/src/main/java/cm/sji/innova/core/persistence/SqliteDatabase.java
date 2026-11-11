@@ -19,11 +19,24 @@ public final class SqliteDatabase {
     }
 
     /**
-     * Opens a connection. If the desktop installed a {@link DatabaseGate} for this file, the connection
-     * passes through it: opening may wait while a backup or restore runs.
+     * Opens a connection. If the desktop installed a {@link DatabaseGate} for this database's folder, the
+     * connection passes through it for its whole life: opening may wait while a backup or restore runs.
      */
     public Connection open() throws SQLException {
-        DatabaseGate.Gate gate = DatabaseGate.forFile(file);
+        return open(null);
+    }
+
+    /**
+     * Opens a maintenance connection. With the {@link DatabaseGate.Pass} of the gate installed for this
+     * database's folder, it does not wait at the gate; with any other pass it is refused. A {@code null}
+     * pass is the same as {@link #open()}.
+     */
+    public Connection open(DatabaseGate.Pass pass) throws SQLException {
+        DatabaseGate.Gate gate = DatabaseGate.forDatabase(file);
+        if (pass != null) {
+            if (!DatabaseGate.admits(pass, file)) throw new SQLException("This pass does not own this database's gate");
+            gate = null;    // the maintenance owner's own connection
+        }
         if (gate != null) gate.enter();
         Connection connection;
         try {

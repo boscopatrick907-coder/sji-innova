@@ -76,6 +76,44 @@ class DatabaseGateTest {
     }
 
     @Test
+    void onlyThePassOfTheInstalledGateGetsThroughAPausedGate() throws Exception {
+        file = directory.resolve("cella.db");
+        new SqliteDatabase(file).initialize();
+        DatabaseGate.Gate paused = new DatabaseGate.Gate() {
+            @Override public void enter() throws SQLException { throw new SQLException("Paused for a backup"); }
+            @Override public void leave() { left.incrementAndGet(); }
+        };
+        DatabaseGate.Pass own = DatabaseGate.install(file, paused);
+        Path elsewhere = directory.resolve("other").resolve("cella.db");
+        DatabaseGate.Pass foreign = DatabaseGate.install(elsewhere, counting);
+        try {
+            assertThrows(SQLException.class, () -> new SqliteDatabase(file).open(), "Ordinary connections are paused");
+            try (Connection maintenance = new SqliteDatabase(file).open(own)) {
+                assertTrue(maintenance.isValid(5), "The owner's pass gets through");
+            }
+            assertThrows(SQLException.class, () -> new SqliteDatabase(file).open(foreign), "Another gate's pass does not");
+            assertEquals(0, left.get());
+        } finally {
+            DatabaseGate.remove(file, paused);
+            DatabaseGate.remove(elsewhere, counting);
+        }
+    }
+
+    @Test
+    void fileWorkInTheFolderEntersTheGateOnceAndDoesNothingWithoutOne() throws Exception {
+        file = directory.resolve("cella.db");
+        try (DatabaseGate.Work none = DatabaseGate.enterFolder(directory)) {
+            assertEquals(0, entered.get(), "No gate, nothing entered");
+        }
+        DatabaseGate.install(file, counting);
+        DatabaseGate.Work work = DatabaseGate.enterFolder(directory);
+        assertEquals(1, entered.get());
+        work.close();
+        work.close();
+        assertEquals(1, left.get(), "Left exactly once");
+    }
+
+    @Test
     void withoutAGateNothingChanges() throws Exception {
         file = directory.resolve("cella.db");
         new SqliteDatabase(file).initialize();
