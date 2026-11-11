@@ -47,7 +47,7 @@ import java.util.logging.Logger;
 public final class ForcedClose {
     private static final String PAUSED = "PAUSED";
     private static final String FINISHED = "FINISHED";
-    private static final Set<String> RUNS = Set.of("execute", "executeUpdate", "executeLargeUpdate", "executeBatch");
+    private static final Set<String> RUNS = Set.of("execute", "executeQuery", "executeUpdate", "executeLargeUpdate", "executeBatch");
     private static volatile String stopAfter;
     private static volatile int stopAt;
     private static final AtomicInteger seen = new AtomicInteger();
@@ -149,6 +149,15 @@ public final class ForcedClose {
      * waits until the system has released its locks on the data folder's files.
      */
     public static void runAndKill(Class<?> main, Path dataFolder, String... args) throws Exception {
+        runAndKill(main, dataFolder, true, args);
+    }
+
+    /**
+     * As {@link #runAndKill(Class, Path, String...)}. With {@code databaseOpen} false, the process is not
+     * expected to hold the shop's database open at its moment (for example a backup checking the copy it
+     * wrote), so its write-ahead log is not used as proof of the crash: the caller checks its own traces.
+     */
+    public static void runAndKill(Class<?> main, Path dataFolder, boolean databaseOpen, String... args) throws Exception {
         List<String> command = new ArrayList<>(List.of(Path.of(System.getProperty("java.home"), "bin",
                         System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("win") ? "java.exe" : "java").toString(),
                 "-Djava.awt.headless=true", "-cp", System.getProperty("java.class.path"), main.getName(),
@@ -171,7 +180,7 @@ public final class ForcedClose {
             }
         }
         // A clean exit folds SQLite's write-ahead log into the database and removes it; a crash leaves it.
-        assertTrue(Files.exists(dataFolder.resolve("cella.db-wal")), "The process died without closing the database");
+        if (databaseOpen) assertTrue(Files.exists(dataFolder.resolve("cella.db-wal")), "The process died without closing the database");
         waitUntilReleased(dataFolder);
     }
 
