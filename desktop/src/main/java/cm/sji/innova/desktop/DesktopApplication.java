@@ -3,6 +3,7 @@ package cm.sji.innova.desktop;
 import cm.sji.innova.desktop.shell.AppContext;
 import cm.sji.innova.desktop.shell.AppContextLoader;
 import cm.sji.innova.desktop.shell.AppLogging;
+import cm.sji.innova.desktop.shell.DataFolderCoordinator;
 import cm.sji.innova.desktop.shell.LocalAppData;
 import cm.sji.innova.desktop.shell.Messages;
 import cm.sji.innova.desktop.shell.ShellPanel;
@@ -30,8 +31,20 @@ import javax.swing.SwingUtilities;
  */
 public final class DesktopApplication {
     private static final Logger LOG = Logger.getLogger(DesktopApplication.class.getName());
+    /** This Cella's place in its data folder, kept until it exits; the system then releases the lock. */
+    private static DataFolderCoordinator.Membership folderMembership;
 
     private DesktopApplication() { }
+
+    /**
+     * Opens the shop as a running Cella: first joins the data folder (OFF-03a1), before reading the shop
+     * ID or opening the database, then loads the shop. Refused while another Cella is making a backup or
+     * restore of this shop; the start-up page then offers Retry.
+     */
+    public static synchronized AppContext openShop(LocalAppData location) throws Exception {
+        if (folderMembership == null) folderMembership = DataFolderCoordinator.forFolder(location).join();
+        return AppContextLoader.load(location);
+    }
 
     public static void main(String[] args) throws Exception {
         if (args.length == 2 && "--product-demo".equals(args[0])) {
@@ -55,7 +68,7 @@ public final class DesktopApplication {
             setUpLookAndFeel();
             JFrame frame = new JFrame(messages.get("app.title"));
             ShellPanel shell = new ShellPanel(messages, location,
-                    () -> AppContextLoader.load(location), () -> System.exit(0));
+                    () -> openShop(location), () -> System.exit(0));
             frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
             frame.setContentPane(shell);
             frame.setSize(1100, 720);
