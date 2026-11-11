@@ -1,5 +1,6 @@
 package cm.sji.innova.desktop.backup;
 
+import static cm.sji.innova.desktop.backup.ArchiveEdits.relist;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -16,26 +17,15 @@ import cm.sji.innova.desktop.shell.AppContextLoader;
 import cm.sji.innova.desktop.shell.DataFolderCoordinator;
 import cm.sji.innova.desktop.shell.LocalAppData;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.MessageDigest;
-import java.sql.DriverManager;
 import java.time.Clock;
-import java.util.HexFormat;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
-import java.util.zip.ZipOutputStream;
 import javax.imageio.ImageIO;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -128,6 +118,23 @@ class BackupArchiveTest {
             entries.put(shouted, entries.get(photo));
             relist(entries, manifest -> { });
         }), "same name");
+
+        // An extra photo, listed, in another shop's folder: unused by the database, so only the shop rule can stop it.
+        String foreign = "photos/" + UUID.randomUUID() + photo.substring(photo.lastIndexOf('/'));
+        assertRefused(rewrite(entries -> {
+            entries.put(foreign, entries.get(photo));
+            relist(entries, manifest -> { });
+        }), "another shop");
+    }
+
+    @Test
+    void extractUnpacksEveryListedFileUnderItsNameAndNothingElse() throws Exception {
+        Path folder = scratch();
+
+        BackupArchive.Contents contents = BackupArchive.extract(good, folder);
+
+        assertEquals(contents.files(), RestorePreparation.fingerprint(folder), "Each listed file, with its listed SHA-256, and no other");
+        assertTrue(contents.files().keySet().containsAll(List.of("cella.db", "shop-id.txt", photoEntry())));
     }
 
     @Test
@@ -143,7 +150,14 @@ class BackupArchiveTest {
     void aDatabaseThatDoesNotMatchItsManifestIsRefused() throws Exception {
         Path counts = rewrite(entries -> relist(entries, manifest -> manifest.setProperty("products", "3")));
         assertRefused(counts, "counts");
-        Path otherShop = rewrite(entries -> relist(entries, manifest -> manifest.setProperty("shopId", UUID.randomUUID().toString())));
+        // The manifest names another shop, and the photos are moved to its folder, so only the shop ID file can tell.
+        String other = UUID.randomUUID().toString();
+        Path otherShop = rewrite(entries -> {
+            for (String name : List.copyOf(entries.keySet())) {
+                if (name.startsWith("photos/")) entries.put("photos/" + other + name.substring(name.lastIndexOf('/')), entries.remove(name));
+            }
+            relist(entries, manifest -> manifest.setProperty("shopId", other));
+        });
         assertRefused(otherShop, "shop ID");
 
         Path anotherShopsSale = rewrite(entries -> {
@@ -184,58 +198,10 @@ class BackupArchiveTest {
 
     /** A copy of the good backup with its entries changed by {@code change} (the manifest is an entry too). */
     private Path rewrite(Consumer<Map<String, byte[]>> change) throws Exception {
-        Map<String, byte[]> entries = new LinkedHashMap<>();
-        try (ZipFile zip = new ZipFile(good.toFile())) {
-            for (ZipEntry entry : zip.stream().toList()) {
-                try (InputStream in = zip.getInputStream(entry)) { entries.put(entry.getName(), in.readAllBytes()); }
-            }
-        }
-        change.accept(entries);
-        Path changed = directory.resolve("changed-" + UUID.randomUUID() + ".zip");
-        try (OutputStream file = Files.newOutputStream(changed); ZipOutputStream zip = new ZipOutputStream(file)) {
-            for (var entry : entries.entrySet()) {
-                zip.putNextEntry(new ZipEntry(entry.getKey()));
-                zip.write(entry.getValue());
-                zip.closeEntry();
-            }
-        }
-        return changed;
-    }
-
-    /** Lists every entry again in the manifest with its real size and SHA-256, after {@code edit}. */
-    private static void relist(Map<String, byte[]> entries, Consumer<Properties> edit) {
-        try {
-            Properties manifest = new Properties();
-            manifest.load(new ByteArrayInputStream(entries.get("manifest.properties")));
-            manifest.stringPropertyNames().stream().filter(key -> key.startsWith("file.")).forEach(manifest::remove);
-            int i = 0;
-            for (var entry : entries.entrySet()) {
-                if (entry.getKey().equals("manifest.properties")) continue;
-                manifest.setProperty("file." + i + ".path", entry.getKey());
-                manifest.setProperty("file." + i + ".size", Integer.toString(entry.getValue().length));
-                manifest.setProperty("file." + i + ".sha256", HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(entry.getValue())));
-                i++;
-            }
-            manifest.setProperty("files", Integer.toString(i));
-            edit.accept(manifest);
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            manifest.store(out, null);
-            entries.put("manifest.properties", out.toByteArray());
-        } catch (Exception failure) {
-            throw new IllegalStateException(failure);
-        }
+        return ArchiveEdits.rewrite(good, directory.resolve("changed-" + UUID.randomUUID() + ".zip"), change);
     }
 
     private byte[] editDatabase(byte[] database, String sql) {
-        try {
-            Path copy = Files.createTempFile(directory, "edit-", ".db");
-            Files.write(copy, database);
-            try (var connection = DriverManager.getConnection("jdbc:sqlite:" + copy); var statement = connection.createStatement()) {
-                statement.execute(sql);
-            }
-            return Files.readAllBytes(copy);
-        } catch (Exception failure) {
-            throw new IllegalStateException(failure);
-        }
+        return ArchiveEdits.editDatabase(database, directory, sql);
     }
 }

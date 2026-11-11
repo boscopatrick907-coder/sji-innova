@@ -367,7 +367,7 @@ public final class BackupService {
         }
     }
 
-    private static String sha256(Path file) throws IOException {
+    static String sha256(Path file) throws IOException {
         MessageDigest sha;
         try {
             sha = MessageDigest.getInstance("SHA-256");
@@ -385,7 +385,7 @@ public final class BackupService {
         return new BackupException(BackupException.Reason.CHECK_FAILED, List.of(), why);
     }
 
-    private static void deleteTree(Path root) throws IOException {
+    static void deleteTree(Path root) throws IOException {
         if (!Files.exists(root)) return;
         List<Path> paths;
         try (var walk = Files.walk(root)) { paths = walk.sorted(Comparator.reverseOrder()).toList(); }
