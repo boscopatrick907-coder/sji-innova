@@ -18,17 +18,29 @@ public final class SqliteDatabase {
         this.file = file.toAbsolutePath().normalize();
     }
 
+    /**
+     * Opens a connection. If the desktop installed a {@link DatabaseGate} for this file, the connection
+     * passes through it: opening may wait while a backup or restore runs.
+     */
     public Connection open() throws SQLException {
-        Connection connection = DriverManager.getConnection("jdbc:sqlite:" + file);
-        try (var statement = connection.createStatement()) {
-            statement.execute("PRAGMA foreign_keys = ON");
-            statement.execute("PRAGMA busy_timeout = 5000");
-            statement.execute("PRAGMA synchronous = FULL");
-        } catch (SQLException failure) {
-            connection.close();
+        DatabaseGate.Gate gate = DatabaseGate.forFile(file);
+        if (gate != null) gate.enter();
+        Connection connection;
+        try {
+            connection = DriverManager.getConnection("jdbc:sqlite:" + file);
+            try (var statement = connection.createStatement()) {
+                statement.execute("PRAGMA foreign_keys = ON");
+                statement.execute("PRAGMA busy_timeout = 5000");
+                statement.execute("PRAGMA synchronous = FULL");
+            } catch (SQLException failure) {
+                connection.close();
+                throw failure;
+            }
+        } catch (SQLException | RuntimeException failure) {
+            if (gate != null) gate.leave();
             throw failure;
         }
-        return connection;
+        return gate == null ? connection : DatabaseGate.leavingOnClose(connection, gate);
     }
 
     public void initialize() throws SQLException, IOException {
