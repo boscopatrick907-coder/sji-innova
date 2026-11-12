@@ -3,7 +3,8 @@
 `cm.sji.innova.desktop.backup.RestoreInstaller` is the second half of restoring a backup, following
 "Exclusive restore with a durable recovery journal" in `docs/design/BACKUP_RESTORE.md`. It installs a restore
 that `RestorePreparation` scheduled (OFF-03b1, `RESTORE.md`), and finishes or undoes one that a crash
-interrupted. Nothing calls it yet: OFF-03b3 will call it at start-up. There is no screen (OFF-03c).
+interrupted. Cella calls it at start-up from `DesktopApplication.openShop` (OFF-03b3a, below). There is no screen
+(OFF-03c).
 
 ```java
 RestoreInstaller.Result result = new RestoreInstaller(location, coordinator, clock).atStart();
@@ -85,9 +86,27 @@ A journal that cannot be read, or that names an item a restore never moves, is r
 While a journal exists, no new restore can be prepared, and `RestorePreparation.discard` never removes a
 restore that ran or is running.
 
+## At start-up (OFF-03b3a)
+
+`DesktopApplication.openShop`, which the start-up page runs in the background, now does, in this order:
+1. joins the data folder (OFF-03a1);
+2. `RestoreInstaller.atStart()`, **before anything reads `shop-id.txt` or opens the database**;
+3. loads the shop.
+
+- **Nothing scheduled:** step 2 takes nothing; start-up is as before.
+- **Restored, or put back:** the shop opens. The outcome is written to the log (`logs/cella-0.log`): an
+  information line for a restore, a warning with the reason for one that was undone.
+- **Refused** (another Cella is open, the prepared files changed, saved work, a damaged journal, a restore
+  that needs repair): the shop does not open. The start-up page's existing error view shows the message and
+  offers Retry; the restore stays as it was.
+
+The start page itself is unchanged: telling the person "Restoring…" or "the restore was undone" needs a
+change to `ShellPanel`, which waits for Patrick's agreement (OFF-03b3b). Until the restore screen exists
+(OFF-03c), nobody can schedule a restore, so nothing changes for anyone yet.
+
 ## Tests
 
-**`RestoreInstallerTest` (13)** copies a shop that was backed up and then changed (Soap added), and
+**`RestoreInstallerTest` (16)** copies a shop that was backed up and then changed (Soap added), and
 schedules the backup in each copy. "The whole old shop" and "the whole new shop" are checked by the
 fingerprint of every item and of `device-id.txt`, then by the products in the database.
 
@@ -106,6 +125,9 @@ fingerprint of every item and of `device-id.txt`, then by the products in the da
 | `aLogLeftBesideTheOldDatabaseGoesAsideWithItAndComesBackWithIt` | A `cella.db-wal` beside the old database moves aside with it, comes back with it, and is never beside the restored one |
 | `setAsideFilesOfTheBackupStayInactiveAndTheOldShopsGoAside` | Nothing waits for a decision after the restore; the old shop's set-aside file is kept with it |
 | `aRestoreThatRanIsNeverDiscarded` | `discard` refuses; the old shop and the pre-restore backup are kept |
+| `aCellaStartingWithAScheduledRestoreOpensTheRestoredShop` | A real Cella started through `openShop` opens the restored shop, with this computer's device ID and the old shop kept aside |
+| `aCellaStartingAfterACrashInTheMiddleOfARestorePutsTheOldShopBackBeforeReadingItsIdentity` | With `shop-id.txt` and `cella.db` set aside by an interrupted restore, a starting Cella opens the whole old shop with its own identity: none is invented |
+| `anotherOpenCellaStopsARestoreAtStartUpUntilItCloses` | A starting Cella is refused while another is open, with nothing moved; once it closes, starting again restores |
 
 `RestorePreparationTest` and `BackupServiceTest` run unchanged. The crash-test helper `ForcedClose` gains
 `reached(step)`, so a restore step can be a kill point, and no longer creates `cella.db` when checking a
@@ -113,8 +135,9 @@ folder where a restore had moved it aside.
 
 ## Not yet
 
-- **Nothing calls `atStart()` yet.** OFF-03b3 calls it at start-up, before identity and services, and
-  shows "Restoring…", "Close the other Cella" and a page for `NEEDS_REPAIR`.
+- **The start page does not say what the restore did** (OFF-03b3b, after Patrick's agreement on
+  `ShellPanel`): "Restoring…", "the restore was undone because…", and a clearer page for `NEEDS_REPAIR`.
+  Today a refusal shows on the existing error page with Retry, and outcomes are only in the log.
 - The screen, cancelling a scheduled restore, and removing old restores: OFF-03c.
 - Power loss is not tested. Files and the journal are forced to the disk, but a rename's folder entry is
   not (Java cannot do that on Windows), and a power cut is not simulated.

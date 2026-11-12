@@ -41,7 +41,7 @@ not make backups.** Nothing changes on screen yet. Backup (OFF-03a3) and restore
 | `core/persistence/DatabaseGate` | Installed per folder. `SqliteDatabase.open()` enters it before opening and leaves it once on close (or on a failed open). `enterFolder(folder)` covers file work. `open(pass)` is the owner's maintenance path. Without a gate, nothing changes. |
 | `core/product/photo/PhotoStoreLock` | Now enters the folder gate before the photo lock, so every photo change takes part. Connections a photo change opens inside its work never wait for it. |
 | `shell/DataFolderCoordinator` | One per folder per process, with one lock-file handle shared by every window: on Linux, closing any second handle to a file drops the process's lock. Provides `join()` (membership; the last one to close lets go), `beginMaintenance(drain)`, `Maintenance.openDatabase()` and `Maintenance.close()`. |
-| `DesktopApplication.openShop` | Cella's start-up: joins the folder, then loads the shop. The membership lasts until Cella exits; the system then releases the lock. |
+| `DesktopApplication.openShop` | Cella's start-up: joins the folder, then finishes, undoes or runs a restore (OFF-03b3a, `RESTORE_RUN.md`), then loads the shop. The membership lasts until Cella exits; the system then releases the lock. |
 
 **Lock order:** maintenance first, then the stock, checkout and import leases. Never begin maintenance
 while holding one of those. Close a `Maintenance` on the thread that began it.
@@ -88,7 +88,7 @@ until a background thread gets it.
 
 - Older Cella versions, other programs and database tools do not take part. Close them before a
   backup or restore.
-- The start-up check for an unfinished restore belongs to OFF-03b, which defines the restore journal.
+- The start-up check for an unfinished or scheduled restore is in `openShop` since OFF-03b3a; see `RESTORE_RUN.md`.
 - Live SQLite on a network share is not supported.
 
 ## Review correction: one gate for all paths to a shop
