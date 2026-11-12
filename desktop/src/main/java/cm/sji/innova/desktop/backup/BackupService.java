@@ -205,6 +205,27 @@ public final class BackupService {
         return Optional.of(p);
     }
 
+    /** The last backup this shop published, as recorded right after its publication (OFF-03c). */
+    public record LastBackup(UUID backupId, Path file, String sha256, Instant createdAt) {
+        /** How long ago it was made, by {@code clock}. */
+        public Duration age(Clock clock) {
+            return Duration.between(createdAt, clock.instant());
+        }
+    }
+
+    /**
+     * The last backup this shop published, if one was recorded. A record that cannot be read counts as none:
+     * a reminder then asks for a backup, which is the safe side.
+     */
+    public Optional<LastBackup> lastSuccess() {
+        try {
+            return lastBackup().map(p -> new LastBackup(UUID.fromString(p.getProperty("backupId")), Path.of(p.getProperty("file")),
+                    Objects.requireNonNull(p.getProperty("sha256")), Instant.parse(p.getProperty("createdAt"))));
+        } catch (IOException | RuntimeException unreadable) {
+            return Optional.empty();
+        }
+    }
+
     /** Under maintenance: no saved request, and a decision for every set-aside file. */
     private void refuseUnresolvedWork() throws IOException {
         List<String> saved = SAVED_REQUESTS.stream().filter(name -> Files.exists(location.directory().resolve(name))).toList();

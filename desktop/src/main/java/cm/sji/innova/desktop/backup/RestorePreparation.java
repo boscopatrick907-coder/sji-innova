@@ -178,6 +178,39 @@ public final class RestorePreparation {
         }
     }
 
+    /**
+     * The person changed their mind before the next start (OFF-03c): the scheduled restore will not run. The
+     * note goes first, so from then on nothing is scheduled; then the prepared copy is removed, unless its
+     * folder also holds a pre-restore backup from an attempt that stopped, which is kept. A note that cannot be
+     * read is removed too: cancelling is the way out of it. Refused once the restore has started (a journal
+     * exists). Returns whether a restore was scheduled.
+     */
+    public boolean cancelScheduled() throws IOException, SQLException {
+        refuseTheSwingThread();
+        try (DatabaseGate.Work ignored = DatabaseGate.enterFolder(location.directory())) {
+            if (Files.exists(location.directory().resolve(RestoreJournal.FILE))) {
+                throw new RestoreException(RestoreException.Reason.ALREADY_SCHEDULED,
+                        "This restore has started and can no longer be cancelled.");
+            }
+            Path note = root().resolve(SCHEDULED);
+            if (!Files.exists(note)) return false;
+            Optional<UUID> restoreId;
+            try {
+                restoreId = scheduled().map(Summary::restoreId);
+            } catch (RestoreException unreadable) {
+                restoreId = Optional.empty();   // its folder cannot be named; it stays, like any prepared restore
+            }
+            Files.delete(note);
+            if (restoreId.isPresent()) {
+                Path folder = root().resolve(restoreId.get().toString());
+                if (!Files.exists(folder.resolve(RestoreInstaller.PRE_RESTORE)) && !Files.exists(folder.resolve(RestoreInstaller.OLD))) {
+                    BackupService.deleteTree(folder);
+                }
+            }
+            return true;
+        }
+    }
+
     // ----- Steps -----
 
     private Path root() {
