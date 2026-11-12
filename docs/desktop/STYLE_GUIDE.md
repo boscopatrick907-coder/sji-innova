@@ -1,8 +1,19 @@
 # Cella desktop style — implementation guide
 
-Approved by Patrick, updated 7 November 2026. Use this for new screens and changes
+Approved by Patrick, updated 12 November 2026. Use this for new screens and changes
 to current screens. [Visual examples and verification](VISUAL_POLISH.md) accompany
 the code; older mockups/review screenshots are historical references.
+
+## Selected visual direction
+
+Patrick selected Atelier's warm paper/green gradient with Comptoir's clear sans-serif headings and
+readable numeric rows. Use PAPER `#F5F5EF`, INK `#22392F`, GREEN `#28664E` and shared borders; white
+surfaces retain restrained rounding. The sidebar is 248px on larger windows and 176px with readable
+labels below 1100px. Products remains the initial route; Accueil opens the live local overview.
+
+See [DASHBOARD.md](DASHBOARD.md) for exact metric definitions and limits. Browser mockups in
+`docs/design/visual-directions/` are archived explorations, not production data. Takou continues restore
+and backup/settings behavior; Patrick/Codex own shared presentation and dashboard changes.
 
 ## Reuse the existing components
 

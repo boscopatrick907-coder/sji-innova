@@ -7,14 +7,15 @@ import javax.swing.*;
 
 /** Shared desktop colors and small hand-drawn icons. No web assets or fonts needed. */
 public final class CatalogStyle {
-    public static final Color PAPER = new Color(0xF1F3ED), INK = new Color(0x22352B),
-            GREEN = new Color(0x256549), MUTED = new Color(0x63715E), LINE = new Color(0xE2E5DC);
+    public static final Color PAPER = new Color(0xF5F5EF), INK = new Color(0x22392F),
+            GREEN = new Color(0x28664E), MUTED = new Color(0x64715F), LINE = new Color(0xE1E6DA);
     private CatalogStyle() { }
     /** Applied after FlatLaf setup; uses the operating system's available sans-serif font. */
     public static void installDefaults() {
         UIManager.put("defaultFont", new Font(Font.SANS_SERIF,Font.PLAIN,14));
         UIManager.put("Button.disabledText",new Color(0x687268));UIManager.put("Button.disabledBackground",new Color(0xE3E7DF));
-        UIManager.put("Button.arc",14);UIManager.put("Component.arc",12);
+        UIManager.put("Button.arc",16);UIManager.put("Component.arc",14);
+        UIManager.put("Component.minimumHeight",40);UIManager.put("ScrollBar.width",11);
         UIManager.put("TextComponent.arc",12);UIManager.put("Component.focusWidth",1);
         UIManager.put("Component.borderColor",LINE);UIManager.put("Component.focusColor",GREEN);
         UIManager.put("Table.selectionBackground",new Color(0xE4F0E8));
@@ -33,27 +34,29 @@ public final class CatalogStyle {
             @Override protected void paintComponent(Graphics graphics){
                 Graphics2D g=(Graphics2D)graphics.create();
                 g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
-                g.setColor(new Color(0,0,0,12));g.fillRoundRect(1,3,getWidth()-2,getHeight()-4,18,18);
-                g.setColor(Color.WHITE);g.fillRoundRect(0,0,getWidth()-1,getHeight()-4,18,18);
-                g.setColor(LINE);g.drawRoundRect(0,0,getWidth()-1,getHeight()-4,18,18);g.dispose();
+                g.setColor(new Color(0,0,0,12));g.fillRoundRect(1,3,getWidth()-2,getHeight()-4,24,24);
+                g.setColor(Color.WHITE);g.fillRoundRect(0,0,getWidth()-1,getHeight()-4,24,24);
+                g.setColor(LINE);g.drawRoundRect(0,0,getWidth()-1,getHeight()-4,24,24);g.dispose();
             }
         };
-        panel.setOpaque(false);panel.setBorder(BorderFactory.createEmptyBorder(14,16,14,16));
+        panel.setOpaque(false);panel.setBorder(BorderFactory.createEmptyBorder(18,20,18,20));
         return panel;
     }
     /** Keep large monetary amounts fully visible in a narrow basket without changing their text. */
-    public static JLabel amountLabel(){
-        Font base=new Font(Font.SANS_SERIF,Font.BOLD,26);
+    public static JLabel amountLabel(){return amountLabel(26);}
+    public static JLabel amountLabel(int size){
+        Font base=new Font(Font.SANS_SERIF,Font.BOLD,size);
         JLabel label=new JLabel(){
-            @Override public Dimension getPreferredSize(){return new Dimension(0,36);}
-            @Override public Dimension getMinimumSize(){return new Dimension(0,36);}
+            @Override public Dimension getPreferredSize(){return new Dimension(0,size+10);}
+            @Override public Dimension getMinimumSize(){return new Dimension(0,size+10);}
             @Override protected void paintComponent(Graphics graphics){
                 Insets insets=getInsets();int available=getWidth()-insets.left-insets.right;if(available<=0)return;
                 Graphics2D g=(Graphics2D)graphics.create();g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
                 Font font=base;String text=getText()==null?"":getText();
                 while(g.getFontMetrics(font).stringWidth(text)>available&&font.getSize2D()>8)font=font.deriveFont(font.getSize2D()-.5f);
                 g.setFont(font);g.setColor(getForeground());FontMetrics metrics=g.getFontMetrics();
-                g.drawString(text,getWidth()-insets.right-metrics.stringWidth(text),(getHeight()-metrics.getHeight())/2+metrics.getAscent());g.dispose();
+                int x=getHorizontalAlignment()==SwingConstants.LEFT?insets.left:getWidth()-insets.right-metrics.stringWidth(text);
+                g.drawString(text,x,(getHeight()-metrics.getHeight())/2+metrics.getAscent());g.dispose();
             }
         };
         label.setFont(base);label.setForeground(INK);label.setHorizontalAlignment(SwingConstants.RIGHT);return label;
@@ -199,7 +202,7 @@ public final class CatalogStyle {
                 setBorder(BorderFactory.createEmptyBorder(0,10,0,10));return this;
             }
         });
-        table.getTableHeader().setFont(new Font(Font.SANS_SERIF,Font.BOLD,12));
+        table.getTableHeader().setFont(new Font(Font.SANS_SERIF,Font.BOLD,13));
         table.getTableHeader().setBackground(new Color(0xF0F4EE));table.getTableHeader().setForeground(MUTED);
         table.getTableHeader().setPreferredSize(new Dimension(10,36));
     }
@@ -247,7 +250,10 @@ public final class CatalogStyle {
             Graphics2D g=(Graphics2D)graphics.create();g.translate(x,y);
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
             g.setColor(c.getForeground());g.setStroke(new BasicStroke(1.3f));
-            if(section==1){
+            if(section==-1){
+                g.drawPolyline(new int[]{2,10,18},new int[]{9,2,9},3);
+                g.drawRect(4,9,12,9);g.drawRect(8,12,4,6);
+            }else if(section==1){
                 g.drawLine(2,2,2,18);g.drawLine(18,2,18,18);
                 g.drawLine(2,10,18,10);g.drawLine(2,18,18,18);
                 g.drawRect(5,3,9,7);g.drawRect(5,12,5,6);g.drawRect(12,13,4,5);

@@ -29,7 +29,9 @@ after these milestones. No additional assignment to another collaborator is impl
 
 ## Design ownership and file coordination
 
-Patrick and Codex are preparing [two interactive visual proposals](../design/visual-directions/index.html).
+Patrick selected Atelier’s warm green/ivory palette with Comptoir’s clear sans-serif typography.
+Patrick and Codex are implementing that direction; see [the shared style guide](../desktop/STYLE_GUIDE.md)
+and [live dashboard contract](../desktop/DASHBOARD.md). The [two visual proposals](../design/visual-directions/index.html) remain reference mockups.
 They own the expanded sidebar, typography, shared components, visual migration and dashboard. You do
 not need to build competing mockups, redesign Products/Stock/Sales or implement the dashboard now.
 
@@ -37,7 +39,7 @@ Use current CatalogStyle and FeedbackStrip for functional Settings UI. Keep comp
 separate from restore/backup logic so the approved style can be applied later. Before editing
 ShellPanel, CatalogStyle, FeedbackStrip, AppContext or common bundles, tell Patrick which files and
 contracts you need; agree the small shared change first. Prefer a self-contained settings package.
-Production visual choices remain unchanged until Patrick selects a proposal.
+Follow the approved shared tokens and components; keep restore/backup behavior independent of styling.
 
 Read [STYLE_GUIDE.md](../desktop/STYLE_GUIDE.md), [DATA_FOLDER.md](../desktop/DATA_FOLDER.md),
 [RECOVERY_EVIDENCE.md](../desktop/RECOVERY_EVIDENCE.md), [BACKUP.md](../desktop/BACKUP.md), and the actual

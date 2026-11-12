@@ -20,7 +20,7 @@ final class ProductRowRenderer implements TableCellRenderer {
         Product product=products.get(table.convertRowIndexToModel(row));
         JPanel cell=new JPanel(new BorderLayout(14,0));
         cell.setToolTipText(product.name()+" · "+Objects.toString(product.reference(),"")+" · "+value);
-        cell.setBackground(selected?new Color(0xE4F0E8):Color.WHITE);
+        cell.setBackground(selected?table.getSelectionBackground():Color.WHITE);
         cell.setBorder(BorderFactory.createEmptyBorder(10,14,10,14));
         if(column==0){
             Icon photo=thumbnails.request(product.id()).getNow(null);
@@ -32,16 +32,17 @@ final class ProductRowRenderer implements TableCellRenderer {
             reference.setForeground(CatalogStyle.MUTED);text.add(reference);cell.add(text,BorderLayout.CENTER);
         }else{
             JPanel text=CatalogStyle.panel(new GridLayout(0,1,0,5));
-            text.add(CatalogStyle.label(String.valueOf(value),column==3?16:15,column==3));
+            JLabel amount=CatalogStyle.label(String.valueOf(value),column==3?16:15,column==3);
+            amount.setHorizontalAlignment(SwingConstants.RIGHT);text.add(amount);
             JLabel caption=CatalogStyle.label(messages.getString(column==3?"catalog.price":"catalog.available"),12,false);
-            caption.setForeground(CatalogStyle.MUTED);text.add(caption);cell.add(text,BorderLayout.CENTER);
+            caption.setForeground(CatalogStyle.MUTED);caption.setHorizontalAlignment(SwingConstants.RIGHT);text.add(caption);cell.add(text,BorderLayout.CENTER);
         }
         if(focus)cell.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(CatalogStyle.GREEN),cell.getBorder()));
         cell.setSize(table.getColumnModel().getColumn(column).getWidth(),Math.max(1,table.getRowHeight(row)-table.getRowMargin()));
         layout(cell);return cell;
     }
     private static void layout(Container parent){parent.doLayout();for(Component child:parent.getComponents())if(child instanceof Container nested)layout(nested);}
-    private record InitialIcon(String name) implements Icon {
+    record InitialIcon(String name) implements Icon {
         public int getIconWidth(){return 64;}public int getIconHeight(){return 64;}
         public void paintIcon(Component c,Graphics graphics,int x,int y){
             Graphics2D g=(Graphics2D)graphics.create();g.translate(x,y);

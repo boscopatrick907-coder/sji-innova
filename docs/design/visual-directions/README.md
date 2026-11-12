@@ -26,6 +26,13 @@ Use the top switches **A · Atelier** and **B · Comptoir**, then the sidebar:
 
 Temporary sample additions and basket changes disappear on reload. No browser storage is used.
 
+## Selected direction
+
+Patrick approved Atelier's warmth with Comptoir's clear typography on 12 November 2026. The Java
+implementation retains real families/variants, photos, cash checkout and recovery, and adds a real
+read-only local overview. These browser figures remain illustrative. See
+[the Java dashboard contract](../../desktop/DASHBOARD.md) for actual reporting definitions.
+
 ## How the directions differ
 
 | | A · Atelier | B · Comptoir |
