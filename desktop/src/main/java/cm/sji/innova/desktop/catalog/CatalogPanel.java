@@ -154,7 +154,7 @@ public final class CatalogPanel extends JPanel {
                 familiesSection.add(CatalogStyle.label(t("catalog.familiesHeading"),18,true),BorderLayout.NORTH);
                 familiesSection.add(cards,BorderLayout.CENTER);
                 JScrollPane familyScroll=new JScrollPane(familiesSection);familyScroll.setBorder(null);familyScroll.getViewport().setBackground(CatalogStyle.PAPER);
-                familyScroll.setPreferredSize(new Dimension(200,Math.min(170,familiesSection.getPreferredSize().height+6)));
+                familyScroll.setPreferredSize(new Dimension(200,Math.min(300,familiesSection.getPreferredSize().height+6)));
                 overview.add(familyScroll,BorderLayout.NORTH);
             }
             List<Product> standalone=items.stream().filter(p->p.familyId()==null).toList();
@@ -198,8 +198,18 @@ public final class CatalogPanel extends JPanel {
         long count=items.stream().filter(p->Objects.equals(id,p.familyId())).count();
         String summary=count+" "+t(count==1?"catalog.variantSingular":"catalog.variants");
         JButton open=CatalogStyle.arrowButton(name+"  ·  "+summary,false,false);
-        open.setHorizontalAlignment(SwingConstants.LEFT);open.setFont(new Font(Font.SANS_SERIF,Font.BOLD,14));
-        open.setBackground(Color.WHITE);open.setToolTipText(categoryName);open.setPreferredSize(new Dimension(260,48));
+        open.setHorizontalAlignment(SwingConstants.LEFT);open.setFont(new Font(Font.SANS_SERIF,Font.BOLD,15));
+        Product representative=items.stream().filter(p->Objects.equals(id,p.familyId())).findFirst().orElse(null);
+        open.setIcon(new Icon(){
+            public int getIconWidth(){return 64;}public int getIconHeight(){return 64;}
+            public void paintIcon(Component component,Graphics graphics,int x,int y){
+                Icon image=representative==null?null:thumbnails.request(representative.id()).getNow(null);
+                if(image==null)new ProductRowRenderer.InitialIcon(name).paintIcon(component,graphics,x,y);
+                else image.paintIcon(component,graphics,x,y);
+            }
+        });
+        open.setHorizontalTextPosition(SwingConstants.RIGHT);open.setIconTextGap(16);
+        open.setBackground(Color.WHITE);open.setToolTipText(categoryName);open.setPreferredSize(new Dimension(260,96));
         open.addActionListener(e->showFamily(id));return open;
     }
     private void renderDetails(Product p){

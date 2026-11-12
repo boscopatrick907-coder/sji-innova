@@ -1,188 +1,86 @@
-# Charles — current assignment
+# Takou / Charles — restore and backup/settings
 
-Updated 7 November 2026. This is the only current assignment file named after
-Charles. Follow this file; older role briefs and the combined NEXT_WORK.md have
-been removed. Technical references provide context, not additional assignments.
+Updated 12 November 2026. This is the only current assignment file named after Charles. Patrick has
+changed the work split: **Takou handles restore and backup/settings; Patrick and Codex handle the
+shared redesign and offline dashboard.** This replaces earlier sales-history-only and whole-roadmap briefs.
 
-## First: update your local project copy
+## What is already merged
 
-Wait until the pull request containing this brief and the shared style is merged. Close Cella and open a
-terminal in your existing sji-innova project folder. Run:
+Receipt history/details/references, recovery acceptance and forced-close tests, recovery guidance,
+and PRs #47–#49's folder coordinator, evidence decisions and checked backup-capture services.
+Their original commits and the additive review corrections remain intact. Do not rebuild those services.
 
-```sh
-git status
-```
+## Your immediate work
 
-If there are modified files or unfinished work, ask your AI editor to help commit
-or safely stash that work first. Do not discard changes or use reset --hard.
-With a clean working tree, run these commands one at a time:
+1. **OFF-03b — restore service:** follow [the corrected backup/restore contract](../design/BACKUP_RESTORE.md).
+   Validate archives and staged migrations before active data changes; obtain exclusive ownership;
+   verify a pre-restore backup; use the durable journal to recover coherent database/identity/photos/
+   evidence after a kill at every boundary. Handle WAL/SHM and device identity as specified.
+2. **OFF-03c — backup/settings functionality:** create/restore actions, destination, progress,
+   confirmed results, last successful backup, reminders/retention and FR/EN wording. Resolve remaining
+   product defaults with Patrick; do not describe an unimplemented restore or successful backup as ready.
+3. **OFF-03d — acceptance:** restore a disposable shop into another folder and compare products,
+   stock, sales, photos, evidence and identity. Include corrupted/unsupported backups, pending work,
+   interrupted restore and two-process exclusion on Windows/Linux.
+
+Deliver small reviewable PRs, not a combined rewrite. Keep the full checklist in
+[OFFLINE_COMPLETION.md](../roadmap/OFFLINE_COMPLETION.md); later backlog work is planned with Patrick
+after these milestones. No additional assignment to another collaborator is implied.
+
+## Design ownership and file coordination
+
+Patrick selected Atelier’s warm green/ivory palette with Comptoir’s clear sans-serif typography.
+Patrick and Codex are implementing that direction; see [the shared style guide](../desktop/STYLE_GUIDE.md)
+and [live dashboard contract](../desktop/DASHBOARD.md). The [two visual proposals](../design/visual-directions/index.html) remain reference mockups.
+They own the expanded sidebar, typography, shared components, visual migration and dashboard. You do
+not need to build competing mockups, redesign Products/Stock/Sales or implement the dashboard now.
+
+Use current CatalogStyle and FeedbackStrip for functional Settings UI. Keep component construction
+separate from restore/backup logic so the approved style can be applied later. Before editing
+ShellPanel, CatalogStyle, FeedbackStrip, AppContext or common bundles, tell Patrick which files and
+contracts you need; agree the small shared change first. Prefer a self-contained settings package.
+Follow the approved shared tokens and components; keep restore/backup behavior independent of styling.
+
+Read [STYLE_GUIDE.md](../desktop/STYLE_GUIDE.md), [DATA_FOLDER.md](../desktop/DATA_FOLDER.md),
+[RECOVERY_EVIDENCE.md](../desktop/RECOVERY_EVIDENCE.md), [BACKUP.md](../desktop/BACKUP.md), and the actual
+merged code. Prototype screenshots are not implementation instructions to replace the Java app with HTML.
+
+## Update safely and preserve work
+
+Close Cella. Run `git status` in the existing project. Preserve unfinished work by committing or safely
+stashing it; never discard it, reset hard, recreate another person's commits or force-push.
+
+After this assignment PR merges, with a clean worktree, run one command at a time:
 
 ```sh
 git switch main
 git pull --ff-only origin main
-git switch -c desktop/sales-history
+git switch -c desktop/backup-restore
 ```
 
-If any command fails, stop and resolve the message before continuing. If your
-feature branch already exists, inspect it with your AI editor instead of deleting
-or resetting it. Never force-push. The pull command downloads the team's merged
-work; the last command creates your own branch for this assignment.
+If you already started restore, inspect that branch and merge current main safely instead of creating
+another branch. Existing branches must not be deleted/restarted. Java and javac must be version 21;
+use the repository Maven wrapper. SQLite needs no separate installation.
 
-Both java -version and javac -version must report 21. Use the repository's Maven
-wrapper; SQLite does not need a separate installation. Follow README.md to build
-and launch the app.
+## Verification
 
-## Required UI style for this assignment
+Preserve immutable operation IDs, stored money/quantities, historical receipts, append-only movements,
+folder locks and evidence dispositions. Never perform database/file/image work on the Swing event
+thread. Keep all readers/writers and startup paths in the coordinator protocol; real path aliases
+must not bypass it. No automatic replay of restored operations.
 
-Patrick approved the shared app style on 7 November 2026. Read and follow
-[the implementation style guide](../desktop/STYLE_GUIDE.md) and
-[the current Java previews](../desktop/VISUAL_POLISH.md). This changes presentation
-requirements, not your functional milestone. Inspect current main rather than
-copying an older screen or the standalone VentesPanel demo.
+Run Java 21 `clean verify`, the packaged checks, and focused restore/process tests. Include Windows
+and Linux CI evidence, screenshots for UI, actual native/manual checks and any limits separately.
+Wait for background workers before deleting test folders or releasing membership; use bounded child
+cleanup. Do not use live shop data for failure drills.
 
-Reuse CatalogStyle and FeedbackStrip for cards, headings, buttons, arrows, search,
-720px forms, aligned tables, rounded badges and typed messages. Do not create your
-own palette or per-screen UIManager overrides. Keep the green sidebar/gradient.
-Use French/English bundles, readable disabled controls and explicit keyboard actions.
-Treat unavailable data as unavailable, never as zero or a successful empty result.
-
-If you already started on your feature branch, preserve/commit or safely stash
-unfinished work, skip the new-branch creation above, and merge the latest main:
-
-```sh
-git fetch origin
-git switch desktop/sales-history
-git merge origin/main
-```
-
-Resolve conflicts with your AI editor while preserving both your functional work
-and the shared UI changes. Do not reset, force-push or recreate another person's
-commits. This is important because Patrick changed Stock/Sales layout and shared
-components while your task was in progress.
-
-For Charles specifically:
-
-- Preserve the approved two-column checkout, larger total, stock badges, search
-  controls and payment/recovery actions inside the basket. Do not rebuild SalesPanel,
-  Checkout or pending stores to add history; retain the existing instances/state.
-- History can use the wider page area with “Historique des ventes”, receipt/date/
-  status filters and an obvious back arrow. Details return to the same filtered
-  list, then to the unchanged basket or pending checkout.
-- Reuse shared search, left text/right amounts, 40px list rows, empty-state messages
-  and labelled status badges. PAID/VOIDED must have understandable translated text;
-  opening a receipt must not edit stock or reinterpret a voided sale as paid.
-- Details display saved names, quantities, charged prices and totals. Use exact
-  long/decimal formatting and the shared amount label; no int/double conversion,
-  current-catalog price substitution, buying-price display or recalculated totals.
-- Display timestamps in Africa/Douala with the shared helper and apply day filters
-  in that same zone. Stored UTC instants and read-only service contracts remain unchanged.
-
-Include real Java previews at 960×600, 1100×720 and 1600×1000. Cover the empty,
-loaded, failed and pending states relevant to your milestone. Run the Java 21
-checks below. State which Windows/native-dialog/keyboard checks were not performed;
-headless tests and component renders do not prove actual desktop interaction.
-Coordinate shared helpers or ShellPanel changes with Patrick and the other developer.
+Patrick reviews before merge. Your editor should push/merge only when you ask it to.
 
 ## Prompt for your AI editor
 
-> I am Charles. Read docs/team/CHARLES.md, docs/team/CONTEXT.md
-> and docs/desktop/STYLE_GUIDE.md. Preserve the approved app-wide style.
-> Help me preserve unfinished changes, update my local copy and create my branch
-> using this file's instructions. Inspect current code and the technical references
-> below. Explain each step simply. Implement my first milestone, test it and report
-> what works and what remains. Preserve collaborators' commits. Do not push or
-> merge unless I ask you to.
-
-Current assignment: 6 November 2026. Cash checkout is delivered and merged in
-PR #30, including the follow-up pending-file ownership fix. Do not rebuild the
-basket, shared services, recovery store or Products screen.
-
-## Goal in plain language
-
-A cashier can find a sale made earlier, open it, and see exactly what was sold,
-the quantities, charged prices, total and whether the sale was later voided.
-Restarting Cella must not lose the history. This is a read-only history milestone.
-
-## Start
-
-Follow the update instructions above and use your `desktop/sales-history` branch.
-Read README.md, docs/team/CONTEXT.md, docs/desktop/SALES_SCREEN.md and
-[the backend sales contract](../backend/SALES.md). Inspect SaleService,
-SaleState, SaleItem and the existing SalesPanel/Checkout before editing.
-
-Own desktop/sales/ and its tests. Patrick owns desktop/catalog/ and Willy owns
-stock/. Coordinate shared ShellPanel changes before editing. Preserve the green
-sidebar, cash-checkout workflow, stable context and existing navigation.
-
-## Milestone 1 — browse persisted sales
-
-- Add an obvious “Historique des ventes” entry inside Ventes, with a clear return
-  to the cashier basket. Browsing must not clear, submit or alter an unfinished
-  basket, confirmation or uncertain checkout. Do not silently abandon pending
-  recovery; disable history temporarily during an active write if needed.
-- Load shop-scoped history through SaleService.listSaleStates off the Swing EDT.
-  Display receipt reference, date/time, total in whole FCFA and effective status.
-  Query state, not only raw Sale: immutable original sales also include voided ones.
-- Show recent sales first with a deterministic tie-breaker, without modifying
-  service history. Search by receipt reference; filter paid/voided and a date range.
-- Keep stored timestamps unchanged. Display dates in a documented local time zone
-  (shop pilot: Africa/Douala), and apply day/date filters consistently in that zone.
-- Give loading, empty, no-results, error/retry and refresh states. A database error
-  must not look like an empty sales list. Ignore superseded query results.
-- Preserve search/filter/selection when returning from details. Use French/English
-  bundles; status should be understandable text, not color alone.
-
-## Milestone 2 — inspect one sale
-
-- Open a selected receipt with Enter, double-click or a labelled Open action.
-- Use persisted sale-item snapshots: product name, unit, quantity, charged unit
-  price and line subtotal. Never rebuild an old receipt using today's catalog
-  price/name or recalculate its saved total. A changed/grouped product must not
-  change what the historical sale displays.
-- Show receipt, sale date, cash payment, saved total and PAID/VOIDED effective state.
-  Buying prices must not appear. Piece/bag quantities are whole; kg/litre can be
-  fractional. Render quantities from integer thousandths, never float arithmetic.
-- For a voided sale, show its recorded reason/date from the event state; clearly
-  identify it as cancelled. Do not erase the original sale or label it paid.
-- Add a clear back action to the filtered list, then back to the preserved basket.
-  Read-only browsing must not change stock, sale events or pending checkout files.
-
-## Acceptance Patrick can demonstrate
-
-1. Prepare disposable stock, complete two cash sales, restart Cella and find both
-   in history with their exact references and totals.
-2. Search one reference, open its detail and verify every saved line, fractional
-   rounding result and total against the service result.
-3. Create a void through the existing backend in test setup: show that sale as
-   VOIDED with its recorded reason, while retaining the original lines. Stock
-   and audit/history remain unchanged by opening the screen.
-4. Change a catalog price/name in controlled test setup: historical details still
-   show the original saved values. Do not implement product editing just for this.
-5. Preserve a nonempty editable basket across history/detail/back navigation.
-   Preserve an uncertain checkout's request/ID and recovery safeguards too.
-6. Cover date-boundary filtering in Africa/Douala, both status filters, wrong-shop
-   isolation, empty/error/retry and stale background query completion.
-
-## Boundaries and safety
-
-No void button, partial return, refund, receipt printing, tax, discount, credit,
-Mobile Money, authentication or cloud sync in this milestone. Voiding UI is a
-separate later task with explicit review. Do not add SQL to event handlers, change
-core/schema or replace the service. Describe a missing contract to Patrick first.
-
-Keep the corrected checkout lease and owner checks from PR #30: another window
-must not overwrite or clear a different pending sale. Inspect the corrected code,
-not your old feature branch. Coordinate receipt-store injection with Willy when
-he touches shared navigation. Pascal can help translation and hands-on Windows QA.
-
-## Verification and delivery
-
-Run the full Java 21 wrapper clean verify and packaged headless startup from
-README.md. Add meaningful temporary-SQLite integration/UI tests for the acceptance
-cases; no live shop data. Test keyboard navigation, resize, labels and save/reopen
-in the actual Windows window, reporting untested GUI checks separately.
-
-Deliver a small reviewed PR per milestone with screenshots, branch/commit, exact
-checks and remaining limitations. Preserve other people's commits. Do not push,
-merge, force-push or change settings without your human's request. Explain each
-step simply so Charles can explain the result to the team.
+> I am Takou (Charles). Read docs/team/CHARLES.md, docs/design/BACKUP_RESTORE.md and the current
+> backup/coordinator/evidence implementation. Patrick and Codex own the redesign and dashboard;
+> I own OFF-03b restore, then OFF-03c backup/settings and OFF-03d acceptance. Preserve all existing
+> commits and behavior. Explain steps simply, start with a small restore-service PR and test actual
+> failure/restart boundaries. Coordinate shared shell/style/context changes with Patrick before
+> editing them. Do not rewrite the app or start a competing design. Do not push or merge unless I ask.

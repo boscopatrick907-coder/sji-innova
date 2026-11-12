@@ -116,10 +116,11 @@ class SalesShellIntegrationTest {
         AppContext context = AppContextLoader.load(location);
         Window french = openSales(context, Locale.FRENCH);
         var navigation = edt(() -> (JList<?>) find(french.shell(), JList.class, null));
-        assertEquals(List.of("Produits", "Stock", "Ventes"), edt(() -> List.of(
+        assertEquals(List.of("Accueil", "Produits", "Stock", "Ventes"), edt(() -> List.of(
                 navigation.getModel().getElementAt(0).toString(),
                 navigation.getModel().getElementAt(1).toString(),
-                navigation.getModel().getElementAt(2).toString())));
+                navigation.getModel().getElementAt(2).toString(),
+                navigation.getModel().getElementAt(3).toString())));
         assertTrue(edt(() -> hasLabel(french.shell(), "Ventes")));
         assertFalse(edt(() -> hasLabel(french.shell(), "Catalogue")));
         assertEquals("Sales", Messages.load(Locale.ENGLISH).get("shell.nav.sales"));

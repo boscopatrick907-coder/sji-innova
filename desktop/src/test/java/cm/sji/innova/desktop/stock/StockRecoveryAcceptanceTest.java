@@ -498,7 +498,8 @@ class StockRecoveryAcceptanceTest {
     @Test
     void aReceiptKeepsTheStockFolderFromSavingItsRequestUntilTheAnswerComes() throws Exception {
         StockPanel panel = open(true);
-        repository.reached = new java.util.concurrent.CountDownLatch(1);
+        var receiptReached = new java.util.concurrent.CountDownLatch(1);
+        repository.reached = receiptReached;
         repository.release = new java.util.concurrent.CountDownLatch(1);
 
         edt(() -> {
@@ -507,7 +508,7 @@ class StockRecoveryAcceptanceTest {
             panel.receiveButton().doClick();
             return null;
         });
-        assertTrue(repository.reached.await(20, TimeUnit.SECONDS), "The receipt reached the database");
+        assertTrue(receiptReached.await(20, TimeUnit.SECONDS), "The receipt reached the database");
         boolean savedFirst;
         String otherProcess;
         try {
