@@ -138,6 +138,6 @@ folder where a restore had moved it aside.
 - **The start page does not say what the restore did** (OFF-03b3b, after Patrick's agreement on
   `ShellPanel`): "Restoring…", "the restore was undone because…", and a clearer page for `NEEDS_REPAIR`.
   Today a refusal shows on the existing error page with Retry, and outcomes are only in the log.
-- The screen, cancelling a scheduled restore, and removing old restores: OFF-03c.
+- Removing old restores: OFF-03c4. The screen is in `SETTINGS.md`; cancelling is in `RESTORE.md`.
 - Power loss is not tested. Files and the journal are forced to the disk, but a rename's folder entry is
   not (Java cannot do that on Windows), and a power cut is not simulated.
