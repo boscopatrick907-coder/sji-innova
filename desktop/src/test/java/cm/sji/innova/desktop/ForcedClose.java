@@ -73,6 +73,14 @@ public final class ForcedClose {
         stopAfter = normalized(statementStart);
     }
 
+    /**
+     * For code that reports its own steps, such as a restore moving files: counts as a statement named
+     * {@code step}, so {@link #stopAfter} can stop right after it.
+     */
+    public static void reached(String step) {
+        ran(step);
+    }
+
     /** Says the operation ended without reaching its moment, so the drill tested nothing. */
     public static void finishedWithoutStopping() {
         System.out.println(FINISHED);
@@ -201,6 +209,8 @@ public final class ForcedClose {
         // Windows can also keep the dead process's mapping of SQLite's shared index file (cella.db-shm) a
         // few milliseconds longer. Until it goes, SQLite cannot reset that file and reports a disk I/O
         // error. Wait until a new connection can read, as the first read of a restarted Cella would.
+        // A database that is not there (a restore had moved it aside) is left alone: opening would create it.
+        if (!Files.exists(folder.resolve("cella.db"))) return;
         while (true) {
             try (var connection = DriverManager.getConnection("jdbc:sqlite:" + folder.resolve("cella.db"));
                  var statement = connection.createStatement();

@@ -133,51 +133,66 @@ public final class BackupService {
                     "Choose a backup folder outside the shop's data folder, ideally on a USB key or another disk.");
         }
         try (DataFolderCoordinator.Maintenance maintenance = coordinator.beginMaintenance(DRAIN)) {
-            refuseUnresolvedWork();
-            UUID backupId = UUID.randomUUID();
-            Instant now = clock.instant();
-            Path work = Files.createDirectory(target.resolve(".cella-backup-" + backupId));
-            Path partial = null;
-            try {
-                Path database = work.resolve("cella.db");
-                snapshot(maintenance, database);
-                Facts facts = checkSnapshot(database);
-                Files.copy(location.shopIdFile(), work.resolve("shop-id.txt"));
-                for (String photo : facts.photos()) copyPhoto(photo, work);
-                List<Evidence> decided = copyEvidence(work);
+            return capture(maintenance, target, true);
+        }
+    }
 
-                Map<String, Entry> entries = describe(work);
-                byte[] manifest = manifest(backupId, now, facts, decided, entries);
-                Path published = target.resolve("cella-backup-" + NAME.format(now.atZone(clock.getZone())) + "-"
-                        + backupId.toString().substring(0, 8) + ".zip");
-                partial = target.resolve(published.getFileName() + "." + backupId + ".partial");
-                writeZip(partial, manifest, work, entries);
+    /**
+     * The pre-restore backup (OFF-03b2): made under the restore's own maintenance, into the restore's folder
+     * inside the data folder, with the same checks and read-back as {@link #create}. It is not recorded as the
+     * shop's last backup, because a copy on the same disk does not protect against losing that disk.
+     */
+    Backup createDuring(DataFolderCoordinator.Maintenance maintenance, Path folder) throws IOException, SQLException {
+        Files.createDirectories(folder);
+        return capture(maintenance, folder.toRealPath(), false);
+    }
 
-                Path scratch = Files.createDirectory(work.resolve("check"));
-                BackupArchive.Contents read = BackupArchive.check(partial, scratch);
-                if (!read.backupId().equals(backupId) || !read.shopId().equals(shopId) || read.products() != facts.products()
-                        || read.sales() != facts.sales() || read.stockMovements() != facts.stockMovements()) {
-                    throw new BackupException(BackupException.Reason.CHECK_FAILED, List.of(partial.getFileName().toString()),
-                            "The backup read back does not match the snapshot");
-                }
-                String sha = sha256(partial);
-                try {
-                    publication.publish(partial, published);
-                } catch (AtomicMoveNotSupportedException unsafe) {
-                    throw new BackupException(BackupException.Reason.DESTINATION_REFUSED, List.of(target.toString()),
-                            "This backup folder cannot rename files safely. Choose another folder or disk.");
-                } catch (FileAlreadyExistsException taken) {
-                    throw new BackupException(BackupException.Reason.DESTINATION_REFUSED, List.of(published.getFileName().toString()),
-                            "Another file already has this backup's name. Nothing was replaced; make the backup again.");
-                }
-                partial = null;
-                recordLastBackup(backupId, published, sha, now);
-                return new Backup(published, sha, backupId, now, shopId, facts.schemaVersion(), facts.products(),
-                        facts.sales(), facts.stockMovements(), facts.photos().size(), decided.size());
-            } finally {
-                if (partial != null) Files.deleteIfExists(partial);
-                deleteTree(work);
+    private Backup capture(DataFolderCoordinator.Maintenance maintenance, Path target, boolean recordSuccess)
+            throws IOException, SQLException {
+        refuseUnresolvedWork();
+        UUID backupId = UUID.randomUUID();
+        Instant now = clock.instant();
+        Path work = Files.createDirectory(target.resolve(".cella-backup-" + backupId));
+        Path partial = null;
+        try {
+            Path database = work.resolve("cella.db");
+            snapshot(maintenance, database);
+            Facts facts = checkSnapshot(database);
+            Files.copy(location.shopIdFile(), work.resolve("shop-id.txt"));
+            for (String photo : facts.photos()) copyPhoto(photo, work);
+            List<Evidence> decided = copyEvidence(work);
+
+            Map<String, Entry> entries = describe(work);
+            byte[] manifest = manifest(backupId, now, facts, decided, entries);
+            Path published = target.resolve("cella-backup-" + NAME.format(now.atZone(clock.getZone())) + "-"
+                    + backupId.toString().substring(0, 8) + ".zip");
+            partial = target.resolve(published.getFileName() + "." + backupId + ".partial");
+            writeZip(partial, manifest, work, entries);
+
+            Path scratch = Files.createDirectory(work.resolve("check"));
+            BackupArchive.Contents read = BackupArchive.check(partial, scratch);
+            if (!read.backupId().equals(backupId) || !read.shopId().equals(shopId) || read.products() != facts.products()
+                    || read.sales() != facts.sales() || read.stockMovements() != facts.stockMovements()) {
+                throw new BackupException(BackupException.Reason.CHECK_FAILED, List.of(partial.getFileName().toString()),
+                        "The backup read back does not match the snapshot");
             }
+            String sha = sha256(partial);
+            try {
+                publication.publish(partial, published);
+            } catch (AtomicMoveNotSupportedException unsafe) {
+                throw new BackupException(BackupException.Reason.DESTINATION_REFUSED, List.of(target.toString()),
+                        "This backup folder cannot rename files safely. Choose another folder or disk.");
+            } catch (FileAlreadyExistsException taken) {
+                throw new BackupException(BackupException.Reason.DESTINATION_REFUSED, List.of(published.getFileName().toString()),
+                        "Another file already has this backup's name. Nothing was replaced; make the backup again.");
+            }
+            partial = null;
+            if (recordSuccess) recordLastBackup(backupId, published, sha, now);
+            return new Backup(published, sha, backupId, now, shopId, facts.schemaVersion(), facts.products(),
+                    facts.sales(), facts.stockMovements(), facts.photos().size(), decided.size());
+        } finally {
+            if (partial != null) Files.deleteIfExists(partial);
+            deleteTree(work);
         }
     }
 
