@@ -17,6 +17,7 @@ import cm.sji.innova.core.product.photo.ProductPhotoService;
 import cm.sji.innova.core.sale.SaleItemRequest;
 import cm.sji.innova.core.sale.SaleService;
 import cm.sji.innova.core.stock.StockService;
+import cm.sji.innova.desktop.DesktopApplication;
 import cm.sji.innova.desktop.ForcedClose;
 import cm.sji.innova.desktop.TestChildProcess;
 import cm.sji.innova.desktop.evidence.Evidence;
@@ -410,8 +411,9 @@ class RestoreInstallerTest {
 
     @Test
     void aSaleCommittedByACrashedCellaIsKeptWithTheOldShop() throws Exception {
-        Shop shop = scheduled("shop", backup);
-        ForcedClose.runAndKill(BackupServiceTest.SellingCella.class, shop.location().directory());   // REC-2, committed, then killed
+        Shop unscheduled = copyOfTemplate("shop");
+        ForcedClose.runAndKill(BackupServiceTest.SellingCella.class, unscheduled.location().directory());   // REC-2, committed, then killed
+        Shop shop = schedule(unscheduled, backup);
 
         try (DataFolderCoordinator.Membership membership = join(shop)) {
             assertEquals(RestoreInstaller.Outcome.RESTORED, installer(shop.location(), shop.coordinator(), step -> { }).atStart().outcome());
@@ -510,6 +512,100 @@ class RestoreInstallerTest {
         assertEquals(1, files(shop.folder().resolve("pre-restore")).size(), "The pre-restore backup is kept");
     }
 
+    // ----- At Cella's start-up (OFF-03b3a) -----
+
+    /** A Cella starting as the app does, through {@code DesktopApplication.openShop}: says what it opened, or why not. */
+    public static class StartingCella {
+        public static void main(String[] args) throws Exception {
+            try {
+                AppContext shop = DesktopApplication.openShop(new LocalAppData(Path.of(args[0])));
+                System.out.println("OPENED " + shop.shopId() + " "
+                        + String.join(",", shop.products().list(shop.shopId()).stream().map(Product::name).sorted().toList()));
+            } catch (Exception refused) {
+                System.out.println("REFUSED " + refused.getClass().getSimpleName() + ": " + refused.getMessage());
+            }
+            System.out.flush();
+            System.exit(0);
+        }
+    }
+
+    @Test
+    void aCellaStartingWithAScheduledRestoreOpensTheRestoredShop() throws Exception {
+        Shop shop = scheduled("shop", backup);
+
+        assertEquals("OPENED " + shop.shopId() + " Oil,Rice", startCella(shop.location()));
+
+        assertNoRestoreLeft(shop);
+        assertEquals(shop.deviceId(), id(shop.location().deviceIdFile()), "The device ID stays this computer's");
+        assertEquals(shop.old().get("cella.db"), RestoreInstaller.fingerprint(shop.folder().resolve("old").resolve("cella.db")),
+                "The old shop is kept aside");
+    }
+
+    @Test
+    void aCellaStartingAfterACrashInTheMiddleOfARestorePutsTheOldShopBackBeforeReadingItsIdentity() throws Exception {
+        Shop shop = scheduled("shop", backup);
+        try (DataFolderCoordinator.Membership membership = join(shop)) {
+            assertThrows(StopHere.class, () -> installer(shop.location(), shop.coordinator(), step -> {
+                if (step.equals("RESTORE STEP journal OLD_QUARANTINED")) throw new StopHere();
+            }).atStart());
+        }
+        assertFalse(Files.exists(shop.location().shopIdFile()), "The shop's identity is set aside");
+        assertFalse(Files.exists(shop.location().databaseFile()), "and so is its database");
+
+        assertEquals("OPENED " + shop.shopId() + " Oil,Rice,Soap", startCella(shop.location()),
+                "The whole old shop, with its own identity: none was invented");
+
+        assertNoRestoreLeft(shop);
+        assertEquals(shop.deviceId(), id(shop.location().deviceIdFile()));
+    }
+
+    @Test
+    void anotherOpenCellaStopsARestoreAtStartUpUntilItCloses() throws Exception {
+        Shop shop = scheduled("shop", backup);
+        try (TestChildProcess idle = idleCella(shop.location())) {
+            String refused = startCella(shop.location());
+            assertTrue(refused.startsWith("REFUSED FolderMaintenanceException"), refused);
+            assertNothingMoved(shop);
+        }
+        waitUntilNoOtherCella(shop.location());
+
+        assertEquals("OPENED " + shop.shopId() + " Oil,Rice", startCella(shop.location()), "Retry, once the other Cella is closed");
+        assertNoRestoreLeft(shop);
+    }
+
+    /** Starts a Cella on {@code location} and returns its {@code OPENED} or {@code REFUSED} line. */
+    private static String startCella(LocalAppData location) throws Exception {
+        String java = Path.of(System.getProperty("java.home"), "bin",
+                System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("win") ? "java.exe" : "java").toString();
+        Process process = new ProcessBuilder(java, "-Djava.awt.headless=true", "-cp", System.getProperty("java.class.path"),
+                StartingCella.class.getName(), location.directory().toString()).redirectError(ProcessBuilder.Redirect.INHERIT).start();
+        try (TestChildProcess child = new TestChildProcess(process)) {
+            return child.readOutput(() -> {
+                BufferedReader lines = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
+                for (String line = lines.readLine(); line != null; line = lines.readLine()) {
+                    if (line.startsWith("OPENED") || line.startsWith("REFUSED")) return line;
+                }
+                return "ENDED WITHOUT A WORD";
+            }).get(120, TimeUnit.SECONDS);
+        }
+    }
+
+    /** Windows releases a killed process's lock a few milliseconds late: wait until the folder's lock is free. */
+    private static void waitUntilNoOtherCella(LocalAppData location) throws Exception {
+        Path lock = location.directory().resolve(DataFolderCoordinator.LOCK_FILE);
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+        while (true) {
+            try (var channel = java.nio.channels.FileChannel.open(lock, java.nio.file.StandardOpenOption.WRITE);
+                 var exclusive = channel.tryLock()) {
+                if (exclusive != null) return;
+            } catch (java.io.IOException busy) {
+                // still held
+            }
+            assertTrue(System.nanoTime() < deadline, "The other Cella's lock was never released");
+            Thread.sleep(20);
+        }
+    }
+
     // ----- Helpers -----
 
     /** A copy of the shop with the backup prepared and scheduled, and what its items are before and after. */
@@ -528,7 +624,10 @@ class RestoreInstallerTest {
     }
 
     private Shop scheduled(String name, Path chosen) throws Exception {
-        Shop shop = copyOfTemplate(name);
+        return schedule(copyOfTemplate(name), chosen);
+    }
+
+    private Shop schedule(Shop shop, Path chosen) throws Exception {
         RestorePreparation preparation = new RestorePreparation(shop.location(), shop.shopId(), CLOCK);
         RestorePreparation.Summary summary = preparation.prepare(chosen);
         preparation.schedule(summary);
