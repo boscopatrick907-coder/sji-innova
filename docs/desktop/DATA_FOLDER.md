@@ -99,3 +99,6 @@ their real existing ancestor. Resolution failures fail closed rather than return
 connection. DatabaseGateTest covers database and file work through an alias; only those alias tests
 are skipped on systems that do not allow creating symbolic links. The ordinary Windows/Linux gate
 and two-process tests remain required.
+
+The coordinator tests also wait for maintenance worker completion before releasing membership.
+Executor shutdown is bounded and awaited, so teardown cannot race the worker's maintenance close.

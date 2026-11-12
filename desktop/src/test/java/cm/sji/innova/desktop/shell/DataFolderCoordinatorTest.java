@@ -423,12 +423,13 @@ class DataFolderCoordinatorTest {
 
         ExecutorService maintainer = stoppableWorkers(1);
         CompletableFuture<Void> started = new CompletableFuture<>(), finish = new CompletableFuture<>();
-        maintainer.submit(() -> {
+        var maintenanceDone = maintainer.submit(() -> {
             try (DataFolderCoordinator.Maintenance ignored = coordinator.beginMaintenance(Duration.ofSeconds(5))) {
                 started.complete(null);
                 finish.get(20, TimeUnit.SECONDS);
             } catch (Exception failure) {
                 started.completeExceptionally(failure);
+                throw failure;
             }
             return null;
         });
@@ -440,6 +441,7 @@ class DataFolderCoordinatorTest {
             assertTrue(System.nanoTime() - before < TimeUnit.SECONDS.toNanos(2), "It did not wait");
         } finally {
             finish.complete(null);
+            maintenanceDone.get(10, TimeUnit.SECONDS);
         }
     }
 
@@ -490,7 +492,12 @@ class DataFolderCoordinatorTest {
             thread.setDaemon(true);
             return thread;
         });
-        toClose.add(pool::shutdownNow);
+        toClose.add(() -> {
+            pool.shutdownNow();
+            if (!pool.awaitTermination(10, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("Coordinator workers did not finish before folder cleanup");
+            }
+        });
         return pool;
     }
 }
