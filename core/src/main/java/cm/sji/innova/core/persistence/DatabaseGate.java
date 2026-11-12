@@ -95,9 +95,9 @@ public final class DatabaseGate {
     }
 
     private static Path folderOf(Path databaseFile) {
-        Path folder = canonical(databaseFile).getParent();
+        Path folder = databaseFile.toAbsolutePath().normalize().getParent();
         if (folder == null) throw new IllegalArgumentException("A database file has a folder: " + databaseFile);
-        return folder;
+        return canonical(folder);
     }
 
     /** Resolve aliases even before a database or subfolder exists. Never silently bypass on I/O failure. */
