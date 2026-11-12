@@ -47,7 +47,8 @@ public final class DashboardPanel extends JPanel {
         titles.add(subtitle); heading.add(titles, BorderLayout.CENTER);
         JButton sale = CatalogStyle.arrowButton(t("sale"), true, false); sale.setName("dashboardSale");
         sale.addActionListener(e -> navigate.accept("sales"));
-        heading.add(sale, BorderLayout.EAST);
+        JPanel saleAction = CatalogStyle.panel(new BorderLayout());
+        saleAction.add(sale, BorderLayout.NORTH); heading.add(saleAction, BorderLayout.EAST);
         JPanel tools = CatalogStyle.panel(new FlowLayout(FlowLayout.LEFT, 8, 0));
         period = new JComboBox<>(new String[]{t("today"), t("sevenDays"), t("month")});
         period.setName("dashboardPeriod"); period.getAccessibleContext().setAccessibleName(t("period"));

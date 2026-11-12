@@ -27,6 +27,13 @@ public final class Basket {
         store(existing.withQuantity(quantityMilli));
     }
 
+    /** Changes only this sale's offered price; catalog data is never modified. */
+    public void setUnitPrice(UUID productId, long price) {
+        BasketLine existing = lines.get(productId);
+        if (existing == null) throw new IllegalArgumentException("Not in the basket: " + productId);
+        store(existing.withUnitPrice(price));
+    }
+
     public void remove(UUID productId) { lines.remove(productId); }
 
     public void clear() { lines.clear(); }

@@ -16,7 +16,7 @@ public final class CatalogStyle {
         UIManager.put("Button.disabledText",new Color(0x687268));UIManager.put("Button.disabledBackground",new Color(0xE3E7DF));
         UIManager.put("Button.arc",16);UIManager.put("Component.arc",14);
         UIManager.put("Component.minimumHeight",40);UIManager.put("ScrollBar.width",11);
-        UIManager.put("TextComponent.arc",12);UIManager.put("Component.focusWidth",1);
+        UIManager.put("TextComponent.arc",12);UIManager.put("Component.focusWidth",2);
         UIManager.put("Component.borderColor",LINE);UIManager.put("Component.focusColor",GREEN);
         UIManager.put("Table.selectionBackground",new Color(0xE4F0E8));
         UIManager.put("Table.selectionForeground",INK);
@@ -222,7 +222,7 @@ public final class CatalogStyle {
         JButton button = new JButton(text);
         button.setFont(new Font(Font.SANS_SERIF, primary ? Font.BOLD : Font.PLAIN, 14));
         if (primary) { button.setBackground(GREEN); button.setForeground(Color.WHITE); }
-        button.putClientProperty("FlatLaf.style", "arc: 12");
+        button.putClientProperty("FlatLaf.style", "arc: 16");
         button.setMargin(new Insets(8,14,8,14));
         button.putClientProperty("JComponent.minimumHeight", 38);
         return button;

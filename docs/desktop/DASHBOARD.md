@@ -32,8 +32,8 @@ have been met. Custom ranges, comparison periods and inventory profit are not im
 ## Shared design
 
 CatalogStyle owns the warm paper, forest green accents, rounded white surfaces and readable controls.
-The sidebar expands to 248 logical pixels on larger windows and retains labelled navigation at
-176px on the supported narrow window. Product photos/families and direct variant rows remain real
+The sidebar expands to 216 logical pixels on larger windows and retains labelled navigation at
+168px on the supported narrow window. Product photos/families and direct variant rows remain real
 catalogue data. Prices and quantities align right; the working basket and recovery panels are retained.
 
 Restore and backup/settings behavior remain Takou's responsibility. Coordinate shared ShellPanel,

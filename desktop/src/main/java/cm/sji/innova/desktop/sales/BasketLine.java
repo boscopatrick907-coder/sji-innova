@@ -35,6 +35,10 @@ public record BasketLine(UUID productId, String label, String reference, String 
         return new BasketLine(productId, label, reference, unit, newQuantityMilli, unitPrice);
     }
 
+    public BasketLine withUnitPrice(long price) {
+        return new BasketLine(productId, label, reference, unit, quantityMilli, price);
+    }
+
     /**
      * Quantity times price, rounded to whole FCFA with exact halves going up: the same calculation
      * as SaleService. The saved sale stays the authority; a test checks that the two agree.

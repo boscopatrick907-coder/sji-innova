@@ -84,6 +84,24 @@ class BasketTest {
     }
 
     @Test
+    void changingPricePreservesQuantityAndSurvivesAnotherAddition() {
+        Basket basket = new Basket();
+        BasketLine rice = line("piece", 2_000, 1000);
+        basket.add(rice);
+        basket.setUnitPrice(rice.productId(), 800);
+        basket.add(rice.withQuantity(1000));
+        assertEquals(800, basket.lines().getFirst().unitPrice());
+        assertEquals(3000, basket.lines().getFirst().quantityMilli());
+        assertEquals(2400, basket.total());
+        var before = basket.lines();
+        assertThrows(IllegalArgumentException.class, () -> basket.setUnitPrice(rice.productId(), -1));
+        assertThrows(ArithmeticException.class, () -> basket.setUnitPrice(rice.productId(), Long.MAX_VALUE));
+        assertEquals(before, basket.lines());
+        basket.setUnitPrice(rice.productId(), 0);
+        assertEquals(0, basket.total());
+    }
+
+    @Test
     void savedLinesComeBackExactlyAsTheyWere() {
         Basket basket = new Basket();
         basket.add(line("kg", 1_000, 100));

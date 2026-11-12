@@ -87,6 +87,7 @@ public final class SalesPanel extends JPanel {
     private static final Logger LOG = Logger.getLogger(SalesPanel.class.getName());
     private static final Color PROBLEM = new Color(0xA43B2D);
     static final int COLUMN_QUANTITY = 3;
+    static final int COLUMN_PRICE = 4;
     private static final String CHECKOUT_PAGE = "checkout";
     private static final String HISTORY_PAGE = "history";
 
@@ -121,7 +122,8 @@ public final class SalesPanel extends JPanel {
     private final JButton addButton;
     private final JTable basketTable;
     private final JButton removeButton;
-    private final JLabel basketHint = new JLabel(" ");
+    private final JButton resetPriceButton;
+    private final JTextArea basketHint = new JTextArea(1, 16);
     private final JLabel totalLabel = CatalogStyle.amountLabel();
     private final JTextArea notice = new JTextArea(2, 20);
     private final JButton checkoutButton;
@@ -144,7 +146,7 @@ public final class SalesPanel extends JPanel {
     private boolean loadFailed;
     private boolean loading;
     private boolean needsRecovery = true;
-    private boolean quantityRefused;
+    private boolean editRefused;
     private boolean resultChosenWithArrows;
     private long generation;                    // only the newest load may update the page
     private int activeWorkers;
@@ -172,6 +174,7 @@ public final class SalesPanel extends JPanel {
         refresh = named(CatalogStyle.button(t("catalog.refresh"), false), "salesRefresh");
         addButton = named(CatalogStyle.button(t("sales.add"), false), "salesAdd");
         removeButton = named(CatalogStyle.button(t("sales.removeLine"), false), "salesRemove");
+        resetPriceButton = named(CatalogStyle.button(t("sales.price.reset"), false), "salesResetPrice");
         checkoutButton = named(CatalogStyle.button(t("sales.checkout"), true), "salesCheckout");
         confirmButton = named(CatalogStyle.button(t("sales.confirm.yes"), true), "salesConfirm");
         backButton = named(CatalogStyle.arrowButton(t("sales.confirm.back"), false, true), "salesBack");
@@ -196,9 +199,9 @@ public final class SalesPanel extends JPanel {
         JPanel areas=CatalogStyle.panel(new java.awt.GridBagLayout());
         java.awt.GridBagConstraints c=new java.awt.GridBagConstraints();c.gridy=0;c.fill=java.awt.GridBagConstraints.BOTH;c.weighty=1;
         JComponent picker=buildResultsArea(),cart=buildBasketArea();picker.setMinimumSize(new Dimension(0,0));cart.setMinimumSize(new Dimension(0,0));
-        c.gridx=0;c.weightx=.6;c.insets=new java.awt.Insets(0,0,0,14);areas.add(picker,c);
+        c.gridx=0;c.weightx=.54;c.insets=new java.awt.Insets(0,0,0,14);areas.add(picker,c);
         cartCard=cart;cartHost=CatalogStyle.panel(new BorderLayout());cartHost.add(cart,BorderLayout.NORTH);
-        c.gridx=1;c.weightx=.4;c.insets=new java.awt.Insets(0,0,0,0);areas.add(cartHost,c);
+        c.gridx=1;c.weightx=.46;c.insets=new java.awt.Insets(0,0,0,0);areas.add(cartHost,c);
         JPanel checkoutPage=CatalogStyle.panel(new BorderLayout(0,10));checkoutPage.add(header,BorderLayout.NORTH);checkoutPage.add(areas,BorderLayout.CENTER);
         add(checkoutPage,CHECKOUT_PAGE);
         add(history,HISTORY_PAGE);
@@ -500,6 +503,8 @@ public final class SalesPanel extends JPanel {
         addButton.setEnabled(editing && selectedHasStock());
         basketTable.setEnabled(editing);
         removeButton.setEnabled(editing && !basket.isEmpty());removeButton.setVisible(!basket.isEmpty());
+        resetPriceButton.setVisible(!basket.isEmpty());
+        resetPriceButton.setEnabled(editing && basketTable.getSelectedRow() >= 0);
         checkoutButton.setEnabled(editing && !basket.isEmpty());
         checkoutButton.setVisible(state != PageState.CONFIRMING && state != PageState.UNCERTAIN && state != PageState.DAMAGED);
         confirmButton.setVisible(state == PageState.CONFIRMING);
@@ -585,9 +590,9 @@ public final class SalesPanel extends JPanel {
 
     /** Finishes a quantity being typed. Returns false if what was typed was refused. */
     private boolean stopQuantityEdit() {
-        quantityRefused = false;
+        editRefused = false;
         if (basketTable.isEditing()) basketTable.getCellEditor().stopCellEditing();
-        return !quantityRefused;
+        return !editRefused;
     }
 
     private void showSale(String messageKey, Sale sale) {
@@ -652,20 +657,30 @@ public final class SalesPanel extends JPanel {
         basketTable.getColumnModel().getColumn(COLUMN_QUANTITY).setPreferredWidth(48);
         basketTable.getColumnModel().getColumn(5).setPreferredWidth(80);
         basketTable.getColumnModel().getColumn(COLUMN_QUANTITY).setMinWidth(48);basketTable.getColumnModel().getColumn(5).setMinWidth(70);
-        for(int hidden:new int[]{1,2,4,6}){var column=basketTable.getColumnModel().getColumn(hidden);column.setMinWidth(0);column.setMaxWidth(0);column.setPreferredWidth(0);}
+        basketTable.getColumnModel().getColumn(COLUMN_PRICE).setPreferredWidth(80);
+        basketTable.getColumnModel().getColumn(COLUMN_PRICE).setMinWidth(64);
+        basketTable.getColumnModel().getColumn(COLUMN_PRICE).setHeaderValue(t("sales.price.short"));
+        for(int hidden:new int[]{1,2,6}){var column=basketTable.getColumnModel().getColumn(hidden);column.setMinWidth(0);column.setMaxWidth(0);column.setPreferredWidth(0);}
         basketTable.getColumnModel().getColumn(COLUMN_QUANTITY).setHeaderValue(t("sales.shortQuantity"));
         basketTable.getColumnModel().getColumn(5).setHeaderValue(t("sales.shortTotal"));
         DefaultCellEditor quantityEditor=new DefaultCellEditor(new JTextField());quantityEditor.setClickCountToStart(1);
         basketTable.getColumnModel().getColumn(COLUMN_QUANTITY).setCellEditor(quantityEditor);
+        DefaultCellEditor priceEditor = new DefaultCellEditor(new JTextField()); priceEditor.setClickCountToStart(1);
+        basketTable.getColumnModel().getColumn(COLUMN_PRICE).setCellEditor(priceEditor);
         basketTable.putClientProperty("terminateEditOnFocusLost",Boolean.TRUE);basketTable.setSurrendersFocusOnKeystroke(true);
         JPanel area=CatalogStyle.surface(new BorderLayout(0,12));area.add(CatalogStyle.label(t("sales.basketHeading"),20,true),BorderLayout.NORTH);
         area.add(CatalogStyle.tableScroll(basketTable,t("empty.cart")),BorderLayout.CENTER);
         CatalogStyle.alignColumns(basketTable,3,4,5,6);
-        basketTable.getColumnModel().getColumn(0).setCellRenderer(CatalogStyle.twoLineRenderer(row->{BasketLine line=basket.lines().get(row);return money.format(line.unitPrice())+" / "+unitName(line.unit());}));
+        basketTable.getColumnModel().getColumn(0).setCellRenderer(CatalogStyle.twoLineRenderer(row->{BasketLine line=basket.lines().get(row);return t("sales.price.unit",unitName(line.unit()));}));
         basketTable.getColumnModel().getColumn(COLUMN_QUANTITY).setCellRenderer(new QuantityRenderer());
-        JPanel footer=CatalogStyle.panel(new BorderLayout(0,12));
-        JPanel tools=CatalogStyle.panel(new BorderLayout(0,8));tools.add(removeButton,BorderLayout.NORTH);
-        basketHint.setFont(basketHint.getFont().deriveFont(12f));tools.add(basketHint,BorderLayout.SOUTH);footer.add(tools,BorderLayout.NORTH);
+        basketTable.getColumnModel().getColumn(COLUMN_PRICE).setCellRenderer(new QuantityRenderer());
+        JPanel footer=CatalogStyle.panel(new BorderLayout(0,6));
+        JPanel tools=CatalogStyle.panel(new BorderLayout(0,4));
+        removeButton.putClientProperty("JComponent.minimumHeight", 32);
+        resetPriceButton.putClientProperty("JComponent.minimumHeight", 32);JPanel lineActions=CatalogStyle.panel(new java.awt.GridLayout(1,2,8,0));lineActions.add(removeButton);lineActions.add(resetPriceButton);tools.add(lineActions,BorderLayout.NORTH);
+        basketHint.setEditable(false); basketHint.setFocusable(false); basketHint.setOpaque(false);
+        basketHint.setLineWrap(true); basketHint.setWrapStyleWord(true); basketHint.setForeground(CatalogStyle.MUTED);
+        basketHint.setFont(new java.awt.Font(java.awt.Font.SANS_SERIF, java.awt.Font.PLAIN, 12));tools.add(basketHint,BorderLayout.SOUTH);footer.add(tools,BorderLayout.NORTH);
         footer.add(buildFooter(),BorderLayout.CENTER);area.add(footer,BorderLayout.SOUTH);return area;
     }
 
@@ -677,10 +692,10 @@ public final class SalesPanel extends JPanel {
         java.awt.GridBagConstraints action=new java.awt.GridBagConstraints();action.gridx=0;action.gridy=0;action.fill=java.awt.GridBagConstraints.HORIZONTAL;action.weightx=1;action.insets=new java.awt.Insets(4,0,0,0);
         for(JButton button:new JButton[]{setAsideButton,discardButton,retryButton,backButton,confirmButton,checkoutButton}){actions.add(button,action);action.gridy++;}
         checkoutButton.putClientProperty("JComponent.minimumHeight",48);checkoutButton.setFont(checkoutButton.getFont().deriveFont(java.awt.Font.BOLD,16f));
-        JLabel totalCaption=CatalogStyle.label(t("sales.totalCaption"),16,false);totalCaption.setForeground(CatalogStyle.MUTED);
+        JLabel totalCaption=CatalogStyle.label(t("sales.totalCaption"),14,false);totalCaption.setForeground(CatalogStyle.MUTED);
         totalLabel.setHorizontalAlignment(SwingConstants.RIGHT);
-        JPanel totalBlock=CatalogStyle.panel(new BorderLayout(0,4));totalBlock.add(totalCaption,BorderLayout.NORTH);totalBlock.add(totalLabel,BorderLayout.CENTER);
-        JPanel footer=CatalogStyle.panel(new BorderLayout(0,12));footer.add(totalBlock,BorderLayout.NORTH);
+        JPanel totalBlock=CatalogStyle.panel(new BorderLayout(0,4));totalBlock.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(1,0,0,0,CatalogStyle.LINE),BorderFactory.createEmptyBorder(8,0,0,0)));totalBlock.add(totalCaption,BorderLayout.NORTH);totalBlock.add(totalLabel,BorderLayout.CENTER);
+        JPanel footer=CatalogStyle.panel(new BorderLayout(0,6));footer.add(totalBlock,BorderLayout.NORTH);
         footer.add(noticeStrip,BorderLayout.CENTER);footer.add(actions,BorderLayout.SOUTH);return footer;
     }
 
@@ -692,6 +707,24 @@ public final class SalesPanel extends JPanel {
         historyButton.addActionListener(event -> openHistory());
         addButton.addActionListener(event -> addSelectedProduct());
         removeButton.addActionListener(event -> removeSelectedLine());
+        basketTable.getSelectionModel().addListSelectionListener(event -> {
+            if (!event.getValueIsAdjusting()) applyState();
+        });
+        resetPriceButton.addActionListener(event -> {
+            if (state != PageState.EDITING || !stopQuantityEdit()) return;
+            int row = basketTable.getSelectedRow();
+            if (row < 0 || row >= basket.lines().size()) return;
+            BasketLine line = basket.lines().get(row);
+            catalog.stream().filter(p -> p.id().equals(line.productId())).findFirst().ifPresent(product -> {
+                try {
+                    basket.setUnitPrice(line.productId(), product.unitPrice());
+                    showNotice(" ", false);
+                } catch (ArithmeticException overflow) {
+                    showNotice(t("sales.error.tooLarge"), true);
+                }
+            });
+            refreshBasketView();
+        });
         checkoutButton.addActionListener(event -> beginCheckout());
         confirmButton.addActionListener(event -> confirmSale());
         backButton.addActionListener(event -> backToBasket());
@@ -762,17 +795,33 @@ public final class SalesPanel extends JPanel {
         }
     }
 
-    /** Draws the quantity like a small input box while it can be changed, so it invites a click. */
+    /** A rounded inset field invites editing without turning the cart into a spreadsheet grid. */
     private static final class QuantityRenderer extends DefaultTableCellRenderer {
+        private boolean editable;
+
         @Override public Component getTableCellRendererComponent(JTable table, Object value, boolean selected,
                                                                  boolean focused, int row, int column) {
-            Component cell = super.getTableCellRendererComponent(table, value, selected, focused, row, column);
-            if (table.isCellEditable(row, column)) {
-                setHorizontalAlignment(SwingConstants.RIGHT);
-                setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(CatalogStyle.MUTED),BorderFactory.createEmptyBorder(0,8,0,8)));
-                if (!selected) setBackground(Color.WHITE);
+            super.getTableCellRendererComponent(table, value, selected, focused, row, column);
+            editable = table.isCellEditable(row, column);
+            setOpaque(false);
+            setHorizontalAlignment(SwingConstants.RIGHT);
+            setBorder(BorderFactory.createEmptyBorder(0, 9, 0, 9));
+            setToolTipText(String.valueOf(value));
+            return this;
+        }
+
+        @Override protected void paintComponent(java.awt.Graphics graphics) {
+            java.awt.Graphics2D g = (java.awt.Graphics2D) graphics.create();
+            g.setColor(getBackground()); g.fillRect(0, 0, getWidth(), getHeight());
+            if (editable) {
+                g.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+                g.setColor(new Color(0xF5F8F1));
+                g.fillRoundRect(3, 8, getWidth() - 6, getHeight() - 16, 12, 12);
+                g.setColor(CatalogStyle.LINE);
+                g.drawRoundRect(3, 8, getWidth() - 7, getHeight() - 17, 12, 12);
             }
-            return cell;
+            g.dispose();
+            super.paintComponent(graphics);
         }
     }
 
@@ -809,7 +858,7 @@ public final class SalesPanel extends JPanel {
         @Override public Class<?> getColumnClass(int column) { return String.class; }
 
         @Override public boolean isCellEditable(int row, int column) {
-            return column == COLUMN_QUANTITY && state == PageState.EDITING;
+            return (column == COLUMN_QUANTITY || column == COLUMN_PRICE) && state == PageState.EDITING;
         }
 
         @Override public Object getValueAt(int row, int column) {
@@ -826,16 +875,30 @@ public final class SalesPanel extends JPanel {
         }
 
         @Override public void setValueAt(Object value, int row, int column) {
+            if (!isCellEditable(row, column) || row < 0 || row >= basket.lines().size()) return;
             BasketLine line = basket.lines().get(row);
             try {
-                basket.setQuantity(line.productId(), Quantities.parseMilli(String.valueOf(value), line.unit()));
-                showNotice(" ", false);
+                if (column == COLUMN_PRICE) {
+                    String raw = String.valueOf(value).strip().replace(" ", "").replace("\u00a0", "").replace("\u202f", "");
+                    if (!raw.matches("[0-9]+")) throw new IllegalArgumentException("Invalid price");
+                    long price;
+                    try { price = Long.parseLong(raw); }
+                    catch (NumberFormatException overflow) { throw new ArithmeticException("Price too large"); }
+                    basket.setUnitPrice(line.productId(), price);
+                    showNotice(" ", false);
+                } else {
+                    basket.setQuantity(line.productId(), Quantities.parseMilli(String.valueOf(value), line.unit()));
+                    showNotice(" ", false);
+                }
             } catch (InvalidQuantityException invalid) {
-                quantityRefused = true;
+                editRefused = true;
                 showNotice(quantityProblem(invalid.problem()), true);
             } catch (ArithmeticException tooLarge) {
-                quantityRefused = true;
+                editRefused = true;
                 showNotice(t("sales.error.tooLarge"), true);
+            } catch (IllegalArgumentException invalidPrice) {
+                editRefused = true;
+                showNotice(t("sales.price.invalid"), true);
             }
             refreshBasketView();
         }

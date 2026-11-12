@@ -198,6 +198,46 @@ class SalesPanelTest {
     }
 
     @Test
+    void negotiatedPriceIsSavedAndCannotChangeDuringConfirmation() throws Exception {
+        SalesPanel panel = open();
+        addToBasket(panel, "rice", "2");
+        edt(() -> basket(panel).setValueAt("850", 0, SalesPanel.COLUMN_PRICE));
+        assertEquals("1,700 FCFA", edt(() -> total(panel)));
+        click(panel, "salesCheckout");
+        assertFalse(edt(() -> basket(panel).isCellEditable(0, SalesPanel.COLUMN_PRICE)));
+        edt(() -> basket(panel).setValueAt("1", 0, SalesPanel.COLUMN_PRICE));
+        assertEquals("850", edt(() -> basket(panel).getValueAt(0, SalesPanel.COLUMN_PRICE)));
+        click(panel, "salesConfirm");
+        waitUntilIdle(panel);
+        assertEquals(1700, savedSales().getFirst().totalAmount());
+        assertEquals(850, savedSales().getFirst().items().getFirst().unitPrice());
+        assertEquals(1000, products.list(shop).getFirst().unitPrice());
+        assertEquals(8000, riceLeft());
+        SalesPanel reopened = open();
+        assertEquals(0, (int) edt(() -> basket(reopened).getRowCount()));
+        assertEquals(850, savedSales().getFirst().items().getFirst().unitPrice());
+    }
+
+    @Test
+    void invalidPricesLeaveTheBasketAloneAndCatalogPriceCanBeRestored() throws Exception {
+        SalesPanel panel = open(Locale.FRENCH, stock, products);
+        addToBasket(panel, "rice", "2");
+        for (String invalid : List.of("", "-1", "1.5", "1,5", "abc", "99999999999999999999999", Long.toString(Long.MAX_VALUE))) {
+            edt(() -> basket(panel).setValueAt(invalid, 0, SalesPanel.COLUMN_PRICE));
+            assertEquals("1\u202f000", edt(() -> basket(panel).getValueAt(0, SalesPanel.COLUMN_PRICE)));
+            assertFalse(edt(() -> notice(panel)).isBlank());
+        }
+        edt(() -> basket(panel).setValueAt("850", 0, SalesPanel.COLUMN_PRICE));
+        edt(() -> basket(panel).setRowSelectionInterval(0, 0));
+        click(panel, "salesResetPrice");
+        assertEquals("1\u202f000", edt(() -> basket(panel).getValueAt(0, SalesPanel.COLUMN_PRICE)));
+        edt(() -> basket(panel).setValueAt("0", 0, SalesPanel.COLUMN_PRICE));
+        confirmCash(panel);
+        assertEquals(0, savedSales().getFirst().totalAmount());
+        assertEquals(8000, riceLeft());
+    }
+
+    @Test
     void repeatedClicksCreateOnlyOneSale() throws Exception {
         SalesPanel panel = open();
         addToBasket(panel, "rice", "2");
@@ -412,6 +452,7 @@ class SalesPanelTest {
         saleRepository.failAfterSaving = true;
         SalesPanel panel = open();
         addToBasket(panel, "rice", "2");
+        edt(() -> basket(panel).setValueAt("825", 0, SalesPanel.COLUMN_PRICE));
         confirmCash(panel);
 
         assertTrue(Files.exists(store.file()));
@@ -422,12 +463,19 @@ class SalesPanelTest {
             assertFalse(button(panel, "salesAdd").isEnabled());
             assertFalse(button(panel, "salesRemove").isEnabled());
             assertFalse(basket(panel).isCellEditable(0, SalesPanel.COLUMN_QUANTITY));
+            assertFalse(basket(panel).isCellEditable(0, SalesPanel.COLUMN_PRICE));
+            assertFalse(button(panel, "salesResetPrice").isEnabled());
+            basket(panel).setValueAt("1", 0, SalesPanel.COLUMN_PRICE);
+            assertEquals("825", basket(panel).getValueAt(0, SalesPanel.COLUMN_PRICE));
         });
+        assertEquals(825, store.load().orElseThrow().lines().getFirst().unitPrice());
 
         click(panel, "salesRetry");
         waitUntilIdle(panel);
 
         assertEquals(1, savedSales().size());
+        assertEquals(1650, savedSales().getFirst().totalAmount());
+        assertEquals(825, savedSales().getFirst().items().getFirst().unitPrice());
         assertEquals(8_000, riceLeft());
         assertEquals(0, (int) edt(() -> basket(panel).getRowCount()));
         assertFalse(Files.exists(store.file()));
