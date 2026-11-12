@@ -122,4 +122,35 @@ class DatabaseGateTest {
         }
         assertEquals(0, entered.get());
     }
+    private Path aliasToShop() throws Exception {
+        Path real = Files.createDirectory(directory.resolve("real-shop"));
+        file = real.resolve("cella.db");
+        Path alias = directory.resolve("shop-alias");
+        try { Files.createSymbolicLink(alias, real); }
+        catch (UnsupportedOperationException | java.io.IOException unavailable) {
+            org.junit.jupiter.api.Assumptions.abort("Symbolic links are unavailable: " + unavailable.getMessage());
+        }
+        return alias;
+    }
+
+    @Test void anAlternatePathToTheSameDatabaseCannotBypassTheGate() throws Exception {
+        Path alias = aliasToShop();
+        new SqliteDatabase(file).initialize();
+        DatabaseGate.install(file, counting);
+        try (Connection connection = new SqliteDatabase(alias.resolve("cella.db")).open()) {
+            assertTrue(connection.isValid(5));
+            assertEquals(1, entered.get(), "An alias still enters the real shop's gate");
+        }
+        assertEquals(1, left.get());
+    }
+
+    @Test void alternateFileWorkUsesTheSameGate() throws Exception {
+        Path alias = aliasToShop();
+        DatabaseGate.install(file, counting);
+        try (DatabaseGate.Work work = DatabaseGate.enterFolder(alias)) {
+            assertEquals(1, entered.get(), "Photo/file work through an alias must not bypass maintenance");
+        }
+        assertEquals(1, left.get());
+    }
+
 }
