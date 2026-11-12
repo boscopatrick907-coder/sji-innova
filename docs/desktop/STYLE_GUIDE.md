@@ -8,7 +8,7 @@ the code; older mockups/review screenshots are historical references.
 
 Patrick selected Atelier's warm paper/green gradient with Comptoir's clear sans-serif headings and
 readable numeric rows. Use PAPER `#F5F5EF`, INK `#22392F`, GREEN `#28664E` and shared borders; white
-surfaces retain restrained rounding. The sidebar is 248px on larger windows and 176px with readable
+surfaces retain restrained rounding. The sidebar is 216px on larger windows and 168px with readable
 labels below 1100px. Products remains the initial route; Accueil opens the live local overview.
 
 See [DASHBOARD.md](DASHBOARD.md) for exact metric definitions and limits. Browser mockups in
@@ -123,3 +123,24 @@ These are actual Java component renders using disposable data, not browser mocku
 - [Cash confirmation](images/overall-sales-confirmation.png)
 - [Loading](images/overall-startup-loading.png)
 - [Startup retry](images/overall-startup-error.png)
+
+## Cart prices and compact navigation
+
+The sidebar uses 216px at desktop sizes and 168px below 1100px, retaining labelled navigation.
+Shared buttons use 16px corner arcs and 2px focus outlines. Cart quantity and price cells use inset
+rounded fields; the basket receives more room alongside the product picker and its total has a divider.
+The Overview action stays at normal button height rather than stretching with the heading.
+
+The cart exposes **Prix/u. / Price/u.** in whole FCFA, editable for this sale only. Catalogue selling
+and buying prices are not changed. A zero selling price is accepted consistently with the existing
+sale service. Negative, fractional, invalid and overflowing amounts leave the basket unchanged.
+Totals use the existing exact rounding rules. Adding the same variant again preserves its negotiated
+unit price. **Prix catalogue / Catalog price** restores the selected line to the currently loaded
+catalogue price; use Refresh if the catalogue changed elsewhere. Confirmation and uncertain recovery
+lock both quantity and price. Pending checkout and saved receipts retain the exact offered price.
+These changes introduce no new price permissions, price tiers, promotions or whole-cart discounts.
+
+![Editable cart unit price, disposable sample shop](images/cart-custom-price.png)
+
+This is a headless render of actual Swing components at 1100px, using disposable SQLite records.
+It does not replace native desktop input, scaling and accessibility checks.

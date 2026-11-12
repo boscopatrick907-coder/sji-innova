@@ -254,7 +254,7 @@ public final class ShellPanel extends JPanel {
             }
         };
         sidebar.setName("cellaSidebar");sidebar.setBorder(BorderFactory.createEmptyBorder(34,20,24,20));
-        sidebar.setPreferredSize(new java.awt.Dimension(248,0));
+        sidebar.setPreferredSize(new java.awt.Dimension(216,0));
         JPanel brand = new JPanel(new java.awt.GridLayout(0,1,0,10));brand.setOpaque(false);
         wordmark = new JLabel("cella.");wordmark.setFont(new java.awt.Font(java.awt.Font.SERIF,java.awt.Font.BOLD,40));wordmark.setForeground(java.awt.Color.WHITE);
         tagline = new JLabel(messages.get("shell.tagline"));tagline.setFont(tagline.getFont().deriveFont(13f));tagline.setForeground(new java.awt.Color(0xD8E7DC));
@@ -308,12 +308,12 @@ public final class ShellPanel extends JPanel {
     @Override public void doLayout() {
         if (sidebar != null && getWidth() > 0) {
             boolean compact = getWidth() < 1100;
-            int width = compact ? 176 : 248;
+            int width = compact ? 168 : 216;
             if (sidebar.getPreferredSize().width != width) {
                 compactSidebar = compact;
                 sidebar.setPreferredSize(new java.awt.Dimension(width, 0));
-                sidebar.setBorder(BorderFactory.createEmptyBorder(30,compact?12:20,24,compact?12:20));
-                wordmark.setFont(new java.awt.Font(java.awt.Font.SERIF,java.awt.Font.BOLD,compact?33:40));
+                sidebar.setBorder(BorderFactory.createEmptyBorder(30,compact?10:16,24,compact?10:16));
+                wordmark.setFont(new java.awt.Font(java.awt.Font.SERIF,java.awt.Font.BOLD,compact?32:36));
                 tagline.setFont(new java.awt.Font(java.awt.Font.SANS_SERIF,java.awt.Font.PLAIN,compact?12:13));
                 navigation.repaint();
             }

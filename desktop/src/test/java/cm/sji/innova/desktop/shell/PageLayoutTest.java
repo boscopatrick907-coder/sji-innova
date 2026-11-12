@@ -62,6 +62,19 @@ class PageLayoutTest {
             assertEquals(SwingConstants.RIGHT,((JLabel)picker.getColumnModel().getColumn(3).getHeaderRenderer().getTableCellRendererComponent(picker,"Stock",false,false,-1,3)).getHorizontalAlignment());
             find(shell,JButton.class,"salesAdd").doClick();for(int i=0;i<5;i++)layout(shell);
             assertEquals(1,cart.getRowCount());assertTrue(pay.isEnabled());
+            assertTrue(cart.editCellAt(0,4), "The offered unit price must be editable");
+            ((JTextField)cart.getEditorComponent()).setText("850");
+            cart.getCellEditor().stopCellEditing();
+            for(int i=0;i<5;i++)layout(shell);
+            assertEquals("850",cart.getValueAt(0,4));
+            assertTrue(((JViewport)cart.getParent()).getHeight() >= cart.getRowHeight(),
+                    "A complete basket row must remain visible after changing the price");
+            assertTrue(bounds(pay,shell).y+pay.getHeight()<=600);
+            cart.setValueAt("-1",0,4);
+            for(int i=0;i<5;i++)layout(shell);
+            assertTrue(((JViewport)cart.getParent()).getHeight() >= cart.getRowHeight(),
+                    "Price errors must leave a complete row available to correct");
+            cart.setValueAt("850",0,4);
             find(shell,JButton.class,"salesCheckout").doClick();for(int i=0;i<5;i++)layout(shell);
             JButton confirm=find(shell,JButton.class,"salesConfirm");assertTrue(confirm.isVisible());
             assertTrue(bounds(confirm,shell).y+confirm.getHeight()<=600,"Cash confirmation must fit too");
