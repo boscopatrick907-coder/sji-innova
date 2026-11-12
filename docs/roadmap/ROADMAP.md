@@ -1,5 +1,7 @@
 # Cella: visual delivery roadmap
 
+> Historical October snapshot. See [the current offline plan](OFFLINE_COMPLETION.md) and [visual proposals](../design/visual-directions/index.html) for the current work split and design.
+
 > Status snapshot: 25 October 2026. Planning guide, not a new scope approval or a deadline commitment. Owners below are suggested coordination assignments; confirm availability with the team.
 
 Open `docs/roadmap/index.html` in a browser for the interactive version. It works offline and has no external dependencies. GitHub displays the source of HTML files; download/open locally to use it.
