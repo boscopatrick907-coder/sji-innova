@@ -10,8 +10,11 @@ import java.nio.file.StandardOpenOption;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
-/** Serializes pending-receipt file operations within this JVM and across JVM processes. */
-final class PendingReceiptFileLease implements AutoCloseable {
+/**
+ * Serializes pending-receipt file operations within this JVM and across JVM processes. The backup also
+ * takes it, to hold the folder; close it on the thread that acquired it.
+ */
+public final class PendingReceiptFileLease implements AutoCloseable {
     private static final ConcurrentHashMap<Path, ReentrantLock> JVM_LOCKS = new ConcurrentHashMap<>();
 
     private final ReentrantLock localLock;
@@ -24,7 +27,7 @@ final class PendingReceiptFileLease implements AutoCloseable {
         this.fileLock = fileLock;
     }
 
-    static PendingReceiptFileLease acquire(Path pendingFile) throws IOException {
+    public static PendingReceiptFileLease acquire(Path pendingFile) throws IOException {
         Path parent = pendingFile.toAbsolutePath().normalize().getParent();
         if (parent == null) throw new IOException("Pending receipt path has no parent directory");
         Files.createDirectories(parent);

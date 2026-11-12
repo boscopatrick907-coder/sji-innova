@@ -18,17 +18,42 @@ public final class SqliteDatabase {
         this.file = file.toAbsolutePath().normalize();
     }
 
+    /**
+     * Opens a connection. If the desktop installed a {@link DatabaseGate} for this database's folder, the
+     * connection passes through it for its whole life: opening may wait while a backup or restore runs.
+     */
     public Connection open() throws SQLException {
-        Connection connection = DriverManager.getConnection("jdbc:sqlite:" + file);
-        try (var statement = connection.createStatement()) {
-            statement.execute("PRAGMA foreign_keys = ON");
-            statement.execute("PRAGMA busy_timeout = 5000");
-            statement.execute("PRAGMA synchronous = FULL");
-        } catch (SQLException failure) {
-            connection.close();
+        return open(null);
+    }
+
+    /**
+     * Opens a maintenance connection. With the {@link DatabaseGate.Pass} of the gate installed for this
+     * database's folder, it does not wait at the gate; with any other pass it is refused. A {@code null}
+     * pass is the same as {@link #open()}.
+     */
+    public Connection open(DatabaseGate.Pass pass) throws SQLException {
+        DatabaseGate.Gate gate = DatabaseGate.forDatabase(file);
+        if (pass != null) {
+            if (!DatabaseGate.admits(pass, file)) throw new SQLException("This pass does not own this database's gate");
+            gate = null;    // the maintenance owner's own connection
+        }
+        if (gate != null) gate.enter();
+        Connection connection;
+        try {
+            connection = DriverManager.getConnection("jdbc:sqlite:" + file);
+            try (var statement = connection.createStatement()) {
+                statement.execute("PRAGMA foreign_keys = ON");
+                statement.execute("PRAGMA busy_timeout = 5000");
+                statement.execute("PRAGMA synchronous = FULL");
+            } catch (SQLException failure) {
+                connection.close();
+                throw failure;
+            }
+        } catch (SQLException | RuntimeException failure) {
+            if (gate != null) gate.leave();
             throw failure;
         }
-        return connection;
+        return gate == null ? connection : DatabaseGate.leavingOnClose(connection, gate);
     }
 
     public void initialize() throws SQLException, IOException {
