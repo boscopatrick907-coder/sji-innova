@@ -1,7 +1,11 @@
 package cm.sji.innova.core.persistence;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
+import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -72,7 +76,7 @@ public final class DatabaseGate {
 
     /** Enters the folder's gate for file work, such as saving a photo. Without a gate it does nothing. */
     public static Work enterFolder(Path dataFolder) throws SQLException {
-        Gate gate = GATES.get(dataFolder.toAbsolutePath().normalize());
+        Gate gate = GATES.get(canonical(dataFolder));
         if (gate == null) return () -> { };
         gate.enterWork();
         AtomicBoolean left = new AtomicBoolean();
@@ -91,9 +95,23 @@ public final class DatabaseGate {
     }
 
     private static Path folderOf(Path databaseFile) {
-        Path folder = databaseFile.toAbsolutePath().normalize().getParent();
+        Path folder = canonical(databaseFile).getParent();
         if (folder == null) throw new IllegalArgumentException("A database file has a folder: " + databaseFile);
         return folder;
+    }
+
+    /** Resolve aliases even before a database or subfolder exists. Never silently bypass on I/O failure. */
+    private static Path canonical(Path path) {
+        Path absolute = path.toAbsolutePath().normalize();
+        try {
+            return absolute.toRealPath();
+        } catch (NoSuchFileException notCreatedYet) {
+            Path parent = absolute.getParent();
+            if (parent == null) throw new UncheckedIOException(notCreatedYet);
+            return canonical(parent).resolve(absolute.getFileName());
+        } catch (IOException unavailable) {
+            throw new UncheckedIOException("Cannot resolve the data folder for maintenance: " + absolute, unavailable);
+        }
     }
 
     /** The connection, which leaves the gate once when it is closed. */

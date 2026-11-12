@@ -90,3 +90,12 @@ until a background thread gets it.
   backup or restore.
 - The start-up check for an unfinished restore belongs to OFF-03b, which defines the restore journal.
 - Live SQLite on a network share is not supported.
+
+## Review correction: one gate for all paths to a shop
+
+DatabaseGate keys both database connections and file work by real filesystem path. An alternate
+symbolic-link path must enter the same gate; databases/subfolders not created yet resolve against
+their real existing ancestor. Resolution failures fail closed rather than returning an ungated
+connection. DatabaseGateTest covers database and file work through an alias; only those alias tests
+are skipped on systems that do not allow creating symbolic links. The ordinary Windows/Linux gate
+and two-process tests remain required.
