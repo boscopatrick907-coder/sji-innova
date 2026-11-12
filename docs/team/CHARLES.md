@@ -2,13 +2,14 @@
 
 Updated 12 November 2026. This is the only current assignment file named after Charles. Patrick has
 changed the work split: **Takou handles restore and backup/settings; Patrick and Codex handle the
-shared redesign and offline dashboard.** This replaces earlier sales-history-only and whole-roadmap briefs.
+shop workflow testing, usability fixes and the shared acceptance checklist.** This replaces earlier sales-history-only and whole-roadmap briefs.
 
 ## What is already merged
 
 Receipt history/details/references, recovery acceptance and forced-close tests, recovery guidance,
 and PRs #47–#49's folder coordinator, evidence decisions and checked backup-capture services.
 Their original commits and the additive review corrections remain intact. Do not rebuild those services.
+PR #50 also merged the approved shared styling and live local dashboard. Reuse them; do not rebuild them.
 
 ## Your immediate work
 
@@ -27,12 +28,37 @@ Deliver small reviewable PRs, not a combined rewrite. Keep the full checklist in
 [OFFLINE_COMPLETION.md](../roadmap/OFFLINE_COMPLETION.md); later backlog work is planned with Patrick
 after these milestones. No additional assignment to another collaborator is implied.
 
+## How Patrick and Codex will help
+
+Your next deliverable is a small **OFF-03b restore-service PR**. Keep your focus on the restore
+contract and its failure/restart tests; Settings and backup controls follow after that service review.
+Patrick and Codex will take the following supporting work:
+
+- Exercise the ordinary shop workflow in a separate demonstration data folder: product families and
+  variants, photos, stock receipts, sales, cancellations and dashboard totals.
+- Close and reopen Cella and check that products, photos, balances and receipt history persist.
+- Fix general usability issues and maintain the approved shared visual components. You own the
+  functional restore/backup Settings controls, using those components.
+- Prepare the shared manual acceptance checklist and expected before/after records for restore.
+  A useful fixture is Riz with Basmati 5 kg and Basmati 25 kg variants, separate stock thresholds,
+  photos, paid receipts and a cancelled receipt. Track each unit separately.
+
+This supporting trial has not yet been completed. It does not replace your automated archive,
+maintenance-lock, journal, interrupted-restore and two-process tests, or prove restore is ready.
+You still own technical OFF-03d acceptance evidence for your implementation; Patrick and Codex own
+preparing the shared checklist and running the ordinary shop/manual comparison when restore is available.
+
+In each PR, provide a short summary of what works, commands and results, known gaps, and exact steps
+for us to verify with disposable data. Report blockers and shared-file needs early. Do not wait for
+our ordinary shop trial to start independent restore-service work. If a supporting fix becomes
+necessary for restore, coordinate it with Patrick instead of silently duplicating that work.
+
 ## Design ownership and file coordination
 
 Patrick selected Atelier’s warm green/ivory palette with Comptoir’s clear sans-serif typography.
-Patrick and Codex are implementing that direction; see [the shared style guide](../desktop/STYLE_GUIDE.md)
+That direction is merged in PR #50; see [the shared style guide](../desktop/STYLE_GUIDE.md)
 and [live dashboard contract](../desktop/DASHBOARD.md). The [two visual proposals](../design/visual-directions/index.html) remain reference mockups.
-They own the expanded sidebar, typography, shared components, visual migration and dashboard. You do
+Patrick and Codex maintain the expanded sidebar, typography, shared components and dashboard. You do
 not need to build competing mockups, redesign Products/Stock/Sales or implement the dashboard now.
 
 Use current CatalogStyle and FeedbackStrip for functional Settings UI. Keep component construction
@@ -50,7 +76,8 @@ merged code. Prototype screenshots are not implementation instructions to replac
 Close Cella. Run `git status` in the existing project. Preserve unfinished work by committing or safely
 stashing it; never discard it, reset hard, recreate another person's commits or force-push.
 
-After this assignment PR merges, with a clean worktree, run one command at a time:
+With a clean worktree, update from main. If you have not started a restore branch, run one command
+at a time (the assignment changes are available after their documentation PR merges):
 
 ```sh
 git switch main
@@ -79,8 +106,10 @@ Patrick reviews before merge. Your editor should push/merge only when you ask it
 ## Prompt for your AI editor
 
 > I am Takou (Charles). Read docs/team/CHARLES.md, docs/design/BACKUP_RESTORE.md and the current
-> backup/coordinator/evidence implementation. Patrick and Codex own the redesign and dashboard;
-> I own OFF-03b restore, then OFF-03c backup/settings and OFF-03d acceptance. Preserve all existing
+> backup/coordinator/evidence implementation. PR #50 styling and dashboard are already merged.
+> Patrick and Codex handle ordinary shop/restart testing, usability fixes and the shared checklist;
+> I own OFF-03b restore, then OFF-03c backup/settings and technical OFF-03d acceptance evidence.
+> Do not duplicate their supporting work or treat it as completed. Preserve all existing
 > commits and behavior. Explain steps simply, start with a small restore-service PR and test actual
 > failure/restart boundaries. Coordinate shared shell/style/context changes with Patrick before
 > editing them. Do not rewrite the app or start a competing design. Do not push or merge unless I ask.
