@@ -94,6 +94,6 @@ listed photo filed under another shop.
 
 ## Not yet
 
-- Installing a scheduled restore, the journal and recovery after a crash: OFF-03b2.
+- Installing a scheduled restore, the journal and recovery after a crash: OFF-03b2, in `RESTORE_RUN.md`.
 - Running it at start-up, before the shop opens: OFF-03b3.
 - The restore screen, cancelling a scheduled restore, and removing old `restore/` folders: OFF-03c.
