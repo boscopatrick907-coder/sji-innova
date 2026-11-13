@@ -1,5 +1,6 @@
 package cm.sji.innova.desktop;
 
+import cm.sji.innova.desktop.backup.RestoreInstaller;
 import cm.sji.innova.desktop.shell.AppContext;
 import cm.sji.innova.desktop.shell.AppContextLoader;
 import cm.sji.innova.desktop.shell.AppLogging;
@@ -13,6 +14,7 @@ import java.awt.GraphicsEnvironment;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Clock;
 import java.util.Comparator;
 import java.util.Locale;
 import java.util.concurrent.CompletionStage;
@@ -37,12 +39,21 @@ public final class DesktopApplication {
     private DesktopApplication() { }
 
     /**
-     * Opens the shop as a running Cella: first joins the data folder (OFF-03a1), before reading the shop
-     * ID or opening the database, then loads the shop. Refused while another Cella is making a backup or
-     * restore of this shop; the start-up page then offers Retry.
+     * Opens the shop as a running Cella: first joins the data folder (OFF-03a1); then, still before reading
+     * the shop ID or opening the database, finishes or undoes an interrupted restore, or runs a scheduled one
+     * (OFF-03b2); then loads the shop. With no restore it takes nothing more. Refused while another Cella is
+     * making a backup or restore of this shop, while another Cella stops a restore from running, or while an
+     * interrupted restore needs repair; the start-up page then shows why and offers Retry.
      */
     public static synchronized AppContext openShop(LocalAppData location) throws Exception {
-        if (folderMembership == null) folderMembership = DataFolderCoordinator.forFolder(location).join();
+        DataFolderCoordinator coordinator = DataFolderCoordinator.forFolder(location);
+        if (folderMembership == null) folderMembership = coordinator.join();
+        RestoreInstaller.Result restore = new RestoreInstaller(location, coordinator, Clock.systemDefaultZone()).atStart();
+        switch (restore.outcome()) {
+            case RESTORED -> LOG.info(() -> "Restored a backup at start-up (restore " + restore.restoreId() + ")");
+            case ROLLED_BACK -> LOG.warning(() -> "A restore was undone at start-up (restore " + restore.restoreId() + "): " + restore.detail());
+            case NOTHING_SCHEDULED -> { }
+        }
         return AppContextLoader.load(location);
     }
 
