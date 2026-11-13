@@ -1,5 +1,7 @@
 package cm.sji.innova.desktop.backup;
 
+import cm.sji.innova.core.persistence.DatabaseGate;
+
 import cm.sji.innova.desktop.evidence.Evidence;
 import cm.sji.innova.desktop.evidence.EvidenceService;
 import cm.sji.innova.desktop.shell.DataFolderCoordinator;
@@ -183,11 +185,15 @@ public final class BackupService {
 
     /** The last backup this shop published, if one was recorded. */
     public Optional<Properties> lastBackup() throws IOException {
-        Path record = location.directory().resolve(LAST_BACKUP);
-        if (!Files.exists(record)) return Optional.empty();
-        Properties p = new Properties();
-        try (Reader reader = Files.newBufferedReader(record, StandardCharsets.UTF_8)) { p.load(reader); }
-        return Optional.of(p);
+        try (DatabaseGate.Work ignored = DatabaseGate.enterFolder(location.directory())) {
+            Path record = location.directory().resolve(LAST_BACKUP);
+            if (!Files.exists(record)) return Optional.empty();
+            Properties p = new Properties();
+            try (Reader reader = Files.newBufferedReader(record, StandardCharsets.UTF_8)) { p.load(reader); }
+            return Optional.of(p);
+        } catch (SQLException blocked) {
+            throw new IOException("Cannot read backup metadata while the folder is paused", blocked);
+        }
     }
 
     /** Under maintenance: no saved request, and a decision for every set-aside file. */
@@ -367,7 +373,7 @@ public final class BackupService {
         }
     }
 
-    private static String sha256(Path file) throws IOException {
+    static String sha256(Path file) throws IOException {
         MessageDigest sha;
         try {
             sha = MessageDigest.getInstance("SHA-256");
@@ -385,7 +391,7 @@ public final class BackupService {
         return new BackupException(BackupException.Reason.CHECK_FAILED, List.of(), why);
     }
 
-    private static void deleteTree(Path root) throws IOException {
+    static void deleteTree(Path root) throws IOException {
         if (!Files.exists(root)) return;
         List<Path> paths;
         try (var walk = Files.walk(root)) { paths = walk.sorted(Comparator.reverseOrder()).toList(); }

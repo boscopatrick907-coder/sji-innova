@@ -32,8 +32,9 @@ import java.util.zip.ZipFile;
 
 /**
  * Reads and checks a Cella backup ZIP. The backup checks every archive with it before giving it its final
- * name, and restore (OFF-03b) checks a chosen file with it before touching anything. Nothing here trusts
- * the archive: every entry name, size and fingerprint is checked, and every read is bounded.
+ * name, and restore checks and unpacks a chosen file with it ({@link #extract}) before touching anything.
+ * Nothing here trusts the archive: every entry name, size and fingerprint is checked, and every read is
+ * bounded.
  */
 public final class BackupArchive {
     public static final String MANIFEST = "manifest.properties";
@@ -56,6 +57,20 @@ public final class BackupArchive {
      * problem.
      */
     public static Contents check(Path archive, Path scratch) throws IOException {
+        return read(archive, scratch, false);
+    }
+
+    /**
+     * Checks the archive as {@link #check} does and unpacks every listed file into {@code folder}, an empty
+     * folder: {@code cella.db}, {@code shop-id.txt}, {@code photos/...} and {@code recovery-evidence/...}. Each
+     * file is written only under its checked name, and compared with its size and SHA-256 as it is written.
+     * After a refusal the folder may hold part of the files: the caller removes it.
+     */
+    public static Contents extract(Path archive, Path folder) throws IOException {
+        return read(archive, folder, true);
+    }
+
+    private static Contents read(Path archive, Path folder, boolean everything) throws IOException {
         try (ZipFile zip = new ZipFile(archive.toFile())) {
             Map<String, ZipEntry> entries = entries(zip);
             Properties manifest = manifest(zip, entries);
@@ -63,16 +78,20 @@ public final class BackupArchive {
             if (!listed.keySet().equals(withoutManifest(entries.keySet()))) {
                 throw refused("The archive holds files its manifest does not list, or lacks listed ones");
             }
+            UUID shopId = uuid(manifest, "shopId");
             long total = 0;
             for (var item : listed.entrySet()) {
+                if (item.getKey().startsWith("photos/") && !item.getKey().startsWith("photos/" + shopId + "/")) {
+                    throw refused("A photo belongs to another shop: " + item.getKey());
+                }
                 long size = Long.parseLong(manifest.getProperty(item.getValue() + ".size"));
                 if (size < 0 || size > MAX_ENTRY_BYTES) throw refused("An entry is too large: " + item.getKey());
                 total += size;
                 if (total > MAX_TOTAL_BYTES) throw refused("The archive is too large");
                 String sha = manifest.getProperty(item.getValue() + ".sha256");
                 ZipEntry entry = entries.get(item.getKey());
-                OutputStream copy = item.getKey().equals("cella.db")
-                        ? Files.newOutputStream(scratch.resolve("cella.db"), StandardOpenOption.CREATE_NEW) : OutputStream.nullOutputStream();
+                OutputStream copy = everything || item.getKey().equals("cella.db")
+                        ? create(folder, item.getKey()) : OutputStream.nullOutputStream();
                 try (InputStream in = zip.getInputStream(entry); copy) {
                     String found = digest(in, size, copy);
                     if (!found.equals(sha)) throw refused("An entry does not match its fingerprint: " + item.getKey());
@@ -80,7 +99,6 @@ public final class BackupArchive {
             }
             byte[] shopIdBytes;
             try (InputStream in = zip.getInputStream(entries.get("shop-id.txt"))) { shopIdBytes = bounded(in, 1024); }
-            UUID shopId = uuid(manifest, "shopId");
             if (!shopId.toString().equals(new String(shopIdBytes, StandardCharsets.UTF_8).replace("\uFEFF", "").strip())) {
                 throw refused("The shop ID file does not match the manifest");
             }
@@ -89,7 +107,7 @@ public final class BackupArchive {
                     Long.parseLong(required(manifest, "products")), Long.parseLong(required(manifest, "sales")),
                     Long.parseLong(required(manifest, "stockMovements")), Integer.parseInt(required(manifest, "photos")),
                     evidence(manifest, listed.keySet()), Map.copyOf(listedShas(manifest, listed)));
-            checkDatabase(scratch.resolve("cella.db"), contents, listed.keySet());
+            checkDatabase(folder.resolve("cella.db"), contents, listed.keySet());
             return contents;
         } catch (BackupException refused) {
             throw refused;
@@ -129,6 +147,15 @@ public final class BackupArchive {
         return name.equals(MANIFEST) || name.equals("cella.db") || name.equals("shop-id.txt")
                 || (name.startsWith("photos/") && name.split("/").length == 3)
                 || (name.startsWith(BackupService.EVIDENCE_FOLDER + "/") && name.split("/").length == 2);
+    }
+
+    /** A new file for a checked entry name, never outside {@code folder} and never over an existing file. */
+    private static OutputStream create(Path folder, String name) throws IOException {
+        Path root = folder.toAbsolutePath().normalize();
+        Path file = root.resolve(name).normalize();
+        if (!file.startsWith(root) || file.equals(root)) throw refused("Unsafe entry name: " + name);
+        Files.createDirectories(file.getParent());
+        return Files.newOutputStream(file, StandardOpenOption.CREATE_NEW);
     }
 
     private static Properties manifest(ZipFile zip, Map<String, ZipEntry> entries) throws IOException {
@@ -197,13 +224,19 @@ public final class BackupArchive {
                 throw refused("The database counts do not match the manifest");
             }
             int photos = 0;
-            try (var rows = statement.executeQuery("SELECT relative_path, thumbnail_path FROM product_photos")) {
-                while (rows.next()) {
-                    for (int column = 1; column <= 2; column++) {
-                        if (!payload.contains(rows.getString(column))) throw refused("A photo is missing: " + rows.getString(column));
-                        photos++;
+            // Photos were introduced in schema 7. Older snapshots are validated here before
+            // their staged copy is migrated; querying a not-yet-existing table blocks migration.
+            if (contents.schemaVersion() >= 7) {
+                try (var rows = statement.executeQuery("SELECT relative_path, thumbnail_path FROM product_photos")) {
+                    while (rows.next()) {
+                        for (int column = 1; column <= 2; column++) {
+                            if (!payload.contains(rows.getString(column))) throw refused("A photo is missing: " + rows.getString(column));
+                            photos++;
+                        }
                     }
                 }
+            } else if (payload.stream().anyMatch(name -> name.startsWith("photos/"))) {
+                throw refused("This database version cannot reference photo files");
             }
             if (photos != contents.photos()) throw refused("The photo count does not match the manifest");
         }
