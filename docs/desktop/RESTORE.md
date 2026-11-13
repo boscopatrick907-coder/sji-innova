@@ -97,3 +97,13 @@ listed photo filed under another shop.
 - Installing a scheduled restore, the journal and recovery after a crash: OFF-03b2.
 - Running it at start-up, before the shop opens: OFF-03b3.
 - The restore screen, cancelling a scheduled restore, and removing old `restore/` folders: OFF-03c.
+
+## Review corrections (13 November 2026)
+
+Archive validation allows a schema from before photo support to reach staged migration, without
+querying a table that does not exist yet. A pre-photo snapshot must declare no photos and carry no
+photo payload. Staged folders and files must be ordinary paths: symbolic links and special files
+are rejected even if their target bytes have the expected checksum. The archive copy itself must
+also be an ordinary file. Scheduled-restore and last-backup metadata readers participate in the
+folder gate; they wait for maintenance instead of racing file moves. The installer's internal note
+reader is used only after exclusive maintenance ownership has been obtained.

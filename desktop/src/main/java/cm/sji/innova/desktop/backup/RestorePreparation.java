@@ -15,6 +15,8 @@ import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.LinkOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -124,7 +126,7 @@ public final class RestorePreparation {
             Path folder = root().resolve(summary.restoreId().toString());
             Path archive = folder.resolve(ARCHIVE);
             Path staged = folder.resolve(STAGED);
-            if (!Files.isRegularFile(archive) || !Files.isDirectory(staged)
+            if (!Files.isRegularFile(archive, LinkOption.NOFOLLOW_LINKS) || !Files.isDirectory(staged, LinkOption.NOFOLLOW_LINKS)
                     || !summary.archiveSha256().equals(BackupService.sha256(archive))
                     || !summary.stagedFiles().equals(fingerprint(staged))) {
                 throw new RestoreException(RestoreException.Reason.STAGING_CHANGED,
@@ -137,6 +139,16 @@ public final class RestorePreparation {
 
     /** The restore scheduled for the next start, if any. A note that is damaged, or for another folder, is refused. */
     public Optional<Summary> scheduled() throws IOException {
+        refuseTheSwingThread();
+        try (DatabaseGate.Work ignored = DatabaseGate.enterFolder(location.directory())) {
+            return readScheduled();
+        } catch (SQLException blocked) {
+            throw new IOException("Cannot read the scheduled restore while the folder is paused", blocked);
+        }
+    }
+
+    /** Internal startup reader: the installer already holds exclusive maintenance ownership. */
+    Optional<Summary> readScheduled() throws IOException {
         Path note = root().resolve(SCHEDULED);
         if (!Files.exists(note)) return Optional.empty();
         byte[] bytes;
@@ -274,8 +286,19 @@ public final class RestorePreparation {
     static Map<String, String> fingerprint(Path staged) throws IOException {
         Map<String, String> files = new TreeMap<>();
         List<Path> found;
-        try (var walk = Files.walk(staged)) { found = walk.filter(Files::isRegularFile).toList(); }
-        for (Path file : found) files.put(staged.relativize(file).toString().replace('\\', '/'), BackupService.sha256(file));
+        if (!Files.isDirectory(staged, LinkOption.NOFOLLOW_LINKS)) {
+            throw stagedFailed("a prepared folder is missing or is a symbolic link");
+        }
+        try (var walk = Files.walk(staged)) { found = walk.toList(); }
+        for (Path file : found) {
+            BasicFileAttributes attributes = Files.readAttributes(file, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+            if (attributes.isSymbolicLink() || (!attributes.isDirectory() && !attributes.isRegularFile())) {
+                throw stagedFailed("a prepared path is not an ordinary file or folder: " + file.getFileName());
+            }
+            if (attributes.isRegularFile()) {
+                files.put(staged.relativize(file).toString().replace('\\', '/'), BackupService.sha256(file));
+            }
+        }
         return files;
     }
 
