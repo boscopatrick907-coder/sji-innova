@@ -100,6 +100,24 @@ class RestoreInstallerTest {
     // ----- A restore at start-up -----
 
     @Test
+    void aScheduledArchiveReplacedByAnIdenticalSymbolicLinkIsRefused() throws Exception {
+        Shop destination = scheduled("linked-archive", backup);
+        Path archive = destination.folder().resolve("archive.zip");
+        Path probe = directory.resolve("archive-link-probe");
+        try { Files.createSymbolicLink(probe, backup.toAbsolutePath()); }
+        catch (UnsupportedOperationException | java.nio.file.FileSystemException unavailable) {
+            org.junit.jupiter.api.Assumptions.abort("Symbolic links unavailable: " + unavailable.getMessage());
+        }
+        Files.delete(probe); Files.delete(archive); Files.createSymbolicLink(archive, backup.toAbsolutePath());
+        try (var membership = join(destination)) {
+            assertEquals(RestoreException.Reason.STAGING_CHANGED, assertThrows(RestoreException.class,
+                    () -> installer(destination.location(), destination.coordinator(), step -> { }).atStart()).reason());
+        }
+        assertOldShop(destination);
+        assertFalse(Files.exists(destination.location().directory().resolve(RestoreJournal.FILE)));
+    }
+
+    @Test
     void aScheduledRestoreReplacesTheShopAndKeepsTheOldOneAside() throws Exception {
         Shop shop = scheduled("shop", backup);
         try (DataFolderCoordinator.Membership membership = join(shop)) {
