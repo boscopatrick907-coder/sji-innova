@@ -1,5 +1,7 @@
 package cm.sji.innova.desktop.backup;
 
+import cm.sji.innova.core.persistence.DatabaseGate;
+
 import cm.sji.innova.desktop.evidence.Evidence;
 import cm.sji.innova.desktop.evidence.EvidenceService;
 import cm.sji.innova.desktop.shell.DataFolderCoordinator;
@@ -198,11 +200,15 @@ public final class BackupService {
 
     /** The last backup this shop published, if one was recorded. */
     public Optional<Properties> lastBackup() throws IOException {
-        Path record = location.directory().resolve(LAST_BACKUP);
-        if (!Files.exists(record)) return Optional.empty();
-        Properties p = new Properties();
-        try (Reader reader = Files.newBufferedReader(record, StandardCharsets.UTF_8)) { p.load(reader); }
-        return Optional.of(p);
+        try (DatabaseGate.Work ignored = DatabaseGate.enterFolder(location.directory())) {
+            Path record = location.directory().resolve(LAST_BACKUP);
+            if (!Files.exists(record)) return Optional.empty();
+            Properties p = new Properties();
+            try (Reader reader = Files.newBufferedReader(record, StandardCharsets.UTF_8)) { p.load(reader); }
+            return Optional.of(p);
+        } catch (SQLException blocked) {
+            throw new IOException("Cannot read backup metadata while the folder is paused", blocked);
+        }
     }
 
     /** The last backup this shop published, as recorded right after its publication (OFF-03c). */
