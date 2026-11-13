@@ -111,7 +111,8 @@ In every refusal, nothing is in the destination, no success is recorded, and the
 
 ## Not yet
 
-- Removing old temporary files, reminders and retention come with the Settings screen (OFF-03c);
+- The Settings screen makes backups (`SETTINGS.md`). Removing old temporary files, reminders and
+  retention come next (OFF-03c4);
   `lastSuccess()` gives the reminder what it needs.
 - Restore (OFF-03b) reuses `BackupArchive`.
 - Power loss is not tested. The archive is forced to the disk before its rename, but a rename alone
