@@ -360,6 +360,60 @@ class RestorePreparationTest {
         });
     }
 
+    @Test
+    void aPrePhotoSchemaBackupCanBeMigratedWithoutTouchingTheShop() throws Exception {
+        Path schema8 = olderBackup(false);
+        Path schema6 = ArchiveEdits.rewrite(schema8, directory.resolve("schema6.zip"), entries -> {
+            entries.keySet().removeIf(name -> name.startsWith("photos/"));
+            entries.put("cella.db", ArchiveEdits.editDatabase(entries.get("cella.db"), directory,
+                    "DROP TABLE product_photos", "DROP TABLE product_import_rows",
+                    "DROP TABLE product_import_operations", "PRAGMA user_version = 6"));
+            ArchiveEdits.relist(entries, manifest -> {
+                manifest.setProperty("schemaVersion", "6"); manifest.setProperty("photos", "0");
+            });
+        });
+        Map<String, String> before = theShop();
+        var summary = preparation().prepare(schema6);
+        assertEquals(6, summary.backupSchemaVersion());
+        assertEquals(0, summary.photos());
+        assertEquals(List.of("Oil", "Rice"), productNames(restoreFolder(summary).resolve("new/cella.db")));
+        preparation().schedule(summary);
+        assertEquals(summary, preparation().scheduled().orElseThrow());
+        assertEquals(before, theShop());
+    }
+
+    @Test
+    void replacingAPreparedPhotoWithAnIdenticalSymbolicLinkMustBeRefused() throws Exception {
+        var summary = preparation().prepare(backup);
+        String name = summary.stagedFiles().keySet().stream().filter(n -> n.startsWith("photos/")).findFirst().orElseThrow();
+        Path photo = restoreFolder(summary).resolve("new").resolve(name);
+        Path outside = directory.resolve("outside-photo.png"); Files.copy(photo, outside);
+        Path probe = directory.resolve("link-probe");
+        try { Files.createSymbolicLink(probe, outside); }
+        catch (UnsupportedOperationException | java.nio.file.FileSystemException unavailable) {
+            org.junit.jupiter.api.Assumptions.abort("Symbolic links unavailable: " + unavailable.getMessage());
+        }
+        Files.delete(probe); Files.delete(photo); Files.createSymbolicLink(photo, outside);
+        assertThrows(java.io.IOException.class, () -> preparation().schedule(summary));
+        assertTrue(preparation().scheduled().isEmpty());
+        assertTrue(Files.exists(outside));
+    }
+
+    @Test
+    void readingAScheduledRestoreWaitsForFolderMaintenance() throws Exception {
+        var summary = preparation().prepare(backup); preparation().schedule(summary);
+        var worker = stoppableWorkers();
+        var started = new java.util.concurrent.CountDownLatch(1);
+        Future<Optional<RestorePreparation.Summary>> reading;
+        try (var maintenance = coordinator.beginMaintenance(Duration.ofSeconds(10))) {
+            reading = worker.submit(() -> { started.countDown(); return preparation().scheduled(); });
+            assertTrue(started.await(5, TimeUnit.SECONDS));
+            assertThrows(java.util.concurrent.TimeoutException.class, () -> reading.get(200, TimeUnit.MILLISECONDS),
+                    "Even metadata readers must wait until restore finishes moving the shop");
+        }
+        assertEquals(Optional.of(summary), reading.get(10, TimeUnit.SECONDS));
+    }
+
     private interface Damage { void apply(Path staged) throws Exception; }
 
     /** The backup unpacked as a restore would, passing the final check; then {@code damage}, which it must refuse. */

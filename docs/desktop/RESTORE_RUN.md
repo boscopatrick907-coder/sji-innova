@@ -141,3 +141,9 @@ folder where a restore had moved it aside.
 - The screen, cancelling a scheduled restore, and removing old restores: OFF-03c.
 - Power loss is not tested. Files and the journal are forced to the disk, but a rename's folder entry is
   not (Java cannot do that on Windows), and a power cut is not simulated.
+
+Review correction (13 November 2026): the scheduled archive and staged tree must still be ordinary
+files/folders at startup; a symbolic link with identical target bytes is refused before pre-backup
+or quarantine. Restore inventory fingerprinting also refuses symbolic links and special files. The
+installer reads its note through the internal reader while it holds exclusive maintenance; ordinary
+Settings readers use the gated public reader and wait until maintenance has ended.
