@@ -3,14 +3,11 @@ package cm.sji.innova.desktop.backup;
 import cm.sji.innova.core.persistence.DatabaseGate;
 import cm.sji.innova.core.persistence.SqliteDatabase;
 import cm.sji.innova.desktop.shell.LocalAppData;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.StringReader;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.FileSystemException;
 import java.nio.file.Files;
@@ -26,8 +23,6 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Clock;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
@@ -151,17 +146,12 @@ public final class RestorePreparation {
     Optional<Summary> readScheduled() throws IOException {
         Path note = root().resolve(SCHEDULED);
         if (!Files.exists(note)) return Optional.empty();
-        byte[] bytes;
-        try (InputStream in = Files.newInputStream(note)) { bytes = in.readNBytes((int) Math.min(Integer.MAX_VALUE - 8, MAX_NOTE_BYTES + 1)); }
-        if (bytes.length > MAX_NOTE_BYTES) throw damaged("it is too large");
-        String text = new String(bytes, StandardCharsets.ISO_8859_1);
-        int last = text.lastIndexOf('\n', text.length() - 2);
-        String body = text.substring(0, last + 1);
-        if (!text.endsWith("\n") || !text.substring(last + 1).equals("checksum=" + hex(digest().digest(body.getBytes(StandardCharsets.ISO_8859_1))) + "\n")) {
-            throw damaged("its checksum does not match");
+        Properties p;
+        try {
+            p = ChecksummedProperties.read(note, MAX_NOTE_BYTES);
+        } catch (IllegalArgumentException unusable) {
+            throw damaged(unusable.getMessage());
         }
-        Properties p = new Properties();
-        p.load(new StringReader(body));
         try {
             if (!FORMAT.equals(p.getProperty("format"))) throw damaged("its format is unknown");
             if (!location.directory().toRealPath().toString().equals(p.getProperty("folder"))) throw damaged("it belongs to another data folder");
@@ -179,7 +169,10 @@ public final class RestorePreparation {
         }
     }
 
-    /** Removes a prepared restore that was not scheduled, for example when the person cancels. Never a scheduled one. */
+    /**
+     * Removes a prepared restore that was not scheduled, for example when the person cancels. Never a scheduled
+     * one, and never one that ran: its folder keeps the old shop and the pre-restore backup (OFF-03b2).
+     */
     public void discard(UUID restoreId) throws IOException, SQLException {
         refuseTheSwingThread();
         try (DatabaseGate.Work ignored = DatabaseGate.enterFolder(location.directory())) {
@@ -187,7 +180,13 @@ public final class RestorePreparation {
             if (scheduled.isPresent() && scheduled.get().restoreId().equals(restoreId)) {
                 throw new RestoreException(RestoreException.Reason.ALREADY_SCHEDULED, "This restore is scheduled and is not removed here.");
             }
-            BackupService.deleteTree(root().resolve(restoreId.toString()));
+            Path folder = root().resolve(restoreId.toString());
+            if (Files.exists(location.directory().resolve(RestoreJournal.FILE)) || Files.exists(folder.resolve(RestoreJournal.FILE))
+                    || Files.exists(folder.resolve(RestoreInstaller.OLD)) || Files.exists(folder.resolve(RestoreInstaller.PRE_RESTORE))) {
+                throw new RestoreException(RestoreException.Reason.ALREADY_SCHEDULED,
+                        "This restore has run, or is running: its folder keeps the old shop and is not removed here.");
+            }
+            BackupService.deleteTree(folder);
         }
     }
 
@@ -202,7 +201,7 @@ public final class RestorePreparation {
     }
 
     private void refuseIfScheduled() throws RestoreException {
-        if (Files.exists(root().resolve(SCHEDULED))) {
+        if (Files.exists(root().resolve(SCHEDULED)) || Files.exists(location.directory().resolve(RestoreJournal.FILE))) {
             throw new RestoreException(RestoreException.Reason.ALREADY_SCHEDULED,
                     "A restore is already scheduled for the next start of Cella.");
         }
@@ -311,7 +310,7 @@ public final class RestorePreparation {
         }
     }
 
-    /** The note's lines, sorted and without a date comment, then a SHA-256 of all of them. */
+    /** The note, in the format of every restore record: sorted lines, then a SHA-256 of all of them. */
     private byte[] note(Summary s) throws IOException {
         Properties p = new Properties();
         p.setProperty("format", FORMAT);
@@ -335,14 +334,7 @@ public final class RestorePreparation {
             p.setProperty("file." + i + ".sha256", file.getValue());
             i++;
         }
-        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-        p.store(bytes, "Cella: a restore scheduled for the next start");
-        List<String> lines = new ArrayList<>(List.of(bytes.toString(StandardCharsets.ISO_8859_1).split("\\R")));
-        lines.removeIf(line -> line.startsWith("#") && !line.equals("#Cella: a restore scheduled for the next start"));
-        lines.sort(Comparator.comparing((String line) -> !line.startsWith("#")).thenComparing(line -> line));
-        String body = String.join("\n", lines) + "\n";
-        String checksum = hex(digest().digest(body.getBytes(StandardCharsets.ISO_8859_1)));
-        return (body + "checksum=" + checksum + "\n").getBytes(StandardCharsets.ISO_8859_1);
+        return ChecksummedProperties.write(p, "Cella: a restore scheduled for the next start");
     }
 
     /** Writes the note completely, then gives it its name in one step that never replaces an existing note. */
