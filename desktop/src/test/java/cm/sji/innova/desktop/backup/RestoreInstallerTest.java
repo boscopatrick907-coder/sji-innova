@@ -114,8 +114,9 @@ class RestoreInstallerTest {
             assertEquals(RestoreException.Reason.STAGING_CHANGED, assertThrows(RestoreException.class,
                     () -> installer(destination.location(), destination.coordinator(), step -> { }).atStart()).reason());
         }
-        assertOldShop(destination);
-        assertFalse(Files.exists(destination.location().directory().resolve(RestoreJournal.FILE)));
+        assertNothingMoved(destination);
+        assertTrue(Files.exists(destination.location().directory().resolve("restore").resolve(RestorePreparation.SCHEDULED)),
+                "A refused restore remains scheduled until explicitly cancelled");
     }
 
     @Test
