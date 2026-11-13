@@ -123,6 +123,21 @@ class BackupServiceTest {
     // ----- What a backup holds -----
 
     @Test
+    void lastBackupMetadataWaitsForFolderMaintenance() throws Exception {
+        service().create(usb);
+        try (var worker = Executors.newSingleThreadExecutor()) {
+            var started = new java.util.concurrent.CountDownLatch(1);
+            java.util.concurrent.Future<java.util.Optional<Properties>> reading;
+            try (var maintenance = coordinator.beginMaintenance(java.time.Duration.ofSeconds(10))) {
+                reading = worker.submit(() -> { started.countDown(); return service().lastBackup(); });
+                assertTrue(started.await(5, TimeUnit.SECONDS));
+                assertThrows(java.util.concurrent.TimeoutException.class, () -> reading.get(200, TimeUnit.MILLISECONDS));
+            }
+            assertTrue(reading.get(10, TimeUnit.SECONDS).isPresent());
+        }
+    }
+
+    @Test
     void aBackupHoldsTheSnapshotTheShopIdThePhotosAndTheDecidedEvidenceEachWithItsChecksum() throws Exception {
         String setAside = decidedSetAsideReceipt();
 
