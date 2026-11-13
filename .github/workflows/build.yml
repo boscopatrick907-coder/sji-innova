@@ -15,6 +15,27 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
+      - name: Prepare Maven wrapper (Linux)
+        if: runner.os != 'Windows'
+        timeout-minutes: 3
+        shell: bash
+        run: |
+          for attempt in 1 2 3; do
+            if ./mvnw --version; then exit 0; fi
+            if [ "$attempt" -lt 3 ]; then sleep 10; fi
+          done
+          exit 1
+      - name: Prepare Maven wrapper (Windows)
+        if: runner.os == 'Windows'
+        timeout-minutes: 3
+        shell: pwsh
+        run: |
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            .\mvnw.cmd --version
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            if ($attempt -lt 3) { Start-Sleep -Seconds 10 }
+          }
+          exit 1
       - name: Build and test (Linux)
         if: runner.os != 'Windows'
         run: ./mvnw --batch-mode --no-transfer-progress clean verify
