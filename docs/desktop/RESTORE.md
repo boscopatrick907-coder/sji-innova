@@ -65,14 +65,27 @@ After the person confirms the summary:
 folder, is reported as `NOTE_DAMAGED`, never ignored. `discard(restoreId)` removes a prepared restore
 that was not scheduled; a scheduled one is never removed there.
 
+## `cancelScheduled()` (OFF-03c)
+
+The person changed their mind before restarting Cella: the scheduled restore will not run.
+1. **Refused once the restore has started** (a journal exists): from then on only recovery at start-up
+   decides (`ALREADY_SCHEDULED`).
+2. **The note goes first**, so from that moment nothing is scheduled.
+3. **Then the prepared copy is removed**, unless its folder also holds a pre-restore backup or an old shop
+   from an attempt that stopped: then the folder is kept.
+
+A note that cannot be read (`NOTE_DAMAGED`) can be cancelled too: that is the way out of it; its prepared
+copy stays, like any prepared restore. It returns whether a restore was scheduled.
+
 ## Folder ownership
 
-`prepare`, `schedule` and `discard` pass through the folder's gate (OFF-03a1), so they wait while a
-backup or restore holds the folder, and a backup waits for them. They refuse the Swing event thread.
+`prepare`, `schedule`, `discard` and `cancelScheduled` pass through the folder's gate (OFF-03a1), so they
+wait while a backup or restore holds the folder, and a backup waits for them. They refuse the Swing event
+thread.
 
 ## Tests
 
-**`RestorePreparationTest` (10)** uses a running shop with products, deliveries, a sale and a photo, a
+**`RestorePreparationTest` (13)** uses a running shop with products, deliveries, a sale and a photo, a
 backup of it on a "USB key", then one more product made after the backup. Every test checks that the shop
 is not changed: each file outside `restore/` keeps its SHA-256.
 
@@ -87,7 +100,10 @@ is not changed: each file outside `restore/` keeps its SHA-256.
 | `schedulingFirstChecksThatThePreparedFilesAreExactlyTheOnesSummarised` | A changed photo, a changed copy, an added file: `STAGING_CHANGED`, no note |
 | `onlyOneRestoreIsScheduledAndAScheduledOneIsNeverDiscarded` | A second schedule and a new prepare are refused, the note is unchanged, the scheduled restore is kept and the other removed |
 | `aDamagedNoteOrOneFromAnotherFolderIsReportedNeverIgnored` | A changed value, a note cut short, a note copied to another folder: `NOTE_DAMAGED` |
-| `preparingAndSchedulingWaitWhileTheFolderIsHeldAndAreRefusedOnTheSwingThread` | Both wait during maintenance and write nothing meanwhile; prepare, schedule and discard refuse the Swing thread |
+| `aScheduledRestoreCanBeCancelledBeforeTheNextStart` | The note and the prepared copy go, the shop is unchanged, nothing is left to cancel, and another restore can be scheduled |
+| `aDamagedNoteCanStillBeCancelled` | A note that cannot be read is removed; its prepared copy stays |
+| `aRestoreThatStartedCannotBeCancelledAndAPreRestoreBackupIsNeverRemoved` | With a journal, cancelling is refused and the restore stays scheduled; a pre-restore backup in the folder is kept |
+| `preparingSchedulingAndCancellingWaitWhileTheFolderIsHeldAndAreRefusedOnTheSwingThread` | Each waits during maintenance and writes nothing meanwhile; prepare, schedule, discard and cancel refuse the Swing thread |
 
 **`BackupArchiveTest`** gains `extractUnpacksEveryListedFileUnderItsNameAndNothingElse`, and refuses a
 listed photo filed under another shop.
@@ -96,7 +112,7 @@ listed photo filed under another shop.
 
 - Installing a scheduled restore, the journal and recovery after a crash: OFF-03b2, in `RESTORE_RUN.md`.
 - Running it at start-up, before the shop opens: OFF-03b3a, in `DesktopApplication.openShop` (see `RESTORE_RUN.md`).
-- The restore screen, cancelling a scheduled restore, and removing old `restore/` folders: OFF-03c.
+- The restore screen and removing old `restore/` folders: OFF-03c.
 
 ## Review corrections (13 November 2026)
 
@@ -107,3 +123,4 @@ are rejected even if their target bytes have the expected checksum. The archive 
 also be an ordinary file. Scheduled-restore and last-backup metadata readers participate in the
 folder gate; they wait for maintenance instead of racing file moves. The installer's internal note
 reader is used only after exclusive maintenance ownership has been obtained.
+

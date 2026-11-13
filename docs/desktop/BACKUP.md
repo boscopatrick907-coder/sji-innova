@@ -49,6 +49,13 @@ A file named `cella-backup-*.zip` is therefore always complete and checked. A te
 the backup's ID, so an interrupted one can be recognised and removed later; it is never reported as a
 success.
 
+## The last backup (OFF-03c)
+
+`lastSuccess()` reads `last-backup.properties` as a `LastBackup`: the backup ID, the file, its SHA-256
+and when it was made, with `age(clock)` for "made 3 days ago" and, later, the reminder. A record that
+cannot be read counts as none: a reminder then asks for a backup, which is the safe side. The older
+`lastBackup()`, which returns the raw properties, is unchanged.
+
 ## `BackupArchive`: the shared checker
 
 `BackupArchive.check(archive, scratch)` trusts nothing in the archive:
@@ -72,12 +79,13 @@ success.
 
 ## Tests
 
-**`BackupServiceTest` (12)** uses a running shop with two products, deliveries, a sale and a photo,
+**`BackupServiceTest` (13)** uses a running shop with two products, deliveries, a sale and a photo,
 joined to its folder.
 
 | Test | Checks |
 | --- | --- |
 | `aBackupHoldsTheSnapshotTheShopIdThePhotosAndTheDecidedEvidenceEachWithItsChecksum` | The file name and entries, the decided set-aside file and its decision, nothing else (no device ID, locks, logs), the manifest's identity, source computer and evidence inventory, every size and SHA-256, the database's stock, and the success record naming this archive |
+| `theLastBackupIsReadWithItsAgeAndAnUnreadableRecordCountsAsNone` | None before a backup; then the backup ID, file, SHA-256, time and age; an unreadable record counts as none |
 | `aBackupChangesNothingInTheShopAndNormalWorkGoesOnAfterwards` | Only the success record is added; afterwards, writes, operations and the import screen work again |
 | `noBackupWhileARequestIsSavedAndTheRequestIsNamed` | Each of the four saved requests |
 | `noBackupWhileASetAsideFileHasNoDecisionThenItWorksOnceDecided` | `EVIDENCE_UNRESOLVED`, then backed up with its decision |
@@ -103,7 +111,8 @@ In every refusal, nothing is in the destination, no success is recorded, and the
 
 ## Not yet
 
-- Removing old temporary files, reminders and retention come with the Settings screen (OFF-03c).
+- Removing old temporary files, reminders and retention come with the Settings screen (OFF-03c);
+  `lastSuccess()` gives the reminder what it needs.
 - Restore (OFF-03b) reuses `BackupArchive`.
 - Power loss is not tested. The archive is forced to the disk before its rename, but a rename alone
   does not prove power-loss durability.

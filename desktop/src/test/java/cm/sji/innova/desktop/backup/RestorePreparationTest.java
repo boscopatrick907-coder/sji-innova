@@ -274,10 +274,63 @@ class RestorePreparationTest {
         assertTrue(preparation().scheduled().isPresent(), "The note reads again once it is whole");
     }
 
+    // ----- Cancelling (OFF-03c) -----
+
+    @Test
+    void aScheduledRestoreCanBeCancelledBeforeTheNextStart() throws Exception {
+        Map<String, String> before = theShop();
+        preparation().schedule(preparation().prepare(backup));
+
+        assertTrue(preparation().cancelScheduled());
+
+        assertEquals(Optional.empty(), preparation().scheduled(), "Nothing is scheduled any more");
+        assertEquals(List.of(), names(restore()), "The note and the prepared copy are gone");
+        assertEquals(before, theShop(), "The shop is not changed");
+        assertFalse(preparation().cancelScheduled(), "Nothing is left to cancel");
+        preparation().schedule(preparation().prepare(backup));
+        assertTrue(preparation().scheduled().isPresent(), "Another restore can be scheduled");
+    }
+
+    @Test
+    void aDamagedNoteCanStillBeCancelled() throws Exception {
+        RestorePreparation.Summary summary = preparation().prepare(backup);
+        preparation().schedule(summary);
+        Path note = restore().resolve(RestorePreparation.SCHEDULED);
+        Files.writeString(note, "not a note", StandardCharsets.ISO_8859_1);
+        assertEquals(RestoreException.Reason.NOTE_DAMAGED, assertThrows(RestoreException.class, () -> preparation().scheduled()).reason());
+
+        assertTrue(preparation().cancelScheduled());
+
+        assertFalse(Files.exists(note));
+        assertEquals(Optional.empty(), preparation().scheduled());
+        assertEquals(List.of(summary.restoreId().toString()), names(restore()), "Its prepared copy stays, like any prepared restore");
+    }
+
+    @Test
+    void aRestoreThatStartedCannotBeCancelledAndAPreRestoreBackupIsNeverRemoved() throws Exception {
+        RestorePreparation.Summary started = preparation().prepare(backup);
+        preparation().schedule(started);
+        Path journal = location.directory().resolve(RestoreJournal.FILE);
+        Files.writeString(journal, "a restore in progress");
+        assertEquals(RestoreException.Reason.ALREADY_SCHEDULED,
+                assertThrows(RestoreException.class, () -> preparation().cancelScheduled()).reason());
+        assertTrue(Files.exists(restore().resolve(RestorePreparation.SCHEDULED)), "It stays scheduled");
+        Files.delete(journal);
+
+        // A start that stopped after making its pre-restore backup: that backup is kept.
+        Path preRestore = Files.createDirectories(restoreFolder(started).resolve(RestoreInstaller.PRE_RESTORE)).resolve("cella-backup-x.zip");
+        Files.writeString(preRestore, "a pre-restore backup");
+
+        assertTrue(preparation().cancelScheduled());
+
+        assertEquals(Optional.empty(), preparation().scheduled());
+        assertTrue(Files.exists(preRestore), "The pre-restore backup is kept");
+    }
+
     // ----- Folder ownership and the Swing thread -----
 
     @Test
-    void preparingAndSchedulingWaitWhileTheFolderIsHeldAndAreRefusedOnTheSwingThread() throws Exception {
+    void preparingSchedulingAndCancellingWaitWhileTheFolderIsHeldAndAreRefusedOnTheSwingThread() throws Exception {
         ExecutorService worker = stoppableWorkers();
         Future<RestorePreparation.Summary> prepared;
         try (DataFolderCoordinator.Maintenance maintenance = coordinator.beginMaintenance(Duration.ofSeconds(10))) {
@@ -298,13 +351,24 @@ class RestorePreparationTest {
         scheduled.get(30, TimeUnit.SECONDS);
         assertTrue(preparation().scheduled().isPresent());
 
+        Future<Boolean> cancelled;
+        try (DataFolderCoordinator.Maintenance maintenance = coordinator.beginMaintenance(Duration.ofSeconds(10))) {
+            cancelled = worker.submit(() -> preparation().cancelScheduled());
+            Thread.sleep(500);
+            assertFalse(cancelled.isDone(), "Cancelling waits too");
+            assertTrue(Files.exists(restore().resolve(RestorePreparation.SCHEDULED)));
+        }
+        assertTrue(cancelled.get(30, TimeUnit.SECONDS));
+        assertEquals(Optional.empty(), preparation().scheduled());
+
         List<Throwable> onTheSwingThread = new ArrayList<>();
         SwingUtilities.invokeAndWait(() -> {
             onTheSwingThread.add(assertThrows(IllegalStateException.class, () -> preparation().prepare(backup)));
             onTheSwingThread.add(assertThrows(IllegalStateException.class, () -> preparation().schedule(summary)));
             onTheSwingThread.add(assertThrows(IllegalStateException.class, () -> preparation().discard(summary.restoreId())));
+            onTheSwingThread.add(assertThrows(IllegalStateException.class, () -> preparation().cancelScheduled()));
         });
-        assertEquals(3, onTheSwingThread.size());
+        assertEquals(4, onTheSwingThread.size());
     }
 
     // ----- Helpers -----

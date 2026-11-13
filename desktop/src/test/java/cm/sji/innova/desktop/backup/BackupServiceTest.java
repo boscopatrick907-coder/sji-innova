@@ -39,12 +39,14 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.sql.DriverManager;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -199,6 +201,23 @@ class BackupServiceTest {
         Properties last = service().lastBackup().orElseThrow();
         assertEquals(backup.backupId().toString(), last.getProperty("backupId"));
         assertEquals(backup.sha256(), last.getProperty("sha256"), "The success record names this exact archive");
+    }
+
+    @Test
+    void theLastBackupIsReadWithItsAgeAndAnUnreadableRecordCountsAsNone() throws Exception {
+        assertEquals(Optional.empty(), service().lastSuccess(), "No backup yet");
+
+        BackupService.Backup backup = service().create(usb);
+
+        BackupService.LastBackup last = service().lastSuccess().orElseThrow();
+        assertEquals(backup.backupId(), last.backupId());
+        assertEquals(backup.file(), last.file());
+        assertEquals(backup.sha256(), last.sha256());
+        assertEquals(backup.createdAt(), last.createdAt());
+        assertEquals(Duration.ofDays(8), last.age(Clock.offset(CLOCK, Duration.ofDays(8))), "Its age, by the clock");
+
+        Files.writeString(location.directory().resolve(BackupService.LAST_BACKUP), "createdAt=last tuesday\n");
+        assertEquals(Optional.empty(), service().lastSuccess(), "An unreadable record counts as none: the safe side");
     }
 
     @Test
