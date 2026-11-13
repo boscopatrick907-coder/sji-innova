@@ -5,10 +5,8 @@ restores it from a backup. It has two cards, **Backup** and **Restore**, over `B
 (`BACKUP.md`) and `RestorePreparation` (`RESTORE.md`). The restore itself runs at the next start
 (`RESTORE_RUN.md`).
 
-**It is not in the sidebar yet.** Its entry changes `ShellPanel`, which waits for Patrick's agreement
-(OFF-03c3). The screen has its own package and its own French and English words
-(`settings_fr.properties`, `settings_en.properties`). It uses `CatalogStyle` and `FeedbackStrip` as they
-are; no shared file is changed.
+The screen has its own package and its own French and English words (`settings_fr.properties`,
+`settings_en.properties`). It uses `CatalogStyle` and `FeedbackStrip` as they are.
 
 ```java
 SettingsPanel settings = new SettingsPanel(location, context, messages);
@@ -16,6 +14,21 @@ settings.reload();   // when the screen is shown: reads the last backup and any 
 ```
 
 Building the screen reads nothing. `reload()` reads in the background.
+
+## In the app (OFF-03c3)
+
+**Settings** (*Paramètres*) is the last entry in the sidebar, with a small gear icon (`SettingsIcon`,
+in this package, so the shared style file does not change). Products is still the first screen.
+
+- `ShellPanel` builds the screen the first time the entry is opened, on the shop that is open:
+  `new SettingsPanel(context.location(), context, messages)`. Building it reads nothing.
+- Every time the entry is opened, `ShellPanel` calls `reload()`. If a backup or restore action is
+  still running, `reload()` reads nothing and returns that action.
+- When the shop is opened again (Retry after an error), the old screen goes with the old shop.
+- The backup and restore services use the folder membership Cella takes at start-up, so a backup
+  waits for, or refuses, the shop's other work as described in `BACKUP.md`.
+
+![Settings opened from the sidebar, 960×600](images/settings-route-960-fr.png)
 
 ## Backup card
 
@@ -114,10 +127,17 @@ Swing event thread. The last test uses the shop's own services on a disposable s
 | `everyWordIsInFrenchAndInEnglishWithTheSamePlaceholders` | Same keys, none blank, same number of `{0}`; the French screen |
 | `onTheShopsOwnServicesABackupIsMadeThenARestoreIsScheduledAndCancelled` | A real backup on a "USB key", then that backup chosen, scheduled and cancelled |
 
+**`SettingsRouteTest` (2, OFF-03c3)** opens the real `ShellPanel` on a disposable shop, with the folder
+membership Cella takes at start-up.
+
+| Test | Checks |
+| --- | --- |
+| `theSettingsEntryOpensTheScreenOnTheShopsOwnBackupAndRestoreServices` | Products first; the five entries in order; nothing built before Settings is opened; then "No backup yet". A real backup and a scheduled restore show when the entry is opened again, on the same screen; its *Cancel the restore* reaches the shop's restore service |
+| `inFrenchTheEntryAndScreenAreFrenchAndOpeningTheShopAgainBuildsANewScreen` | The French entries and screen; after the shop is opened again, the old screen is gone and a new one is built |
+
 ## Not yet
 
-- **The sidebar entry** (OFF-03c3), after Patrick's agreement on `ShellPanel`.
-- **The start page's restore messages** (OFF-03b3b), also on `ShellPanel`.
+- **The start page's restore messages** (OFF-03b3b), on `ShellPanel`.
 - **A reminder to back up, how many backups to keep, and removing old `restore/` folders** (OFF-03c4),
   with Patrick's defaults. A chosen backup that is never confirmed or cancelled keeps its copy in
   `restore/` until then.
