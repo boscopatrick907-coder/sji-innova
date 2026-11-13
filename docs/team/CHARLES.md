@@ -1,6 +1,6 @@
 # Takou / Charles — restore and backup/settings
 
-Updated 12 November 2026. This is the only current assignment file named after Charles. Patrick has
+Updated 13 November 2026. This is the only current assignment file named after Charles. Patrick has
 changed the work split: **Takou handles restore and backup/settings; Patrick and Codex handle the
 shop workflow testing, usability fixes and the shared acceptance checklist.** This replaces earlier sales-history-only and whole-roadmap briefs.
 
@@ -11,27 +11,43 @@ and PRs #47–#49's folder coordinator, evidence decisions and checked backup-ca
 Their original commits and the additive review corrections remain intact. Do not rebuild those services.
 PR #50 also merged the approved shared styling and live local dashboard. Reuse them; do not rebuild them.
 
+## Restore delivery review — PRs #53–#57
+
+Your restore preparation, journal/recovery, startup, cancellation/status services and Settings screen
+have been submitted as five stacked PRs. The review adds corrections without recreating your commits:
+pre-photo-schema migration, strict ordinary staging paths, and gated metadata readers. See
+[RESTORE_REVIEW.md](../desktop/RESTORE_REVIEW.md) for scope and verification evidence.
+
+These submissions are **not merged yet**. Patrick reviews and merges #53, #54, #55, #56, then #57 after
+their checks pass. Keep each original commit with the normal merge option; do not force-push or squash
+the reviewed branches. Update an existing working branch safely rather than restarting your work.
+
 ## Your immediate work
 
-1. **OFF-03b — restore service:** follow [the corrected backup/restore contract](../design/BACKUP_RESTORE.md).
-   Validate archives and staged migrations before active data changes; obtain exclusive ownership;
-   verify a pre-restore backup; use the durable journal to recover coherent database/identity/photos/
-   evidence after a kill at every boundary. Handle WAL/SHM and device identity as specified.
-2. **OFF-03c — backup/settings functionality:** create/restore actions, destination, progress,
-   confirmed results, last successful backup, reminders/retention and FR/EN wording. Resolve remaining
-   product defaults with Patrick; do not describe an unimplemented restore or successful backup as ready.
-3. **OFF-03d — acceptance:** restore a disposable shop into another folder and compare products,
-   stock, sales, photos, evidence and identity. Include corrupted/unsupported backups, pending work,
-   interrupted restore and two-process exclusion on Windows/Linux.
+1. **OFF-03c3 — connect Settings to the real app:** after the reviewed stack merges, add a translated
+   Settings entry to ShellPanel, create the existing SettingsPanel with the current location/context,
+   and call reload when the route opens. Keep Products as the initial screen. Reuse the approved
+   styling and lifetime folder membership; no file/database work on the event thread. Add a small
+   integration test proving the route opens and production services are used. Coordinate ShellPanel,
+   shared messages and navigation assertions with Patrick before editing them.
+2. **OFF-03c4 — remaining backup usability:** reminders, retention, destination persistence and any
+   approved defaults still need implementation/acceptance. Review the existing backup/restore
+   contract and resolve the product choices with Patrick; do not silently choose deletion defaults.
+   Retention must never remove the last valid backup, pre-restore backups, quarantined generations,
+   pending staging or anything a live journal references.
+3. **OFF-03d — technical acceptance:** include corrupt/unsupported backups, pending destination work,
+   interrupted restore and two-process exclusion on Windows/Linux. Deliver a real disposable-shop
+   backup/restore comparison covering products, stock, sales, photos, evidence and device identity.
+   Patrick and Codex supply the ordinary shop trial and shared checklist; those are not a substitute
+   for your restore failure/restart tests.
 
-Deliver small reviewable PRs, not a combined rewrite. Keep the full checklist in
-[OFFLINE_COMPLETION.md](../roadmap/OFFLINE_COMPLETION.md); later backlog work is planned with Patrick
-after these milestones. No additional assignment to another collaborator is implied.
+Deliver one small reviewable PR at a time. Follow [BACKUP_RESTORE.md](../design/BACKUP_RESTORE.md)
+and keep [OFFLINE_COMPLETION.md](../roadmap/OFFLINE_COMPLETION.md) honest about what remains.
 
 ## How Patrick and Codex will help
 
-Your next deliverable is a small **OFF-03b restore-service PR**. Keep your focus on the restore
-contract and its failure/restart tests; Settings and backup controls follow after that service review.
+Your next deliverable after the review stack is **OFF-03c3 Settings integration**. Maintain the restore
+contract and its failure/restart tests while connecting the existing screen.
 Patrick and Codex will take the following supporting work:
 
 - Exercise the ordinary shop workflow in a separate demonstration data folder: product families and
@@ -50,7 +66,7 @@ preparing the shared checklist and running the ordinary shop/manual comparison w
 
 In each PR, provide a short summary of what works, commands and results, known gaps, and exact steps
 for us to verify with disposable data. Report blockers and shared-file needs early. Do not wait for
-our ordinary shop trial to start independent restore-service work. If a supporting fix becomes
+our ordinary shop trial to start independent Settings integration work. If a supporting fix becomes
 necessary for restore, coordinate it with Patrick instead of silently duplicating that work.
 
 ## Design ownership and file coordination
@@ -108,8 +124,9 @@ Patrick reviews before merge. Your editor should push/merge only when you ask it
 > I am Takou (Charles). Read docs/team/CHARLES.md, docs/design/BACKUP_RESTORE.md and the current
 > backup/coordinator/evidence implementation. PR #50 styling and dashboard are already merged.
 > Patrick and Codex handle ordinary shop/restart testing, usability fixes and the shared checklist;
-> I own OFF-03b restore, then OFF-03c backup/settings and technical OFF-03d acceptance evidence.
+> My submitted restore/services/Settings work is in reviewed PRs #53–#57. My next task after merge
+> is OFF-03c3 Settings integration, then the remaining OFF-03c4 work and technical OFF-03d evidence.
 > Do not duplicate their supporting work or treat it as completed. Preserve all existing
-> commits and behavior. Explain steps simply, start with a small restore-service PR and test actual
+> commits and behavior. Explain steps simply, start with a small Settings-integration PR and preserve actual
 > failure/restart boundaries. Coordinate shared shell/style/context changes with Patrick before
 > editing them. Do not rewrite the app or start a competing design. Do not push or merge unless I ask.
