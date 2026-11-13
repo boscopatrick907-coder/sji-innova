@@ -73,6 +73,8 @@ public final class ShellPanel extends JPanel {
     private AppContext activeContext;
     private cm.sji.innova.desktop.catalog.CatalogPanel catalog;
     private cm.sji.innova.desktop.stock.StockPanel stockPanel;
+    private cm.sji.innova.desktop.settings.SettingsPanel settingsPanel;
+    private CompletionStage<Void> settingsReady;
 
     public ShellPanel(Messages messages, LocalAppData location, Callable<AppContext> loader, Runnable onExit) {
         super(new BorderLayout());
@@ -114,6 +116,8 @@ public final class ShellPanel extends JPanel {
         screenArea.removeAll();
         activeContext = context;
         stockPanel = null;
+        settingsPanel = null;
+        settingsReady = null;
         dashboard = new DashboardPanel(context, messages, this::selectScreen);
         screenArea.add(dashboard, "home");
         var products = ProductsSlot.create(context, messages);
@@ -128,6 +132,7 @@ public final class ShellPanel extends JPanel {
         model.addElement(new NavItem("products", messages.get("shell.nav.products")));
         model.addElement(new NavItem("stock", messages.get("shell.nav.stock")));
         model.addElement(new NavItem("sales", messages.get("shell.nav.sales")));
+        model.addElement(new NavItem("settings", messages.get("shell.nav.settings")));
         navigation.setSelectedIndex(1);
         statusLine.setText(" ");
         show(Page.MAIN);
@@ -240,6 +245,13 @@ public final class ShellPanel extends JPanel {
                     catalog.refreshIfBrowsing();
                 } else if ("sales".equals(item.id())) {
                     salesPanel.reload();    // stock may have changed since this screen was last open
+                } else if ("settings".equals(item.id())) {
+                    if (settingsPanel == null) {    // building it reads nothing
+                        settingsPanel = new cm.sji.innova.desktop.settings.SettingsPanel(activeContext.location(),
+                                activeContext, messages);
+                        screenArea.add(settingsPanel, "settings");
+                    }
+                    settingsReady = settingsPanel.reload();    // the last backup and any scheduled restore, in the background
                 }
                 screens.show(screenArea, item.id());
                 screenHeading.setText("products".equals(item.id()) ? messages.get("shell.catalog") : item.label());
@@ -270,7 +282,7 @@ public final class ShellPanel extends JPanel {
                 label.setBorder(BorderFactory.createEmptyBorder(11,12,11,8));
                 String id=((NavItem)value).id();
                 int section=switch(id){case "home"->-1;case "products"->0;case "stock"->1;default->2;};
-                label.setIcon(new CatalogStyle.NavigationIcon(section));label.setIconTextGap(12);
+                label.setIcon("settings".equals(id)?new cm.sji.innova.desktop.settings.SettingsIcon():new CatalogStyle.NavigationIcon(section));label.setIconTextGap(12);
                 label.setToolTipText(value.toString());
                 return label;
             }
@@ -319,6 +331,11 @@ public final class ShellPanel extends JPanel {
             }
         }
         super.doLayout();
+    }
+
+    /** Obtain on the EDT after opening Settings, then await off the EDT: the screen shows what it read. */
+    public CompletionStage<Void> settingsReady() {
+        return java.util.Objects.requireNonNull(settingsReady, "Settings screen has not been opened");
     }
 
     /** Await off the EDT after selecting home, for diagnostics and layout checks. */
