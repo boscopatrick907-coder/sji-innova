@@ -105,7 +105,7 @@ public final class RestoreInstaller {
             Optional<RestoreJournal> journal = RestoreJournal.read(location.directory());   // again, now that the folder is ours
             if (journal.isPresent()) return recover(maintenance, journal.get());
             UUID shopId = id(location.shopIdFile());
-            Optional<RestorePreparation.Summary> scheduled = new RestorePreparation(location, shopId, clock).scheduled();
+            Optional<RestorePreparation.Summary> scheduled = new RestorePreparation(location, shopId, clock).readScheduled();
             if (scheduled.isEmpty()) return new Result(Outcome.NOTHING_SCHEDULED, null, "");
             return run(maintenance, scheduled.get(), shopId, id(location.deviceIdFile()));
         }
@@ -118,7 +118,7 @@ public final class RestoreInstaller {
         Path folder = restoreFolder(note.restoreId());
         Path staged = folder.resolve(RestorePreparation.STAGED);
         Path archive = folder.resolve(RestorePreparation.ARCHIVE);
-        if (!Files.isDirectory(staged) || !Files.isRegularFile(archive)
+        if (!Files.isDirectory(staged, LinkOption.NOFOLLOW_LINKS) || !Files.isRegularFile(archive, LinkOption.NOFOLLOW_LINKS)
                 || !note.archiveSha256().equals(BackupService.sha256(archive))
                 || !note.stagedFiles().equals(RestorePreparation.fingerprint(staged))) {
             throw new RestoreException(RestoreException.Reason.STAGING_CHANGED,
@@ -305,7 +305,7 @@ public final class RestoreInstaller {
 
     private boolean noteIsFor(RestoreJournal journal) {
         try {
-            return new RestorePreparation(location, journal.newShopId(), clock).scheduled()
+            return new RestorePreparation(location, journal.newShopId(), clock).readScheduled()
                     .map(s -> s.restoreId().equals(journal.restoreId())).orElse(false);
         } catch (IOException unreadable) {
             return false;   // a note that cannot be read stays where it is, for someone to look at
@@ -354,7 +354,13 @@ public final class RestoreInstaller {
 
     /** A file's SHA-256, or for a folder, the SHA-256 of every file in it with its path. */
     static String fingerprint(Path path) throws IOException {
-        if (!Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) return BackupService.sha256(path);
+        if (Files.isSymbolicLink(path)) throw needsRepair("a restore item is a symbolic link: " + path.getFileName());
+        if (!Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) {
+            if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
+                throw needsRepair("a restore item is not an ordinary file: " + path.getFileName());
+            }
+            return BackupService.sha256(path);
+        }
         MessageDigest sha;
         try {
             sha = MessageDigest.getInstance("SHA-256");

@@ -224,13 +224,19 @@ public final class BackupArchive {
                 throw refused("The database counts do not match the manifest");
             }
             int photos = 0;
-            try (var rows = statement.executeQuery("SELECT relative_path, thumbnail_path FROM product_photos")) {
-                while (rows.next()) {
-                    for (int column = 1; column <= 2; column++) {
-                        if (!payload.contains(rows.getString(column))) throw refused("A photo is missing: " + rows.getString(column));
-                        photos++;
+            // Photos were introduced in schema 7. Older snapshots are validated here before
+            // their staged copy is migrated; querying a not-yet-existing table blocks migration.
+            if (contents.schemaVersion() >= 7) {
+                try (var rows = statement.executeQuery("SELECT relative_path, thumbnail_path FROM product_photos")) {
+                    while (rows.next()) {
+                        for (int column = 1; column <= 2; column++) {
+                            if (!payload.contains(rows.getString(column))) throw refused("A photo is missing: " + rows.getString(column));
+                            photos++;
+                        }
                     }
                 }
+            } else if (payload.stream().anyMatch(name -> name.startsWith("photos/"))) {
+                throw refused("This database version cannot reference photo files");
             }
             if (photos != contents.photos()) throw refused("The photo count does not match the manifest");
         }
