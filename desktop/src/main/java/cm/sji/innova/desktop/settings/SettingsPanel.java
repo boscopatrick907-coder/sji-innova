@@ -117,6 +117,7 @@ public final class SettingsPanel extends JPanel {
     private boolean noteDamaged;
     private boolean busy;
     private CompletionStage<Void> lastWork = CompletableFuture.completedFuture(null);
+    private Runnable onBackupSaved = () -> { };
 
     /** The screen on the shop's own backup and restore services. */
     public SettingsPanel(LocalAppData location, AppContext context, Messages messages) {
@@ -192,13 +193,19 @@ public final class SettingsPanel extends JPanel {
             folderMissing = !state.folderThere();
             showFolder();
             if (folderMissing) tell(backupMessage, backupStrip, FeedbackStrip.Tone.WARNING, f("settings.backup.folder.missing", folder));
-            else say(backupMessage, "");
+            else BackupReminder.cardText(state.last(), clock, texts, locale).ifPresentOrElse(
+                    reminder -> tell(backupMessage, backupStrip, FeedbackStrip.Tone.WARNING, reminder), () -> say(backupMessage, ""));
             scheduled = state.scheduled().orElse(null);
             noteDamaged = state.unreadable() instanceof RestoreException damaged && damaged.reason() == RestoreException.Reason.NOTE_DAMAGED;
             if (scheduled != null || noteDamaged) prepared = null;
             showRestore();
             if (state.unreadable() != null) tell(restoreMessage, restoreStrip, FeedbackStrip.Tone.ERROR, explain(state.unreadable(), true));
         }, true);
+    }
+
+    /** {@code action} runs on the Swing event thread after each backup this screen saves (OFF-03c4b). */
+    public void whenBackupSaved(Runnable action) {
+        onBackupSaved = Objects.requireNonNull(action, "action");
     }
 
     /** The last piece of background work, finished once the screen shows its result. For tests. */
@@ -223,6 +230,7 @@ public final class SettingsPanel extends JPanel {
         work(backupMessage, backupStrip, t("settings.backup.running"), () -> actions.backUp(destination), backup -> {
             tell(backupMessage, backupStrip, FeedbackStrip.Tone.SUCCESS, f("settings.backup.done", backup.file().getFileName()));
             showLast(Optional.of(new BackupService.LastBackup(backup.backupId(), backup.file(), backup.sha256(), backup.createdAt())));
+            onBackupSaved.run();
         }, false);
     }
 
@@ -508,11 +516,7 @@ public final class SettingsPanel extends JPanel {
         }
 
         @Override public Optional<BackupService.LastBackup> lastBackup() {
-            try {
-                return backups().lastSuccess();
-            } catch (IOException unreadable) {
-                return Optional.empty();
-            }
+            return BackupService.lastSuccess(location);
         }
 
         @Override public Optional<Path> rememberedFolder() throws IOException {
