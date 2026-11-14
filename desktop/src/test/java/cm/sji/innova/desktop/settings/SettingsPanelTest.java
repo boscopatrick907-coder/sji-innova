@@ -76,7 +76,7 @@ class SettingsPanelTest {
             assertFalse(button(panel, "settingsCancelScheduled").isVisible());
             return null;
         });
-        assertEquals(List.of("lastBackup", "scheduledRestore"), actions.calls);
+        assertEquals(List.of("lastBackup", "rememberedFolder", "folderIsThere " + Path.of("E:", "Cella backups"), "scheduledRestore"), actions.calls);
     }
 
     @Test
@@ -94,6 +94,7 @@ class SettingsPanelTest {
 
         chooser.folder = Optional.of(directory.resolve("usb"));
         edt(() -> { button(panel, "settingsChooseFolder").doClick(); return null; });
+        await(edt(panel::lastWork));
 
         edt(() -> {
             assertEquals(directory.resolve("usb").toString(), words(panel, "settingsFolder"));
@@ -111,7 +112,9 @@ class SettingsPanelTest {
         chooser.folder = Optional.of(directory.resolve("usb"));
         actions.hold = new CountDownLatch(1);
         SettingsPanel panel = panel(actions, chooser, Locale.ENGLISH);
-        edt(() -> { button(panel, "settingsChooseFolder").doClick(); button(panel, "settingsCreateBackup").doClick(); return null; });
+        edt(() -> { button(panel, "settingsChooseFolder").doClick(); return null; });
+        await(edt(panel::lastWork));
+        edt(() -> { button(panel, "settingsCreateBackup").doClick(); return null; });
 
         edt(() -> {
             assertEquals("Making the backup… Sales and stock wait until it is done.", words(panel, "settingsBackupFeedback"));
@@ -131,7 +134,7 @@ class SettingsPanelTest {
             assertTrue(button(panel, "settingsCreateBackup").isEnabled());
             return null;
         });
-        assertEquals(List.of("backUp " + directory.resolve("usb")), actions.calls);
+        assertEquals(List.of("rememberFolder " + directory.resolve("usb"), "backUp " + directory.resolve("usb")), actions.calls);
     }
 
     @Test
@@ -141,6 +144,7 @@ class SettingsPanelTest {
         chooser.folder = Optional.of(directory.resolve("usb"));
         SettingsPanel panel = panel(actions, chooser, Locale.ENGLISH);
         edt(() -> { button(panel, "settingsChooseFolder").doClick(); return null; });
+        await(edt(panel::lastWork));
 
         Map<Exception, String> refusals = Map.of(
                 new FolderMaintenanceException(FolderMaintenanceException.Reason.OTHER_INSTANCE, "x"),
@@ -163,6 +167,80 @@ class SettingsPanelTest {
                 return null;
             });
         }
+    }
+
+    // ----- The backup folder (OFF-03c4) -----
+
+    @Test
+    void theRememberedFolderIsOfferedFirstAndAChosenFolderIsRememberedOffTheSwingThread() throws Exception {
+        FakeActions actions = new FakeActions();
+        actions.last = Optional.of(new BackupService.LastBackup(UUID.randomUUID(), Path.of("E:", "Cella backups", "cella-backup-1.zip"),
+                "0".repeat(64), CLOCK.instant()));
+        actions.remembered = Optional.of(Path.of("F:", "Cella"));
+        FakeChooser chooser = new FakeChooser();
+        SettingsPanel panel = panel(actions, chooser, Locale.ENGLISH);
+        await(edt(panel::reload));
+        edt(() -> {
+            assertEquals(Path.of("F:", "Cella").toString(), words(panel, "settingsFolder"), "The remembered folder, not the last backup's");
+            assertTrue(button(panel, "settingsCreateBackup").isEnabled());
+            return null;
+        });
+
+        chooser.folder = Optional.of(directory.resolve("usb"));
+        edt(() -> { button(panel, "settingsChooseFolder").doClick(); return null; });
+        await(edt(panel::lastWork));
+
+        assertEquals(Optional.of(directory.resolve("usb")), actions.remembered);
+        assertEquals("rememberFolder " + directory.resolve("usb"), actions.calls.getLast());
+        edt(() -> {
+            assertEquals(directory.resolve("usb").toString(), words(panel, "settingsFolder"));
+            assertEquals("", words(panel, "settingsBackupFeedback"));
+            return null;
+        });
+    }
+
+    @Test
+    void aRememberedFolderThatIsNotThereIsReportedAndNoBackupStartsUntilItIsBack() throws Exception {
+        FakeActions actions = new FakeActions();
+        Path key = Path.of("F:", "Cella");
+        actions.remembered = Optional.of(key);
+        actions.missing.add(key);
+        SettingsPanel panel = panel(actions, new FakeChooser(), Locale.ENGLISH);
+        await(edt(panel::reload));
+        edt(() -> {
+            assertEquals("The folder " + key + " cannot be found. Plug in the USB key, or choose another folder.",
+                    words(panel, "settingsBackupFeedback"));
+            assertEquals(key.toString(), words(panel, "settingsFolder"));
+            assertFalse(button(panel, "settingsCreateBackup").isEnabled(), "Not into a folder that is not there");
+            assertTrue(button(panel, "settingsChooseFolder").isEnabled());
+            return null;
+        });
+
+        actions.missing.clear();   // the key is plugged in, and the screen is opened again
+        await(edt(panel::reload));
+        edt(() -> {
+            assertEquals("", words(panel, "settingsBackupFeedback"));
+            assertTrue(button(panel, "settingsCreateBackup").isEnabled());
+            return null;
+        });
+    }
+
+    @Test
+    void aFolderThatCannotBeRememberedIsStillUsedNow() throws Exception {
+        FakeActions actions = new FakeActions();
+        actions.rememberFailure = new java.io.IOException("The disk is full");
+        FakeChooser chooser = new FakeChooser();
+        chooser.folder = Optional.of(directory.resolve("usb"));
+        SettingsPanel panel = panel(actions, chooser, Locale.ENGLISH);
+        edt(() -> { button(panel, "settingsChooseFolder").doClick(); return null; });
+        await(edt(panel::lastWork));
+        edt(() -> {
+            assertEquals("Cella uses this folder now, but could not remember it for the next start. The disk is full",
+                    words(panel, "settingsBackupFeedback"));
+            assertEquals(directory.resolve("usb").toString(), words(panel, "settingsFolder"));
+            assertTrue(button(panel, "settingsCreateBackup").isEnabled());
+            return null;
+        });
     }
 
     // ----- Restoring -----
@@ -360,7 +438,9 @@ class SettingsPanelTest {
 
             await(edt(panel::reload));
             edt(() -> { assertEquals("No backup yet.", words(panel, "settingsLastBackup")); return null; });
-            edt(() -> { button(panel, "settingsChooseFolder").doClick(); button(panel, "settingsCreateBackup").doClick(); return null; });
+            edt(() -> { button(panel, "settingsChooseFolder").doClick(); return null; });
+            await(edt(panel::lastWork));
+            edt(() -> { button(panel, "settingsCreateBackup").doClick(); return null; });
             await(edt(panel::lastWork));
 
             List<Path> made;
@@ -369,6 +449,15 @@ class SettingsPanelTest {
             edt(() -> {
                 assertEquals("Backup saved: " + made.getFirst().getFileName(), words(panel, "settingsBackupFeedback"));
                 assertTrue(words(panel, "settingsLastBackup").endsWith("(today)"));
+                return null;
+            });
+
+            // After a restart, a new screen on the same shop offers the folder it remembered.
+            SettingsPanel afterRestart = panel(new SettingsPanel.ServiceActions(location, shop, CLOCK), new FakeChooser(), Locale.ENGLISH);
+            await(edt(afterRestart::reload));
+            edt(() -> {
+                assertEquals(directory.resolve("usb").toAbsolutePath().normalize().toString(), words(afterRestart, "settingsFolder"));
+                assertEquals("", words(afterRestart, "settingsBackupFeedback"));
                 return null;
             });
 
@@ -396,31 +485,56 @@ class SettingsPanelTest {
     private static final class FakeActions implements SettingsPanel.Actions {
         final List<String> calls = new ArrayList<>();
         Optional<BackupService.LastBackup> last = Optional.empty();
+        Optional<Path> remembered = Optional.empty();
+        final List<Path> missing = new ArrayList<>();
+        Exception rememberFailure;
         Exception failure;
         Exception scheduledFailure;
         RestorePreparation.Summary summary;
         CountDownLatch hold;
 
-        private void called(String call) throws Exception {
+        /** Records a read; fails on the Swing thread. */
+        private void read(String call) {
             if (SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Work on the Swing thread: " + call);
             calls.add(call);
-            if (hold != null && !hold.await(10, TimeUnit.SECONDS)) throw new IllegalStateException("never released");
-            if (failure != null && !call.equals("lastBackup") && !call.equals("scheduledRestore")) throw failure;
+        }
+
+        /** Records an action; fails on the Swing thread, or with {@code failure}. */
+        private void called(String call) throws Exception {
+            read(call);
+            if (failure != null) throw failure;
         }
 
         @Override public Optional<BackupService.LastBackup> lastBackup() {
-            try { called("lastBackup"); } catch (Exception impossible) { throw new IllegalStateException(impossible); }
+            read("lastBackup");
             return last;
         }
 
+        @Override public Optional<Path> rememberedFolder() {
+            read("rememberedFolder");
+            return remembered;
+        }
+
+        @Override public void rememberFolder(Path folder) throws Exception {
+            read("rememberFolder " + folder);
+            if (rememberFailure != null) throw rememberFailure;
+            remembered = Optional.of(folder);
+        }
+
+        @Override public boolean folderIsThere(Path folder) {
+            read("folderIsThere " + folder);
+            return !missing.contains(folder);
+        }
+
         @Override public Optional<RestorePreparation.Summary> scheduledRestore() throws Exception {
-            called("scheduledRestore");
+            read("scheduledRestore");
             if (scheduledFailure != null) throw scheduledFailure;
             return Optional.empty();
         }
 
         @Override public BackupService.Backup backUp(Path folder) throws Exception {
             called("backUp " + folder);
+            if (hold != null && !hold.await(10, TimeUnit.SECONDS)) throw new IllegalStateException("never released");
             return new BackupService.Backup(folder.resolve("cella-backup-2026-11-12-090000-1a2b3c4d.zip"), "0".repeat(64), UUID.randomUUID(),
                     CLOCK.instant(), UUID.randomUUID(), 9, 2, 1, 3, 2, 0);
         }

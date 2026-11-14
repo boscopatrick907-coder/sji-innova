@@ -4,6 +4,7 @@ import cm.sji.innova.core.persistence.SqliteDatabase;
 import cm.sji.innova.core.persistence.SqliteProductImportRepository;
 import cm.sji.innova.desktop.backup.BackupException;
 import cm.sji.innova.desktop.backup.BackupService;
+import cm.sji.innova.desktop.backup.BackupSettings;
 import cm.sji.innova.desktop.backup.RestoreException;
 import cm.sji.innova.desktop.backup.RestorePreparation;
 import cm.sji.innova.desktop.catalog.CatalogStyle;
@@ -18,6 +19,7 @@ import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.FlowLayout;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.text.MessageFormat;
 import java.time.Clock;
@@ -33,6 +35,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JComponent;
@@ -61,6 +64,9 @@ public final class SettingsPanel extends JPanel {
     /** The backup and restore work the screen asks for. Every method runs off the Swing event thread. */
     interface Actions {
         Optional<BackupService.LastBackup> lastBackup();
+        Optional<Path> rememberedFolder() throws Exception;
+        void rememberFolder(Path folder) throws Exception;
+        boolean folderIsThere(Path folder);
         Optional<RestorePreparation.Summary> scheduledRestore() throws Exception;
         BackupService.Backup backUp(Path folder) throws Exception;
         RestorePreparation.Summary prepare(Path backup) throws Exception;
@@ -75,8 +81,12 @@ public final class SettingsPanel extends JPanel {
         Optional<Path> backup(Component parent, Path folder, String title, String filter);
     }
 
-    /** What {@link #reload()} reads; {@code unreadable} is why the scheduled restore could not be read, if it could not. */
-    private record State(Optional<BackupService.LastBackup> last, Optional<RestorePreparation.Summary> scheduled, Exception unreadable) { }
+    /**
+     * What {@link #reload()} reads: the last backup; the folder to offer (the remembered one, else the last
+     * backup's) and whether it is there; any scheduled restore, or why it could not be read.
+     */
+    private record State(Optional<BackupService.LastBackup> last, Optional<Path> folder, boolean folderThere,
+                         Optional<RestorePreparation.Summary> scheduled, Exception unreadable) { }
 
     private final Actions actions;
     private final Chooser chooser;
@@ -101,6 +111,7 @@ public final class SettingsPanel extends JPanel {
     private final JButton cancelScheduled;
 
     private Path folder;
+    private boolean folderMissing;
     private RestorePreparation.Summary prepared;
     private RestorePreparation.Summary scheduled;
     private boolean noteDamaged;
@@ -154,21 +165,34 @@ public final class SettingsPanel extends JPanel {
     // ----- What the screen can do -----
 
     /**
-     * Reads the last backup and any scheduled restore, off the Swing event thread. While other work runs it
-     * reads nothing and returns that work. A backup the person has chosen but not yet confirmed stays chosen.
+     * Reads the last backup, the backup folder and any scheduled restore, off the Swing event thread. While
+     * other work runs it reads nothing and returns that work. A backup the person has chosen but not yet
+     * confirmed stays chosen.
      */
     public CompletionStage<Void> reload() {
         if (busy) return lastWork;
         return work(restoreMessage, restoreStrip, "", () -> {
             Optional<BackupService.LastBackup> last = actions.lastBackup();
+            Optional<Path> remembered;
             try {
-                return new State(last, actions.scheduledRestore(), null);
+                remembered = actions.rememberedFolder();
             } catch (Exception unreadable) {
-                return new State(last, Optional.empty(), unreadable);
+                remembered = Optional.empty();   // then the last backup's folder, or the person chooses one
+            }
+            Optional<Path> offered = remembered.or(() -> last.map(b -> b.file().getParent()));
+            boolean there = offered.map(actions::folderIsThere).orElse(true);
+            try {
+                return new State(last, offered, there, actions.scheduledRestore(), null);
+            } catch (Exception unreadable) {
+                return new State(last, offered, there, Optional.empty(), unreadable);
             }
         }, state -> {
             showLast(state.last());
-            if (folder == null) state.last().map(b -> b.file().getParent()).ifPresent(parent -> { folder = parent; showFolder(); });
+            state.folder().ifPresent(offered -> folder = offered);
+            folderMissing = !state.folderThere();
+            showFolder();
+            if (folderMissing) tell(backupMessage, backupStrip, FeedbackStrip.Tone.WARNING, f("settings.backup.folder.missing", folder));
+            else say(backupMessage, "");
             scheduled = state.scheduled().orElse(null);
             noteDamaged = state.unreadable() instanceof RestoreException damaged && damaged.reason() == RestoreException.Reason.NOTE_DAMAGED;
             if (scheduled != null || noteDamaged) prepared = null;
@@ -182,12 +206,14 @@ public final class SettingsPanel extends JPanel {
         return lastWork;
     }
 
+    /** The chosen folder is used at once, and remembered for the next start in the background. */
     private void chooseFolder() {
         chooser.folder(this, folder, t("settings.dialog.folder")).ifPresent(chosen -> {
             folder = chosen;
+            folderMissing = false;
             showFolder();
-            say(backupMessage, "");
-            refresh();
+            work(backupMessage, backupStrip, "", () -> { actions.rememberFolder(chosen); return chosen; }, remembered -> { },
+                    failure -> f("settings.error.rememberFolder", reason(failure)));
         });
     }
 
@@ -243,6 +269,12 @@ public final class SettingsPanel extends JPanel {
      */
     private <T> CompletionStage<Void> work(JLabel message, FeedbackStrip strip, String working, Callable<T> task,
                                            Consumer<T> shown, boolean restoring) {
+        return work(message, strip, working, task, shown, failure -> explain(failure, restoring));
+    }
+
+    /** As above, with {@code why} saying why the work failed. */
+    private <T> CompletionStage<Void> work(JLabel message, FeedbackStrip strip, String working, Callable<T> task,
+                                           Consumer<T> shown, Function<Throwable, String> why) {
         busy = true;
         refresh();
         if (!working.isEmpty()) tell(message, strip, FeedbackStrip.Tone.INFO, working);
@@ -260,7 +292,7 @@ public final class SettingsPanel extends JPanel {
                     say(message, "");   // an earlier refusal no longer applies
                     shown.accept(result);
                 } catch (ExecutionException failed) {
-                    tell(message, strip, FeedbackStrip.Tone.ERROR, explain(failed.getCause() == null ? failed : failed.getCause(), restoring));
+                    tell(message, strip, FeedbackStrip.Tone.ERROR, why.apply(failed.getCause() == null ? failed : failed.getCause()));
                 } catch (InterruptedException interrupted) {
                     Thread.currentThread().interrupt();
                 } finally {
@@ -337,7 +369,7 @@ public final class SettingsPanel extends JPanel {
     /** Which actions make sense now; nothing can start while one runs. */
     private void refresh() {
         chooseFolder.setEnabled(!busy);
-        createBackup.setEnabled(!busy && folder != null);
+        createBackup.setEnabled(!busy && folder != null && !folderMissing);
         boolean idle = prepared == null && scheduled == null && !noteDamaged;
         chooseBackup.setVisible(idle);
         chooseBackup.setEnabled(!busy && idle);
@@ -381,7 +413,11 @@ public final class SettingsPanel extends JPanel {
                 default -> f("settings.error.other", refused.getMessage());
             };
         }
-        return f("settings.error.other", failure.getMessage() == null ? failure.getClass().getSimpleName() : failure.getMessage());
+        return f("settings.error.other", reason(failure));
+    }
+
+    private static String reason(Throwable failure) {
+        return failure.getMessage() == null ? failure.getClass().getSimpleName() : failure.getMessage();
     }
 
     // ----- Small helpers -----
@@ -477,6 +513,18 @@ public final class SettingsPanel extends JPanel {
             } catch (IOException unreadable) {
                 return Optional.empty();
             }
+        }
+
+        @Override public Optional<Path> rememberedFolder() throws IOException {
+            return new BackupSettings(location).folder();
+        }
+
+        @Override public void rememberFolder(Path folder) throws IOException {
+            new BackupSettings(location).rememberFolder(folder);
+        }
+
+        @Override public boolean folderIsThere(Path folder) {
+            return Files.isDirectory(folder);
         }
 
         @Override public Optional<RestorePreparation.Summary> scheduledRestore() throws IOException {
