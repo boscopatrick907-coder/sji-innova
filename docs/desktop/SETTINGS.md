@@ -33,12 +33,33 @@ in this package, so the shared style file does not change). Products is still th
 ## Backup card
 
 - **Last backup:** its date and age ("today", "yesterday", "3 days ago"), or "No backup yet."
-- **Backup folder:** the last backup's folder, or "No folder chosen yet". *Choose a folder…* opens the
-  system's folder dialog. A hint says a USB key or another disk protects the shop if this computer's
-  disk fails.
+- **Backup folder:** the folder Cella remembers (OFF-03c4a), else the last backup's folder, else "No
+  folder chosen yet". *Choose a folder…* opens the system's folder dialog. The chosen folder is used at
+  once and remembered for the next start, in the background. A hint says a USB key or another disk
+  protects the shop if this computer's disk fails.
+- **A folder that is not there** (a USB key not plugged in) is reported: "The folder *path* cannot be
+  found. Plug in the USB key, or choose another folder." *Create a backup* waits until the folder is
+  back (open Settings again) or another folder is chosen.
 - **Create a backup** is disabled until a folder is chosen. While it runs, the screen says "Making the
   backup… Sales and stock wait until it is done." and every button is disabled. Then it says "Backup
   saved: *file name*", and the last-backup line changes to today.
+
+### The remembered folder (OFF-03c4a)
+
+Agreed with Patrick on 14 November: Cella remembers the chosen folder in the data folder.
+
+- `BackupSettings` keeps it in `backup-settings.properties`, in the data folder, written in one step
+  (a temporary file, then an atomic move). Other settings in that file are kept, for OFF-03c4's next parts.
+- It is read and written through the folder's gate, so it waits while a backup or restore holds the
+  folder, and never on the Swing event thread.
+- It belongs to this computer, like the device ID: **a backup does not contain it, and a restore does
+  not move it.**
+- A file that cannot be read, or a folder that is not a full path, counts as nothing remembered: Settings
+  offers the last backup's folder, or asks.
+- If the folder cannot be remembered, it is still used now: "Cella uses this folder now, but could not
+  remember it for the next start." and the reason.
+
+![A remembered folder that is not there, 960×600](images/settings-folder-missing-960-fr.png)
 
 ## Restore card
 
@@ -110,7 +131,7 @@ The next success removes an earlier refusal.
 
 ## Tests
 
-**`SettingsPanelTest` (11).** Most tests give the screen fake actions that fail if they are called on the
+**`SettingsPanelTest` (14).** Most tests give the screen fake actions that fail if they are called on the
 Swing event thread. The last test uses the shop's own services on a disposable shop.
 
 | Test | Checks |
@@ -125,7 +146,20 @@ Swing event thread. The last test uses the shop's own services on a disposable s
 | `aScheduledRestoreThatCannotBeReadIsShownWithAWayToCancelIt` | A damaged note: the message and *Cancel the restore*; the last backup still shown |
 | `reloadingKeepsAChosenBackupAndStillShowsTheLastBackupWhenTheRestoreStateCannotBeRead` | A read error is explained, the last backup is shown, the chosen backup stays |
 | `everyWordIsInFrenchAndInEnglishWithTheSamePlaceholders` | Same keys, none blank, same number of `{0}`; the French screen |
-| `onTheShopsOwnServicesABackupIsMadeThenARestoreIsScheduledAndCancelled` | A real backup on a "USB key", then that backup chosen, scheduled and cancelled |
+| `theRememberedFolderIsOfferedFirstAndAChosenFolderIsRememberedOffTheSwingThread` | The remembered folder before the last backup's; a new choice is remembered |
+| `aRememberedFolderThatIsNotThereIsReportedAndNoBackupStartsUntilItIsBack` | The warning, *Create a backup* disabled, then enabled when the folder is back |
+| `aFolderThatCannotBeRememberedIsStillUsedNow` | The message, and the folder is used |
+| `onTheShopsOwnServicesABackupIsMadeThenARestoreIsScheduledAndCancelled` | A real backup on a "USB key"; after a restart, a new screen offers the remembered folder; then that backup chosen, scheduled and cancelled |
+
+**`BackupSettingsTest` (5, OFF-03c4a)** uses a disposable shop folder.
+
+| Test | Checks |
+| --- | --- |
+| `nothingIsRememberedUntilAFolderIsChosenThenItIsKeptWithTheOtherSettings` | Nothing, then the folder as a full path after reading again; other settings kept; no temporary file left; a new choice replaces the old |
+| `aSettingsFileThatCannotBeReadCountsAsNoFolder` | Blank, relative, bad escape, bad character, no folder line, a folder in the file's place |
+| `readingAndRememberingWaitWhileABackupOrRestoreHoldsTheFolder` | Nothing written during maintenance; done after it |
+| `neverOnTheSwingThread` | Both refuse the Swing thread |
+| `theSettingsBelongToThisComputerABackupDoesNotHoldThemAndARestoreDoesNotMoveThem` | Not in a real backup; not in the restore's list of moved files |
 
 **`SettingsRouteTest` (2, OFF-03c3)** opens the real `ShellPanel` on a disposable shop, with the folder
 membership Cella takes at start-up.
@@ -138,8 +172,8 @@ membership Cella takes at start-up.
 ## Not yet
 
 - **The start page's restore messages** (OFF-03b3b), on `ShellPanel`.
-- **A reminder to back up, how many backups to keep, and removing old `restore/` folders** (OFF-03c4),
-  with Patrick's defaults. A chosen backup that is never confirmed or cancelled keeps its copy in
-  `restore/` until then.
+- **A reminder after 7 days without a backup** (OFF-03c4b) and **keeping only the last backups, off
+  unless the shop turns it on** (OFF-03c4c), as agreed with Patrick. A chosen backup that is never
+  confirmed or cancelled keeps its copy in `restore/`.
 - Deciding about set-aside files from this screen.
 - The file dialogs are Swing's `JFileChooser`; the tests use a fake one.
