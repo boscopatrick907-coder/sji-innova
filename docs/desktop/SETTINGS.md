@@ -61,6 +61,30 @@ Agreed with Patrick on 14 November: Cella remembers the chosen folder in the dat
 
 ![A remembered folder that is not there, 960×600](images/settings-folder-missing-960-fr.png)
 
+### The reminder (OFF-03c4b)
+
+Agreed with Patrick on 14 November: Cella reminds the shop after 7 days without a backup
+(`BackupReminder.AFTER`).
+
+- **When:** no backup recorded; a record that cannot be read (the safe side); or a last backup 7 days
+  old or more. A computer clock set back does not cause a reminder.
+- **In the sidebar, from start-up.** Under the navigation, a small box says "No backup yet" or "Last
+  backup 12 days ago" (French: "Aucune sauvegarde", "Sauvegarde il y a 12 jours"), then "Back up now",
+  which opens Settings.
+  - In the sidebar it takes no room from the screens, so the smallest window, 960×600, keeps the
+    screens' layout.
+  - It is one button: the keyboard reaches it, and a screen reader reads both lines.
+- **How it reads.** It reads the last backup in the background, through the folder's gate, with
+  `BackupService.lastSuccess(location)`, which creates nothing. After a backup saved in Settings, it
+  reads again and goes away.
+- **In the Settings card:** "The last backup was 12 days ago. Make a new one: it protects the shop if
+  this computer breaks or is lost.", or "Make a first backup: …". If the folder is not there, the card
+  says that instead, because it must be fixed first.
+
+![The reminder in the sidebar, 960×600](images/settings-reminder-960-fr.png)
+
+![The reminder in the Settings card, 1100×720](images/settings-reminder-card-1100-fr.png)
+
 ## Restore card
 
 | State | The card shows | Buttons |
@@ -131,7 +155,7 @@ The next success removes an earlier refusal.
 
 ## Tests
 
-**`SettingsPanelTest` (14).** Most tests give the screen fake actions that fail if they are called on the
+**`SettingsPanelTest` (15).** Most tests give the screen fake actions that fail if they are called on the
 Swing event thread. The last test uses the shop's own services on a disposable shop.
 
 | Test | Checks |
@@ -161,19 +185,31 @@ Swing event thread. The last test uses the shop's own services on a disposable s
 | `neverOnTheSwingThread` | Both refuse the Swing thread |
 | `theSettingsBelongToThisComputerABackupDoesNotHoldThemAndARestoreDoesNotMoveThem` | Not in a real backup; not in the restore's list of moved files |
 
-**`SettingsRouteTest` (2, OFF-03c3)** opens the real `ShellPanel` on a disposable shop, with the folder
-membership Cella takes at start-up.
+**`BackupReminderTest` (4, OFF-03c4b).**
+
+| Test | Checks |
+| --- | --- |
+| `dueWithNoBackupOrOneSevenDaysOldButNotBefore` | No backup, 7 days and 30 days: due; just under 7 days and a clock set back: not |
+| `theCardWordsSayHowOldTheLastBackupIsInBothLanguages` | Nothing when recent; the first-backup and "12 days ago" sentences, in English and French |
+| `theReminderReadsOffTheSwingThreadShowsWhenDueAndOpensSettings` | Building reads nothing; hidden until read; reads off the Swing thread; its words; it opens Settings; hidden after a recent backup |
+| `inFrenchAndWhenTheRecordCannotBeReadItAsksForABackup` | An unreadable record: "Aucune sauvegarde"; the French words for an old backup |
+
+`SettingsPanelTest` also has `theCardRemindsAfterSevenDaysWithoutABackupAndASavedBackupTellsTheWindow`
+(15 tests in all): the card's reminder, the window told after a saved backup, and not after a refused one.
+
+**`SettingsRouteTest` (3, OFF-03c3 and c4b)** opens the real `ShellPanel` on a disposable shop, with the
+folder membership Cella takes at start-up.
 
 | Test | Checks |
 | --- | --- |
 | `theSettingsEntryOpensTheScreenOnTheShopsOwnBackupAndRestoreServices` | Products first; the five entries in order; nothing built before Settings is opened; then "No backup yet". A real backup and a scheduled restore show when the entry is opened again, on the same screen; its *Cancel the restore* reaches the shop's restore service |
 | `inFrenchTheEntryAndScreenAreFrenchAndOpeningTheShopAgainBuildsANewScreen` | The French entries and screen; after the shop is opened again, the old screen is gone and a new one is built |
+| `theBackupReminderShowsInTheSidebarFromStartUpOpensSettingsAndGoesAfterABackup` | From start-up, in the sidebar, Products still first; it opens Settings with the remembered folder; a real backup from the screen makes it go away |
 
 ## Not yet
 
 - **The start page's restore messages** (OFF-03b3b), on `ShellPanel`.
-- **A reminder after 7 days without a backup** (OFF-03c4b) and **keeping only the last backups, off
-  unless the shop turns it on** (OFF-03c4c), as agreed with Patrick. A chosen backup that is never
-  confirmed or cancelled keeps its copy in `restore/`.
+- **Keeping only the last backups, off unless the shop turns it on** (OFF-03c4c), as agreed with
+  Patrick. A chosen backup that is never confirmed or cancelled keeps its copy in `restore/`.
 - Deciding about set-aside files from this screen.
 - The file dialogs are Swing's `JFileChooser`; the tests use a fake one.

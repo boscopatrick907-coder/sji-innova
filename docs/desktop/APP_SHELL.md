@@ -72,7 +72,9 @@ The navigation shows Overview, Products, Stock, Ventes (Sales) and Settings (Par
 is selected first. An entry is added only when its panel exists. Stock and Settings are built the
 first time they are opened. Settings is `SettingsPanel(context.location(), context, messages)` and
 reads the last backup and any scheduled restore each time it is opened (`settingsReady()` for tests;
-see `SETTINGS.md`). Screen tests that only need a fake `ProductService` build
+see `SETTINGS.md`). Under the navigation, the backup reminder (`BackupReminder`, OFF-03c4b) shows
+from start-up when no backup was made in the last 7 days; it opens Settings (`reminderReady()` for
+tests). Screen tests that only need a fake `ProductService` build
 their context with the test helper `TestAppContexts.withProducts(location, products)`.
 
 ## Start-up behaviour
