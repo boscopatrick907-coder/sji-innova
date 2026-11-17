@@ -205,6 +205,10 @@ public final class BackupService {
 
     /** The last backup this shop published, if one was recorded. */
     public Optional<Properties> lastBackup() throws IOException {
+        return lastBackup(location);
+    }
+
+    private static Optional<Properties> lastBackup(LocalAppData location) throws IOException {
         try (DatabaseGate.Work ignored = DatabaseGate.enterFolder(location.directory())) {
             Path record = location.directory().resolve(LAST_BACKUP);
             if (!Files.exists(record)) return Optional.empty();
@@ -229,8 +233,16 @@ public final class BackupService {
      * a reminder then asks for a backup, which is the safe side.
      */
     public Optional<LastBackup> lastSuccess() {
+        return lastSuccess(location);
+    }
+
+    /**
+     * As {@link #lastSuccess()}, for a screen that has no backup service at hand (OFF-03c4b): it only reads
+     * the record through the folder's gate, and creates nothing, not even the data folder.
+     */
+    public static Optional<LastBackup> lastSuccess(LocalAppData location) {
         try {
-            return lastBackup().map(p -> new LastBackup(UUID.fromString(p.getProperty("backupId")), Path.of(p.getProperty("file")),
+            return lastBackup(location).map(p -> new LastBackup(UUID.fromString(p.getProperty("backupId")), Path.of(p.getProperty("file")),
                     Objects.requireNonNull(p.getProperty("sha256")), Instant.parse(p.getProperty("createdAt"))));
         } catch (IOException | RuntimeException unreadable) {
             return Optional.empty();

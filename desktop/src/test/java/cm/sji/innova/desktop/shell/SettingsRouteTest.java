@@ -8,8 +8,10 @@ import static org.junit.jupiter.api.Assertions.fail;
 import cm.sji.innova.core.persistence.SqliteDatabase;
 import cm.sji.innova.core.persistence.SqliteProductImportRepository;
 import cm.sji.innova.desktop.backup.BackupService;
+import cm.sji.innova.desktop.backup.BackupSettings;
 import cm.sji.innova.desktop.backup.RestorePreparation;
 import cm.sji.innova.desktop.evidence.EvidenceService;
+import cm.sji.innova.desktop.settings.BackupReminder;
 import cm.sji.innova.desktop.settings.SettingsPanel;
 import java.awt.Component;
 import java.awt.Container;
@@ -26,6 +28,7 @@ import javax.swing.AbstractButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JList;
+import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -116,6 +119,79 @@ class SettingsRouteTest {
             });
             await(edt(shell::settingsReady));
             edt(() -> { assertEquals(1, count(shell, SettingsPanel.class)); return null; });
+        }
+    }
+
+    @Test
+    void theBackupReminderShowsInTheSidebarFromStartUpOpensSettingsAndGoesAfterABackup() throws Exception {
+        LocalAppData location = new LocalAppData(directory.resolve("data"));
+        DataFolderCoordinator coordinator = DataFolderCoordinator.forFolder(location);
+        try (DataFolderCoordinator.Membership membership = coordinator.join()) {
+            AppContext shop = AppContextLoader.load(location);
+            Path usb = java.nio.file.Files.createDirectories(directory.resolve("usb"));
+            new BackupSettings(location).rememberFolder(usb);
+            ShellPanel shell = open(Locale.ENGLISH, location, shop);
+            await(edt(shell::reminderReady));
+            edt(() -> {
+                BackupReminder reminder = find(shell, BackupReminder.class, "backupReminder");
+                assertTrue(reminder.isVisible(), "No backup yet: reminded from start-up");
+                assertEquals("No backup yet. Back up now", reminder.getAccessibleContext().getAccessibleName());
+                assertTrue(SwingUtilities.isDescendingFrom(reminder, find(shell, JPanel.class, "cellaSidebar")),
+                        "In the sidebar, so the screens keep their room");
+                assertEquals("products", shell.selectedScreenId(), "Products stays the first screen");
+                reminder.doClick();
+                return null;
+            });
+            await(edt(shell::settingsReady));
+            edt(() -> {
+                assertEquals("settings", shell.selectedScreenId(), "The reminder opens Settings");
+                assertEquals(usb.toAbsolutePath().normalize().toString(), words(shell, "settingsFolder"));
+                button(shell, "settingsCreateBackup").doClick();
+                return null;
+            });
+
+            // Opening the entry while the backup runs returns that work, so this waits for the backup.
+            edt(() -> { shell.selectScreen("products"); shell.selectScreen("settings"); return null; });
+            await(edt(shell::settingsReady));
+            assertTrue(BackupService.lastSuccess(location).isPresent(), "A real backup was made");
+            await(edt(shell::reminderReady));
+            edt(() -> { assertFalse(find(shell, BackupReminder.class, "backupReminder").isVisible(), "Gone after the backup"); return null; });
+        }
+    }
+
+    @Test
+    void theReminderFitsCompletelyInTheSmallestWindow() throws Exception {
+        edt(() -> { com.formdev.flatlaf.FlatLightLaf.setup(); cm.sji.innova.desktop.catalog.CatalogStyle.installDefaults(); return null; });
+        LocalAppData location = new LocalAppData(directory.resolve("compact-reminder"));
+        DataFolderCoordinator coordinator = DataFolderCoordinator.forFolder(location);
+        try (var membership = coordinator.join()) {
+            AppContext shop = AppContextLoader.load(location);
+            ShellPanel shell = open(Locale.FRENCH, location, shop);
+            await(edt(shell::reminderReady));
+            edt(() -> {
+                shell.setSize(1100,760); for(int i=0;i<6;i++) layoutTree(shell);
+                var preview = new java.awt.image.BufferedImage(1100,760,java.awt.image.BufferedImage.TYPE_INT_RGB);
+                var graphics = preview.createGraphics(); shell.printAll(graphics); graphics.dispose();
+                shell.setSize(960,600); for(int i=0;i<6;i++) layoutTree(shell);
+                BackupReminder reminder = find(shell,BackupReminder.class,"backupReminder");
+                assertTrue(reminder.isVisible());
+                assertTrue(reminder.getWidth() >= reminder.getPreferredSize().width,
+                        "The reminder must not be squeezed horizontally");
+                assertTrue(reminder.getHeight() >= reminder.getPreferredSize().height,
+                        "The whole reminder, including its action link, must fit");
+                assertTrue(reminder.getY()+reminder.getHeight() <= reminder.getParent().getHeight(),
+                        "The sidebar must not clip the reminder through its parent");
+                var bounds = SwingUtilities.convertRectangle(reminder.getParent(),reminder.getBounds(),shell);
+                assertTrue(bounds.y >= 0 && bounds.y+bounds.height <= shell.getHeight());
+                return null;
+            });
+        }
+    }
+
+    private static void layoutTree(Component component) {
+        if (component instanceof Container parent) {
+            parent.doLayout();
+            for (Component child : parent.getComponents()) layoutTree(child);
         }
     }
 

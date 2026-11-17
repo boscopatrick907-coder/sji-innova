@@ -48,3 +48,27 @@ retention/destination behavior and the complete manual acceptance remain separat
 shop/restart trial and shared checklist; Charles keeps technical restore acceptance ownership.
 
 After green checks, merge #53 → #54 → #55 → #56 → #57 using normal merge commits to retain history.
+
+## Settings integration review — PRs #58–#60
+
+The Settings route, remembered destination and seven-day reminder are the next reviewed stack.
+The original combined suite passed 470 tests before review; three new cases reproduced these issues:
+
+- If the chosen folder disappeared after loading, the generic backup service recreated its path.
+  Settings now uses the existing-folder API; failure leaves the destination absent, preserves the
+  prior success record and displays the reconnect/choose-folder guidance. No removable-device
+  identity guarantee is inferred from a path still existing.
+- After preference storage failed, reopening Settings silently replaced the current folder choice
+  with the old persisted choice. The current choice now remains active in that window; restarting
+  still uses the stored preference, as the existing error message explains.
+- An older reminder read could overwrite the result of a newer check. A generation guard now
+  applies only the latest result, including the check after a saved backup.
+
+Regression tests cover all three cases. The existing-folder fixture uses a real directory, matching
+what the production folder chooser returns. The original six commits remain ancestors of the
+reviewed heads. PR #58 needs no code correction; fixes extend #59 and #60. The current assignment
+in CHARLES.md moves to retention and final technical/manual acceptance after this stack merges.
+
+A rendered 960×600 preview also exposed clipping of the reminder's action by its parent container.
+The sidebar now gives that area enough vertical space. A layout test checks containment after a
+wide-to-small resize; checking only the button's own preferred height had missed the clipping.

@@ -203,6 +203,8 @@ class SettingsPanelTest {
     void aRememberedFolderThatIsNotThereIsReportedAndNoBackupStartsUntilItIsBack() throws Exception {
         FakeActions actions = new FakeActions();
         Path key = Path.of("F:", "Cella");
+        actions.last = Optional.of(new BackupService.LastBackup(UUID.randomUUID(), key.resolve("cella-backup-1.zip"), "0".repeat(64),
+                CLOCK.instant()));   // recent: no reminder, so only the folder speaks
         actions.remembered = Optional.of(key);
         actions.missing.add(key);
         SettingsPanel panel = panel(actions, new FakeChooser(), Locale.ENGLISH);
@@ -241,6 +243,39 @@ class SettingsPanelTest {
             assertTrue(button(panel, "settingsCreateBackup").isEnabled());
             return null;
         });
+    }
+
+    // ----- The reminder (OFF-03c4b) -----
+
+    @Test
+    void theCardRemindsAfterSevenDaysWithoutABackupAndASavedBackupTellsTheWindow() throws Exception {
+        FakeActions actions = new FakeActions();
+        actions.last = Optional.of(new BackupService.LastBackup(UUID.randomUUID(), directory.resolve("usb").resolve("cella-backup-1.zip"),
+                "0".repeat(64), CLOCK.instant().minus(Duration.ofDays(9))));
+        SettingsPanel panel = panel(actions, new FakeChooser(), Locale.ENGLISH);
+        List<String> told = new ArrayList<>();
+        edt(() -> { panel.whenBackupSaved(() -> told.add("saved on the Swing thread: " + SwingUtilities.isEventDispatchThread())); return null; });
+        await(edt(panel::reload));
+        edt(() -> {
+            assertEquals("The last backup was 9 days ago. Make a new one: it protects the shop if this computer breaks or is lost.",
+                    words(panel, "settingsBackupFeedback"));
+            button(panel, "settingsCreateBackup").doClick();
+            return null;
+        });
+        await(edt(panel::lastWork));
+        edt(() -> { assertTrue(words(panel, "settingsBackupFeedback").startsWith("Backup saved: "), words(panel, "settingsBackupFeedback")); return null; });
+        assertEquals(List.of("saved on the Swing thread: true"), told);
+
+        actions.last = Optional.empty();
+        actions.failure = new java.io.IOException("x");
+        await(edt(panel::reload));
+        edt(() -> {
+            assertEquals("Make a first backup: it protects the shop if this computer breaks or is lost.", words(panel, "settingsBackupFeedback"));
+            button(panel, "settingsCreateBackup").doClick();
+            return null;
+        });
+        await(edt(panel::lastWork));
+        assertEquals(1, told.size(), "A refused backup tells nothing");
     }
 
     // ----- Restoring -----

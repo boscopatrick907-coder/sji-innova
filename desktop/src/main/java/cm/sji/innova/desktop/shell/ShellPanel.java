@@ -75,6 +75,9 @@ public final class ShellPanel extends JPanel {
     private cm.sji.innova.desktop.stock.StockPanel stockPanel;
     private cm.sji.innova.desktop.settings.SettingsPanel settingsPanel;
     private CompletionStage<Void> settingsReady;
+    private final JPanel reminderSlot = new JPanel(new BorderLayout());
+    private cm.sji.innova.desktop.settings.BackupReminder reminder;
+    private CompletionStage<Void> reminderReady;
 
     public ShellPanel(Messages messages, LocalAppData location, Callable<AppContext> loader, Runnable onExit) {
         super(new BorderLayout());
@@ -118,6 +121,10 @@ public final class ShellPanel extends JPanel {
         stockPanel = null;
         settingsPanel = null;
         settingsReady = null;
+        reminderSlot.removeAll();    // OFF-03c4b: the backup reminder under the navigation, read in the background
+        reminder = new cm.sji.innova.desktop.settings.BackupReminder(context.location(), messages, () -> selectScreen("settings"));
+        reminderSlot.add(reminder, BorderLayout.NORTH);
+        reminderReady = reminder.check();
         dashboard = new DashboardPanel(context, messages, this::selectScreen);
         screenArea.add(dashboard, "home");
         var products = ProductsSlot.create(context, messages);
@@ -249,6 +256,7 @@ public final class ShellPanel extends JPanel {
                     if (settingsPanel == null) {    // building it reads nothing
                         settingsPanel = new cm.sji.innova.desktop.settings.SettingsPanel(activeContext.location(),
                                 activeContext, messages);
+                        settingsPanel.whenBackupSaved(() -> reminderReady = reminder.check());
                         screenArea.add(settingsPanel, "settings");
                     }
                     settingsReady = settingsPanel.reload();    // the last backup and any scheduled restore, in the background
@@ -267,10 +275,10 @@ public final class ShellPanel extends JPanel {
         };
         sidebar.setName("cellaSidebar");sidebar.setBorder(BorderFactory.createEmptyBorder(34,20,24,20));
         sidebar.setPreferredSize(new java.awt.Dimension(216,0));
-        JPanel brand = new JPanel(new java.awt.GridLayout(0,1,0,10));brand.setOpaque(false);
+        JPanel brand = new JPanel(new BorderLayout(0,10));brand.setOpaque(false);
         wordmark = new JLabel("cella.");wordmark.setFont(new java.awt.Font(java.awt.Font.SERIF,java.awt.Font.BOLD,40));wordmark.setForeground(java.awt.Color.WHITE);
         tagline = new JLabel(messages.get("shell.tagline"));tagline.setFont(tagline.getFont().deriveFont(13f));tagline.setForeground(new java.awt.Color(0xD8E7DC));
-        brand.add(wordmark);brand.add(tagline);sidebar.add(brand,BorderLayout.NORTH);
+        brand.add(wordmark,BorderLayout.NORTH);brand.add(tagline,BorderLayout.SOUTH);sidebar.add(brand,BorderLayout.NORTH);
         navigation.setOpaque(false);navigation.setForeground(java.awt.Color.WHITE);navigation.setFixedCellHeight(54);
         navigation.setCellRenderer(new javax.swing.DefaultListCellRenderer(){
             private boolean active;
@@ -302,6 +310,7 @@ public final class ShellPanel extends JPanel {
             }
         });
         JPanel navHolder=new JPanel(new BorderLayout());navHolder.setOpaque(false);navHolder.add(navigation,BorderLayout.NORTH);sidebar.add(navHolder,BorderLayout.CENTER);
+        reminderSlot.setOpaque(false);reminderSlot.setBorder(BorderFactory.createEmptyBorder(16,0,0,0));navHolder.add(reminderSlot,BorderLayout.CENTER);
         JPanel footer=CatalogStyle.panel(new java.awt.GridLayout(0,1,0,7));
         localCaption=CatalogStyle.label(messages.get("shell.local"),13,false);localCaption.setForeground(new java.awt.Color(0xD6E4CE));
         JLabel offline=CatalogStyle.label(messages.get("shell.offline"),12,false);offline.setForeground(new java.awt.Color(0xBED1C3));
@@ -323,6 +332,7 @@ public final class ShellPanel extends JPanel {
             int width = compact ? 168 : 216;
             if (sidebar.getPreferredSize().width != width) {
                 compactSidebar = compact;
+                ((BorderLayout)sidebar.getLayout()).setVgap(compact ? 24 : 32);
                 sidebar.setPreferredSize(new java.awt.Dimension(width, 0));
                 sidebar.setBorder(BorderFactory.createEmptyBorder(30,compact?10:16,24,compact?10:16));
                 wordmark.setFont(new java.awt.Font(java.awt.Font.SERIF,java.awt.Font.BOLD,compact?32:36));
@@ -331,6 +341,11 @@ public final class ShellPanel extends JPanel {
             }
         }
         super.doLayout();
+    }
+
+    /** Obtain on the EDT after showMain, then await off the EDT: the backup reminder shows what it read. */
+    public CompletionStage<Void> reminderReady() {
+        return java.util.Objects.requireNonNull(reminderReady, "Main page is not initialized");
     }
 
     /** Obtain on the EDT after opening Settings, then await off the EDT: the screen shows what it read. */
