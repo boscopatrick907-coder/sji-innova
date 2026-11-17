@@ -228,3 +228,8 @@ The general service `create` still supports explicitly creating a new destinatio
 
 These are path-availability checks, not proof that a USB device is mounted: a filesystem may leave
 an existing mount directory behind. Actual USB removal/reconnection remains a manual acceptance check.
+
+
+Reminder review: overlapping background checks apply only the latest result, so an old result cannot
+bring a warning back after a new backup clears it. This does not add a periodic timer or replace the
+startup and post-backup checks already specified above.
