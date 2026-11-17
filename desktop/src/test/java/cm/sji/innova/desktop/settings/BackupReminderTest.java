@@ -97,6 +97,28 @@ class BackupReminderTest {
         edt(() -> { assertEquals("Sauvegarde il y a 8 jours. Sauvegarder", old.getAccessibleContext().getAccessibleName()); return null; });
     }
 
+    @Test
+    void anOlderReminderReadCannotOverwriteARecentBackup() throws Exception {
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        var started = new java.util.concurrent.CountDownLatch(1);
+        var release = new java.util.concurrent.CountDownLatch(1);
+        BackupReminder reminder = edt(() -> new BackupReminder(() -> {
+            if (calls.incrementAndGet() == 1) {
+                started.countDown();
+                try { if (!release.await(10, TimeUnit.SECONDS)) throw new IllegalStateException("not released"); }
+                catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); throw new IllegalStateException(interrupted); }
+                return Optional.empty();
+            }
+            return madeAgo(Duration.ofHours(1));
+        }, () -> { }, Locale.ENGLISH, CLOCK));
+        var old = edt(reminder::check);
+        assertTrue(started.await(5, TimeUnit.SECONDS));
+        try { await(edt(reminder::check)); }
+        finally { release.countDown(); }
+        await(old);
+        edt(() -> { assertFalse(reminder.isVisible(), "An older read must not bring back a cleared reminder"); return null; });
+    }
+
     private static Optional<BackupService.LastBackup> madeAgo(Duration age) {
         return Optional.of(new BackupService.LastBackup(UUID.randomUUID(), Path.of("E:", "cella-backup.zip"), "0".repeat(64),
                 CLOCK.instant().minus(age)));

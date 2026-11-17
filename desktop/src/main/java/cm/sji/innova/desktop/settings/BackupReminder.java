@@ -43,6 +43,7 @@ public final class BackupReminder extends JButton {
     private final ResourceBundle texts;
     private final Locale locale;
     private final Clock clock;
+    private long generation;
     private CompletionStage<Void> lastCheck = CompletableFuture.completedFuture(null);
 
     /** The reminder for the shop in {@code location}; {@code open} shows Settings. */
@@ -86,6 +87,7 @@ public final class BackupReminder extends JButton {
 
     /** Reads the last backup off the Swing event thread, then shows the reminder if one is due, or hides it. */
     public CompletionStage<Void> check() {
+        long request = ++generation;
         CompletableFuture<Void> finished = new CompletableFuture<>();
         lastCheck = finished;
         new SwingWorker<Optional<BackupService.LastBackup>, Void>() {
@@ -95,9 +97,10 @@ public final class BackupReminder extends JButton {
 
             @Override protected void done() {
                 try {
-                    show(get());
+                    Optional<BackupService.LastBackup> result = get();
+                    if (request == generation) show(result);
                 } catch (ExecutionException unreadable) {
-                    show(Optional.empty());   // the safe side: ask for a backup
+                    if (request == generation) show(Optional.empty());   // the safe side: ask for a backup
                 } catch (InterruptedException interrupted) {
                     Thread.currentThread().interrupt();
                 } finally {
