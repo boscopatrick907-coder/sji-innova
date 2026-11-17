@@ -213,3 +213,18 @@ folder membership Cella takes at start-up.
   Patrick. A chosen backup that is never confirmed or cancelled keeps its copy in `restore/`.
 - Deciding about set-aside files from this screen.
 - The file dialogs are Swing's `JFileChooser`; the tests use a fake one.
+
+## Review: destination changes while Settings is open
+
+A chosen folder remains the active choice in this Settings window even if saving the preference
+failed; reopening the route does not silently switch back to an older folder. The existing warning
+still explains that the choice may not survive an application restart.
+
+The production backup action uses `BackupService.createInExistingFolder`: it never recreates a
+missing destination. If a chosen folder disappears after the screen loaded (or while waiting for
+maintenance), the action fails, shows the missing-folder guidance and disables backup until the
+folder is chosen or checked again. A lost folder does not create a new last-success record.
+The general service `create` still supports explicitly creating a new destination for its callers.
+
+These are path-availability checks, not proof that a USB device is mounted: a filesystem may leave
+an existing mount directory behind. Actual USB removal/reconnection remains a manual acceptance check.

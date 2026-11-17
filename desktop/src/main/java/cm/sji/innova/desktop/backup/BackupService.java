@@ -129,6 +129,11 @@ public final class BackupService {
     /** Makes, checks and publishes a backup in {@code destination}, then returns it. */
     public Backup create(Path destination) throws IOException, SQLException {
         Files.createDirectories(destination);
+        return createInExistingFolder(destination);
+    }
+
+    /** For a user-selected folder: never recreate a missing or disconnected destination. */
+    public Backup createInExistingFolder(Path destination) throws IOException, SQLException {
         Path target = destination.toRealPath();
         if (target.startsWith(location.directory().toRealPath())) {
             throw new BackupException(BackupException.Reason.DESTINATION_REFUSED, List.of(destination.toString()),
