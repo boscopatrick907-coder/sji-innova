@@ -56,6 +56,13 @@ and when it was made, with `age(clock)` for "made 3 days ago" and, later, the re
 cannot be read counts as none: a reminder then asks for a backup, which is the safe side. The older
 `lastBackup()`, which returns the raw properties, is unchanged.
 
+## The backup folder (OFF-03c4a)
+
+`BackupSettings` remembers the folder chosen in Settings, in `backup-settings.properties` in the data
+folder. It is this computer's setting: a backup does not contain it, and a restore does not move it
+(`RestoreJournal.FILES` moves `last-backup.properties` with the old shop, but not this file). See
+`SETTINGS.md`.
+
 ## `BackupArchive`: the shared checker
 
 `BackupArchive.check(archive, scratch)` trusts nothing in the archive:
