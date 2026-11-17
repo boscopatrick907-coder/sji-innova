@@ -434,6 +434,7 @@ class SettingsPanelTest {
             shop.sales().makeCashSale(UUID.randomUUID(), shop.shopId(), shop.deviceId(), "REC-1", List.of(new SaleItemRequest(rice.id(), 1_000)));
             FakeChooser chooser = new FakeChooser();
             chooser.folder = Optional.of(directory.resolve("usb"));
+            Files.createDirectories(directory.resolve("usb")); // A real directory chooser selects an existing folder.
             SettingsPanel panel = panel(new SettingsPanel.ServiceActions(location, shop, CLOCK), chooser, Locale.ENGLISH);
 
             await(edt(panel::reload));
@@ -476,6 +477,46 @@ class SettingsPanelTest {
             edt(() -> { button(panel, "settingsCancelScheduled").doClick(); return null; });
             await(edt(panel::lastWork));
             assertEquals(Optional.empty(), restores.scheduled(), "and cancelled");
+        }
+    }
+
+    @Test
+    void aChosenFolderIsKeptOnReloadEvenWhenRememberingItFailed() throws Exception {
+        FakeActions actions = new FakeActions();
+        actions.remembered = Optional.of(directory.resolve("old-folder"));
+        FakeChooser chooser = new FakeChooser();
+        SettingsPanel panel = panel(actions, chooser, Locale.ENGLISH);
+        await(edt(panel::reload));
+        actions.rememberFailure = new java.io.IOException("The disk is full");
+        chooser.folder = Optional.of(directory.resolve("new-folder"));
+        edt(() -> { button(panel, "settingsChooseFolder").doClick(); return null; });
+        await(edt(panel::lastWork));
+        await(edt(panel::reload));
+        edt(() -> { assertEquals(directory.resolve("new-folder").toString(), words(panel, "settingsFolder")); return null; });
+    }
+
+    @Test
+    void aBackupFolderDisconnectedAfterLoadingMustNotBeRecreated() throws Exception {
+        LocalAppData location = new LocalAppData(directory.resolve("disconnected-data"));
+        DataFolderCoordinator coordinator = DataFolderCoordinator.forFolder(location);
+        try (var membership = coordinator.join()) {
+            AppContext shop = AppContextLoader.load(location);
+            Path usb = Files.createDirectory(directory.resolve("disconnected-usb"));
+            FakeChooser chooser = new FakeChooser(); chooser.folder = Optional.of(usb);
+            SettingsPanel panel = panel(new SettingsPanel.ServiceActions(location, shop, CLOCK), chooser, Locale.ENGLISH);
+            await(edt(panel::reload));
+            edt(() -> { button(panel, "settingsChooseFolder").doClick(); return null; });
+            await(edt(panel::lastWork));
+            Files.delete(usb);
+            edt(() -> { button(panel, "settingsCreateBackup").doClick(); return null; });
+            await(edt(panel::lastWork));
+            assertFalse(Files.exists(usb), "Do not silently recreate an unplugged backup destination");
+            assertTrue(new SettingsPanel.ServiceActions(location, shop, CLOCK).lastBackup().isEmpty());
+            edt(() -> {
+                assertFalse(button(panel, "settingsCreateBackup").isEnabled());
+                assertTrue(words(panel, "settingsBackupFeedback").contains("cannot be found"));
+                return null;
+            });
         }
     }
 

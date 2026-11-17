@@ -112,6 +112,7 @@ public final class SettingsPanel extends JPanel {
 
     private Path folder;
     private boolean folderMissing;
+    private boolean folderChosenThisSession;
     private RestorePreparation.Summary prepared;
     private RestorePreparation.Summary scheduled;
     private boolean noteDamaged;
@@ -171,6 +172,7 @@ public final class SettingsPanel extends JPanel {
      */
     public CompletionStage<Void> reload() {
         if (busy) return lastWork;
+        Path sessionFolder = folderChosenThisSession ? folder : null;
         return work(restoreMessage, restoreStrip, "", () -> {
             Optional<BackupService.LastBackup> last = actions.lastBackup();
             Optional<Path> remembered;
@@ -179,7 +181,8 @@ public final class SettingsPanel extends JPanel {
             } catch (Exception unreadable) {
                 remembered = Optional.empty();   // then the last backup's folder, or the person chooses one
             }
-            Optional<Path> offered = remembered.or(() -> last.map(b -> b.file().getParent()));
+            Optional<Path> offered = sessionFolder != null ? Optional.of(sessionFolder)
+                    : remembered.or(() -> last.map(b -> b.file().getParent()));
             boolean there = offered.map(actions::folderIsThere).orElse(true);
             try {
                 return new State(last, offered, there, actions.scheduledRestore(), null);
@@ -188,7 +191,7 @@ public final class SettingsPanel extends JPanel {
             }
         }, state -> {
             showLast(state.last());
-            state.folder().ifPresent(offered -> folder = offered);
+            folder = state.folder().orElse(null);
             folderMissing = !state.folderThere();
             showFolder();
             if (folderMissing) tell(backupMessage, backupStrip, FeedbackStrip.Tone.WARNING, f("settings.backup.folder.missing", folder));
@@ -210,6 +213,7 @@ public final class SettingsPanel extends JPanel {
     private void chooseFolder() {
         chooser.folder(this, folder, t("settings.dialog.folder")).ifPresent(chosen -> {
             folder = chosen;
+            folderChosenThisSession = true;
             folderMissing = false;
             showFolder();
             work(backupMessage, backupStrip, "", () -> { actions.rememberFolder(chosen); return chosen; }, remembered -> { },
@@ -223,7 +227,14 @@ public final class SettingsPanel extends JPanel {
         work(backupMessage, backupStrip, t("settings.backup.running"), () -> actions.backUp(destination), backup -> {
             tell(backupMessage, backupStrip, FeedbackStrip.Tone.SUCCESS, f("settings.backup.done", backup.file().getFileName()));
             showLast(Optional.of(new BackupService.LastBackup(backup.backupId(), backup.file(), backup.sha256(), backup.createdAt())));
-        }, false);
+        }, failure -> {
+            if (failure instanceof BackupFolderUnavailable) {
+                folderMissing = true;
+                showFolder();
+                return f("settings.backup.folder.missing", destination);
+            }
+            return explain(failure, false);
+        });
     }
 
     private void chooseBackup() {
@@ -485,6 +496,11 @@ public final class SettingsPanel extends JPanel {
 
     // ----- The real services and dialogs -----
 
+    /** Distinguishes a lost destination from a missing source asset while making a backup. */
+    private static final class BackupFolderUnavailable extends IOException {
+        BackupFolderUnavailable() { super("The chosen backup folder is unavailable"); }
+    }
+
     /** The shop's own services, made fresh for each piece of work, in the background worker. */
     static final class ServiceActions implements Actions {
         private final LocalAppData location;
@@ -532,7 +548,13 @@ public final class SettingsPanel extends JPanel {
         }
 
         @Override public BackupService.Backup backUp(Path folder) throws Exception {
-            return backups().create(folder);
+            if (!Files.isDirectory(folder)) throw new BackupFolderUnavailable();
+            try {
+                return backups().createInExistingFolder(folder);
+            } catch (IOException failure) {
+                if (!Files.isDirectory(folder)) throw new BackupFolderUnavailable();
+                throw failure;
+            }
         }
 
         @Override public RestorePreparation.Summary prepare(Path backup) throws Exception {
