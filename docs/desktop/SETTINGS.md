@@ -233,3 +233,7 @@ an existing mount directory behind. Actual USB removal/reconnection remains a ma
 Reminder review: overlapping background checks apply only the latest result, so an old result cannot
 bring a warning back after a new backup clears it. This does not add a periodic timer or replace the
 startup and post-backup checks already specified above.
+
+The sidebar brand uses its labels' natural heights and smaller gaps in the compact window, leaving
+room for the entire reminder and its action. The layout regression checks that the parent container
+does not clip the button at 960×600, including after resizing from a wider window.

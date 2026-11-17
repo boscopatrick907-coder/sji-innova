@@ -275,10 +275,10 @@ public final class ShellPanel extends JPanel {
         };
         sidebar.setName("cellaSidebar");sidebar.setBorder(BorderFactory.createEmptyBorder(34,20,24,20));
         sidebar.setPreferredSize(new java.awt.Dimension(216,0));
-        JPanel brand = new JPanel(new java.awt.GridLayout(0,1,0,10));brand.setOpaque(false);
+        JPanel brand = new JPanel(new BorderLayout(0,10));brand.setOpaque(false);
         wordmark = new JLabel("cella.");wordmark.setFont(new java.awt.Font(java.awt.Font.SERIF,java.awt.Font.BOLD,40));wordmark.setForeground(java.awt.Color.WHITE);
         tagline = new JLabel(messages.get("shell.tagline"));tagline.setFont(tagline.getFont().deriveFont(13f));tagline.setForeground(new java.awt.Color(0xD8E7DC));
-        brand.add(wordmark);brand.add(tagline);sidebar.add(brand,BorderLayout.NORTH);
+        brand.add(wordmark,BorderLayout.NORTH);brand.add(tagline,BorderLayout.SOUTH);sidebar.add(brand,BorderLayout.NORTH);
         navigation.setOpaque(false);navigation.setForeground(java.awt.Color.WHITE);navigation.setFixedCellHeight(54);
         navigation.setCellRenderer(new javax.swing.DefaultListCellRenderer(){
             private boolean active;
@@ -332,6 +332,7 @@ public final class ShellPanel extends JPanel {
             int width = compact ? 168 : 216;
             if (sidebar.getPreferredSize().width != width) {
                 compactSidebar = compact;
+                ((BorderLayout)sidebar.getLayout()).setVgap(compact ? 24 : 32);
                 sidebar.setPreferredSize(new java.awt.Dimension(width, 0));
                 sidebar.setBorder(BorderFactory.createEmptyBorder(30,compact?10:16,24,compact?10:16));
                 wordmark.setFont(new java.awt.Font(java.awt.Font.SERIF,java.awt.Font.BOLD,compact?32:36));

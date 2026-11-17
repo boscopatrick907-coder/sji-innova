@@ -159,6 +159,42 @@ class SettingsRouteTest {
         }
     }
 
+    @Test
+    void theReminderFitsCompletelyInTheSmallestWindow() throws Exception {
+        edt(() -> { com.formdev.flatlaf.FlatLightLaf.setup(); cm.sji.innova.desktop.catalog.CatalogStyle.installDefaults(); return null; });
+        LocalAppData location = new LocalAppData(directory.resolve("compact-reminder"));
+        DataFolderCoordinator coordinator = DataFolderCoordinator.forFolder(location);
+        try (var membership = coordinator.join()) {
+            AppContext shop = AppContextLoader.load(location);
+            ShellPanel shell = open(Locale.FRENCH, location, shop);
+            await(edt(shell::reminderReady));
+            edt(() -> {
+                shell.setSize(1100,760); for(int i=0;i<6;i++) layoutTree(shell);
+                var preview = new java.awt.image.BufferedImage(1100,760,java.awt.image.BufferedImage.TYPE_INT_RGB);
+                var graphics = preview.createGraphics(); shell.printAll(graphics); graphics.dispose();
+                shell.setSize(960,600); for(int i=0;i<6;i++) layoutTree(shell);
+                BackupReminder reminder = find(shell,BackupReminder.class,"backupReminder");
+                assertTrue(reminder.isVisible());
+                assertTrue(reminder.getWidth() >= reminder.getPreferredSize().width,
+                        "The reminder must not be squeezed horizontally");
+                assertTrue(reminder.getHeight() >= reminder.getPreferredSize().height,
+                        "The whole reminder, including its action link, must fit");
+                assertTrue(reminder.getY()+reminder.getHeight() <= reminder.getParent().getHeight(),
+                        "The sidebar must not clip the reminder through its parent");
+                var bounds = SwingUtilities.convertRectangle(reminder.getParent(),reminder.getBounds(),shell);
+                assertTrue(bounds.y >= 0 && bounds.y+bounds.height <= shell.getHeight());
+                return null;
+            });
+        }
+    }
+
+    private static void layoutTree(Component component) {
+        if (component instanceof Container parent) {
+            parent.doLayout();
+            for (Component child : parent.getComponents()) layoutTree(child);
+        }
+    }
+
     // ----- Helpers -----
 
     private static ShellPanel open(Locale locale, LocalAppData location, AppContext shop) throws Exception {

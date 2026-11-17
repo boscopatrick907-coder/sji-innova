@@ -68,3 +68,7 @@ Regression tests cover all three cases. The existing-folder fixture uses a real 
 what the production folder chooser returns. The original six commits remain ancestors of the
 reviewed heads. PR #58 needs no code correction; fixes extend #59 and #60. The current assignment
 in CHARLES.md moves to retention and final technical/manual acceptance after this stack merges.
+
+A rendered 960×600 preview also exposed clipping of the reminder's action by its parent container.
+The sidebar now gives that area enough vertical space. A layout test checks containment after a
+wide-to-small resize; checking only the button's own preferred height had missed the clipping.
