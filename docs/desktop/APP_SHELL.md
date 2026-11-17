@@ -68,8 +68,11 @@ new StockPanel(context.stock(), context.products(), context.shopId(), context.de
 SalesSlot.create(context, messages)
 ```
 
-The navigation shows Products, Stock and Ventes (Sales). An entry is added only when its panel
-exists. Screen tests that only need a fake `ProductService` build
+The navigation shows Overview, Products, Stock, Ventes (Sales) and Settings (Paramètres). Products
+is selected first. An entry is added only when its panel exists. Stock and Settings are built the
+first time they are opened. Settings is `SettingsPanel(context.location(), context, messages)` and
+reads the last backup and any scheduled restore each time it is opened (`settingsReady()` for tests;
+see `SETTINGS.md`). Screen tests that only need a fake `ProductService` build
 their context with the test helper `TestAppContexts.withProducts(location, products)`.
 
 ## Start-up behaviour
@@ -102,7 +105,7 @@ there, `FallbackMessages` (English) is used, so the window never shows a missing
 
 **Keys the shell uses (Pascal: please add them to `messages_en` and `messages_fr`):**
 `app.title`, `shell.nav.accessibleName`, `shell.nav.products`, `shell.nav.stock`,
-`shell.nav.sales`, `shell.loading`,
+`shell.nav.sales`, `shell.nav.home`, `shell.nav.settings`, `shell.loading`,
 `shell.error.title`, `shell.error.dataFolder` (`{0}` = folder), `shell.error.retry`,
 `shell.error.exit`, `shell.devShop` (`{0}` = shop ID).
 The Products panel uses the product/action/unit keys listed in docs/team/PASCAL.md.
@@ -127,6 +130,6 @@ human checking; a rendered preview is not a Windows GUI test.
 ## Limitations
 
 - No login, no shop registration, no live language switching.
-- Three navigation entries: Products, Stock and Ventes (Sales). Customers come later.
+- Five navigation entries: Overview, Products, Stock, Ventes (Sales) and Settings. Customers come later.
 - The loading, error and main pages were checked as images without a screen; the real
   window, keyboard navigation and restart behaviour still need a manual check on Windows.
